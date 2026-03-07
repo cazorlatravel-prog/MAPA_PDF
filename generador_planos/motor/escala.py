@@ -2,12 +2,12 @@
 Lógica de selección automática de escala.
 
 Escalas permitidas (solo estas):
-    1:5.000 | 1:7.500 | 1:10.000 | 1:15.000 | 1:20.000
+    1:5.000 | 1:7.500 | 1:10.000 | 1:15.000 | 1:20.000 | 1:25.000 | 1:30.000
 
 La escala se elige automáticamente según la extensión de la geometría + margen del 20%.
 """
 
-ESCALAS = [5000, 7500, 10000, 15000, 20000]
+ESCALAS = [5000, 7500, 10000, 15000, 20000, 25000, 30000]
 
 INTERVALOS_GRID = {
     5000: 500,
@@ -15,6 +15,8 @@ INTERVALOS_GRID = {
     10000: 1000,
     15000: 1000,
     20000: 2000,
+    25000: 2000,
+    30000: 5000,
 }
 
 # Longitud de la barra de escala gráfica (metros)
@@ -24,6 +26,8 @@ BARRA_ESCALA_M = {
     10000: 1000,
     15000: 2000,
     20000: 2000,
+    25000: 2000,
+    30000: 5000,
 }
 
 MARGENES_MM = {"izq": 20, "der": 15, "sup": 15, "inf": 30}
@@ -33,6 +37,8 @@ FORMATOS = {
     "A4 Horizontal": (297, 210),
     "A3 Vertical":   (297, 420),
     "A3 Horizontal": (420, 297),
+    "A2 Vertical":   (420, 594),
+    "A2 Horizontal": (594, 420),
 }
 
 # Proporción del mapa principal respecto al ancho/alto útil

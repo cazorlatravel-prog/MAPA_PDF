@@ -77,7 +77,7 @@ class App(tk.Tk):
         self.panel_capas = PanelCapas(
             izq, self.motor,
             callback_log=self._escribir_log,
-            callback_tabla=self._poblar_tabla,
+            callback_tabla=self._on_tabla_cargada,
         )
         self.panel_config = PanelConfig(izq)
         self.panel_campos = PanelCampos(izq)
@@ -196,6 +196,12 @@ class App(tk.Tk):
         self._tabla.tag_configure("par", background="#1E2A3A")
         self._tabla.tag_configure("impar", background="#172030")
         self._escribir_log(f"Tabla actualizada: {len(gdf)} infraestructuras.", "info")
+
+    def _on_tabla_cargada(self):
+        """Callback cuando se carga un nuevo shapefile."""
+        self._poblar_tabla()
+        # Actualizar valores de agrupación si el modo agrupado está activo
+        self.panel_generacion.actualizar_valores_si_agrupado()
 
     def _get_config(self) -> dict:
         """Devuelve la configuración actual para el panel de generación."""

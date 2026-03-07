@@ -185,10 +185,15 @@ class MaquetadorPlano:
                 )
 
     def dibujar_panel_atributos(self, row, campos_visibles, campo_mapeo=None):
+        """Dibuja la tabla de atributos para una sola infraestructura."""
+        self.dibujar_panel_atributos_multi([row], campos_visibles, campo_mapeo)
+
+    def dibujar_panel_atributos_multi(self, rows, campos_visibles, campo_mapeo=None):
         """Dibuja la tabla de atributos en el panel derecho.
 
-        campo_mapeo: dict opcional {campo_real: campo_shapefile} para
-                     shapefiles con nombres de campo distintos.
+        rows: lista de Series (filas del GeoDataFrame). Si hay varias,
+              se muestra una tabla con una fila por infraestructura.
+        campo_mapeo: dict opcional {campo_esperado: campo_shapefile}.
         """
         ax = self.ax_info
         ax.set_xlim(0, 1)
@@ -202,59 +207,154 @@ class MaquetadorPlano:
         )
         ax.add_patch(fondo)
 
+        n_rows = len(rows)
+        es_multi = n_rows > 1
+
         # Título
+        titulo = "DATOS DE LAS INFRAESTRUCTURAS" if es_multi else "DATOS DE LA INFRAESTRUCTURA"
         ax.text(
-            0.5, 0.97, "DATOS DE LA INFRAESTRUCTURA",
+            0.5, 0.97, titulo,
             ha="center", va="top", fontsize=7.5, fontweight="bold",
             color="white", transform=ax.transAxes,
             bbox=dict(boxstyle="round,pad=0.3", facecolor="#2C3E50", edgecolor="none"),
         )
 
-        # Filtrar campos que existen
         campos_orden = list(ETIQUETAS_CAMPOS.keys())
         campos_mostrar = [c for c in campos_orden if c in campos_visibles]
-        n = len(campos_mostrar)
-        if n == 0:
+        n_campos = len(campos_mostrar)
+        if n_campos == 0:
             return
 
-        y_start = 0.90
-        row_h = (y_start - 0.12) / max(n, 1)
-
-        for i, campo in enumerate(campos_mostrar):
-            y = y_start - i * row_h
-            # Soporte para mapeo de campos
-            campo_real = campo
+        def _resolver_campo(campo):
             if campo_mapeo and campo in campo_mapeo:
-                campo_real = campo_mapeo[campo]
-            valor = str(row.get(campo_real, "\u2014"))
-            etiq = ETIQUETAS_CAMPOS.get(campo, campo)
+                return campo_mapeo[campo]
+            return campo
 
-            # Fondo alterno
-            if i % 2 == 0:
-                rect = Rectangle(
-                    (0.01, y - row_h + 0.005), 0.98, row_h - 0.005,
-                    facecolor="#E8F4F8", edgecolor="none", zorder=1,
+        if not es_multi:
+            # ── Modo simple: una fila, layout original ──
+            row = rows[0]
+            y_start = 0.90
+            row_h = (y_start - 0.12) / max(n_campos, 1)
+
+            for i, campo in enumerate(campos_mostrar):
+                y = y_start - i * row_h
+                campo_real = _resolver_campo(campo)
+                valor = str(row.get(campo_real, "\u2014"))
+                etiq = ETIQUETAS_CAMPOS.get(campo, campo)
+
+                if i % 2 == 0:
+                    rect = Rectangle(
+                        (0.01, y - row_h + 0.005), 0.98, row_h - 0.005,
+                        facecolor="#E8F4F8", edgecolor="none", zorder=1,
+                    )
+                    ax.add_patch(rect)
+
+                ax.text(
+                    0.04, y - row_h / 2, etiq + ":",
+                    ha="left", va="center", fontsize=6.5, fontweight="bold",
+                    color="#2C3E50", transform=ax.transAxes, zorder=2,
                 )
-                ax.add_patch(rect)
+                ax.text(
+                    0.98, y - row_h / 2, valor,
+                    ha="right", va="center", fontsize=6.5,
+                    color="#1A1A2E", transform=ax.transAxes, zorder=2,
+                    wrap=True,
+                )
 
-            ax.text(
-                0.04, y - row_h / 2, etiq + ":",
-                ha="left", va="center", fontsize=6.5, fontweight="bold",
-                color="#2C3E50", transform=ax.transAxes, zorder=2,
-            )
-            ax.text(
-                0.98, y - row_h / 2, valor,
-                ha="right", va="center", fontsize=6.5,
-                color="#1A1A2E", transform=ax.transAxes, zorder=2,
-                wrap=True,
-            )
+            for i in range(1, n_campos):
+                y_line = y_start - i * row_h
+                ax.axhline(
+                    y=y_line, xmin=0.02, xmax=0.98, color="#CCCCCC",
+                    linewidth=0.4, transform=ax.transAxes, zorder=2,
+                )
+        else:
+            # ── Modo multi-fila: tabla con columnas = campos, filas = infraestructuras ──
+            # Seleccionar los campos más relevantes para caber en el espacio
+            # Limitar columnas según ancho disponible
+            max_cols = min(n_campos, 6)
+            campos_tabla = campos_mostrar[:max_cols]
 
-        # Líneas separadoras
-        for i in range(1, n):
-            y_line = y_start - i * row_h
-            ax.axhline(
-                y=y_line, xmin=0.02, xmax=0.98, color="#CCCCCC",
-                linewidth=0.4, transform=ax.transAxes, zorder=2,
+            y_start = 0.90
+            # Cabecera de tabla + filas de datos
+            total_filas = 1 + n_rows  # 1 cabecera + n filas
+            row_h = (y_start - 0.12) / max(total_filas, 1)
+
+            # Tamaño de fuente adaptativo
+            font_size = max(4.0, min(6.0, 6.0 - (n_rows - 3) * 0.3))
+
+            # Ancho de columnas proporcional
+            x_left = 0.02
+            x_right = 0.98
+            col_w = (x_right - x_left) / max(len(campos_tabla), 1)
+
+            # ── Cabecera de la tabla ──
+            y_cab = y_start
+            ax.add_patch(Rectangle(
+                (x_left, y_cab - row_h), x_right - x_left, row_h,
+                facecolor="#2C3E50", edgecolor="none", zorder=1,
+            ))
+            for j, campo in enumerate(campos_tabla):
+                x_center = x_left + j * col_w + col_w / 2
+                etiq = ETIQUETAS_CAMPOS.get(campo, campo)
+                # Abreviar si es muy largo
+                if len(etiq) > 12:
+                    etiq = etiq[:11] + "."
+                ax.text(
+                    x_center, y_cab - row_h / 2, etiq,
+                    ha="center", va="center", fontsize=font_size,
+                    fontweight="bold", color="white",
+                    transform=ax.transAxes, zorder=2,
+                )
+
+            # ── Filas de datos ──
+            for r_idx, row in enumerate(rows):
+                y = y_start - (1 + r_idx) * row_h
+
+                # Fondo alterno
+                if r_idx % 2 == 0:
+                    ax.add_patch(Rectangle(
+                        (x_left, y - row_h + 0.002), x_right - x_left, row_h - 0.002,
+                        facecolor="#E8F4F8", edgecolor="none", zorder=1,
+                    ))
+
+                for j, campo in enumerate(campos_tabla):
+                    campo_real = _resolver_campo(campo)
+                    valor = str(row.get(campo_real, "\u2014"))
+                    # Truncar valores largos
+                    if len(valor) > 18:
+                        valor = valor[:17] + "\u2026"
+                    x_center = x_left + j * col_w + col_w / 2
+                    ax.text(
+                        x_center, y - row_h / 2, valor,
+                        ha="center", va="center", fontsize=font_size,
+                        color="#1A1A2E", transform=ax.transAxes, zorder=2,
+                    )
+
+            # Líneas horizontales separadoras
+            for r_idx in range(total_filas + 1):
+                y_line = y_start - r_idx * row_h
+                ax.axhline(
+                    y=y_line, xmin=x_left, xmax=x_right, color="#AAAAAA",
+                    linewidth=0.3, transform=ax.transAxes, zorder=2,
+                )
+
+            # Líneas verticales
+            for j in range(len(campos_tabla) + 1):
+                x_line = x_left + j * col_w
+                y_top = y_start
+                y_bot = y_start - total_filas * row_h
+                ax.plot(
+                    [x_line, x_line], [y_top, y_bot],
+                    color="#AAAAAA", linewidth=0.3,
+                    transform=ax.transAxes, zorder=2,
+                )
+
+            # Contador
+            ax.text(
+                0.5, y_start - total_filas * row_h - 0.02,
+                f"{n_rows} infraestructuras",
+                ha="center", va="top", fontsize=5.5, color="#555555",
+                style="italic", transform=ax.transAxes,
             )
 
         # Sistema de coordenadas
@@ -356,9 +456,12 @@ class MaquetadorPlano:
             ha="right", va="bottom", fontsize=5.5, color="#666666", style="italic",
         )
 
-    def dibujar_cabecera(self, row):
-        """Banda superior con logo org., título y nº de plano."""
-        # Calcular posición dinámica basada en el GridSpec real
+    def dibujar_cabecera(self, row, titulo_grupo=None, num_plano_override=None):
+        """Banda superior con logo org., título y nº de plano.
+
+        titulo_grupo: si se pasa, se usa como título principal (p.ej. "Monte: Sierra Norte").
+        num_plano_override: número de plano a mostrar (si no, se usa row.name).
+        """
         izq_frac = MARGENES_MM["izq"] / self.fmt_mm[0]
         der_frac = MARGENES_MM["der"] / self.fmt_mm[0]
         sup_frac = MARGENES_MM["sup"] / self.fmt_mm[1]
@@ -384,14 +487,23 @@ class MaquetadorPlano:
         )
 
         # Título del plano
-        nombre = str(row.get("Nombre_Infra", "INFRAESTRUCTURA FORESTAL"))
-        ax_cab.text(0.5, 0.65, nombre.upper(), ha="center", va="center",
-                    fontsize=9, fontweight="bold", color="white")
-        ax_cab.text(0.5, 0.25, "PLANO DE INFRAESTRUCTURA FORESTAL",
-                    ha="center", va="center", fontsize=6.5, color="#95A5A6")
+        if titulo_grupo:
+            ax_cab.text(0.5, 0.65, titulo_grupo.upper(), ha="center", va="center",
+                        fontsize=9, fontweight="bold", color="white")
+            ax_cab.text(0.5, 0.25, "PLANO DE INFRAESTRUCTURAS FORESTALES",
+                        ha="center", va="center", fontsize=6.5, color="#95A5A6")
+        else:
+            nombre = str(row.get("Nombre_Infra", "INFRAESTRUCTURA FORESTAL"))
+            ax_cab.text(0.5, 0.65, nombre.upper(), ha="center", va="center",
+                        fontsize=9, fontweight="bold", color="white")
+            ax_cab.text(0.5, 0.25, "PLANO DE INFRAESTRUCTURA FORESTAL",
+                        ha="center", va="center", fontsize=6.5, color="#95A5A6")
 
         # Número de plano
-        num_plano = row.name + 1 if hasattr(row, "name") and isinstance(row.name, int) else 1
+        if num_plano_override is not None:
+            num_plano = num_plano_override
+        else:
+            num_plano = row.name + 1 if hasattr(row, "name") and isinstance(row.name, int) else 1
         ax_cab.text(0.99, 0.5, f"Plano n\u00ba\n{num_plano:04d}",
                     ha="right", va="center", fontsize=7, fontweight="bold",
                     color="#2ECC71")
