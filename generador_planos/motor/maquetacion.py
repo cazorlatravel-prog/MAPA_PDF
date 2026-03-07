@@ -990,8 +990,7 @@ class MaquetadorPlano:
         copyright_text = cajetin.get("copyright", "") if cajetin else ""
         if not copyright_text:
             copyright_text = (
-                "Mapa creado con APP Generador Mapas Forestales / "
-                "Jose Caballero Sánchez / Aplicación Open Source de uso gratuito"
+                "APP PLANOS PDF COPYRIGHT: JOSE CABALLERO SÁNCHEZ (CAZORLA-2026)"
             )
         ax.text(
             1.8, self.fmt_mm[1] / 2, copyright_text,
