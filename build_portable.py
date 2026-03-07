@@ -41,6 +41,16 @@ import os
 if getattr(sys, 'frozen', False):
     base = sys._MEIPASS
     sys.path.insert(0, base)
+    # Forzar importación de matplotlib antes de cualquier otro import
+    # para que PyInstaller lo resuelva correctamente
+    os.environ["MPLBACKEND"] = "Agg"
+
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import matplotlib.backends.backend_agg
+import matplotlib.backends.backend_pdf
+import matplotlib.backends.backend_svg
 
 from generador_planos.gui.app import App
 
@@ -231,6 +241,15 @@ def main():
     # Collect-all para paquetes complejos
     for pkg in COLLECT_ALL:
         cmd.extend(["--collect-all", pkg])
+
+    # Collect-submodules para paquetes que fallan con solo collect-all
+    for pkg in ["matplotlib", "matplotlib.backends", "geopandas",
+                "pyproj", "shapely", "contextily"]:
+        cmd.extend(["--collect-submodules", pkg])
+
+    # Collect-data para paquetes con archivos de datos necesarios
+    for pkg in ["matplotlib", "pyproj", "certifi"]:
+        cmd.extend(["--collect-data", pkg])
 
     # Hidden imports
     for mod in HIDDEN_IMPORTS:
