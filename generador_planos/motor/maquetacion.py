@@ -221,7 +221,7 @@ class MaquetadorPlano:
 
     # ── Leyenda ────────────────────────────────────────────────────────
 
-    def dibujar_leyenda(self, items_leyenda, stats_resumen=None):
+    def dibujar_leyenda(self, items_leyenda, stats_resumen=None):  # noqa: ARG002
         handles = []
         for label, color, geom_type, linestyle, marker, facecolor in items_leyenda:
             if "point" in geom_type:
@@ -245,26 +245,6 @@ class MaquetadorPlano:
             )
             leg.set_zorder(15)
 
-        if stats_resumen:
-            lines = []
-            if "total_longitud_km" in stats_resumen:
-                lines.append(
-                    f"Long. total: {stats_resumen['total_longitud_km']:.2f} km")
-            if "total_superficie_ha" in stats_resumen:
-                lines.append(
-                    f"Sup. total: {stats_resumen['total_superficie_ha']:.2f} ha")
-            if "num_infraestructuras" in stats_resumen:
-                lines.append(
-                    f"N\u00ba infra.: {stats_resumen['num_infraestructuras']}")
-            if lines:
-                self.ax_map.text(
-                    0.01, 0.01, "\n".join(lines),
-                    transform=self.ax_map.transAxes,
-                    fontsize=4.5, va="bottom", ha="left", color="#333",
-                    bbox=dict(boxstyle="round,pad=0.3", facecolor="white",
-                              edgecolor="#CCC", alpha=0.9),
-                    zorder=15,
-                )
 
     # ── Panel de atributos (centro, 2 columnas, campos dinámicos) ─────
 

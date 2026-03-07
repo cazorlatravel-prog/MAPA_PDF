@@ -87,6 +87,7 @@ class GeneradorPlanos:
         self.gestor_simbologia = GestorSimbologia()
         self._cajetin = {}
         self._plantilla = {}
+        self.config_infra = {}  # linewidth, alpha, linestyle, marker
 
     # ── Configuración ────────────────────────────────────────────────────
 
@@ -202,6 +203,10 @@ class GeneradorPlanos:
             )
 
         # Infraestructuras seleccionadas (resaltadas)
+        ci = self.config_infra
+        lw = ci.get("linewidth", 2.5)
+        alpha_infra = ci.get("alpha", 1.0)
+
         geom_type = ""
         for geom_single in gdf_sel.geometry:
             geom_type = str(geom_single.geom_type).lower()
@@ -209,12 +214,15 @@ class GeneradorPlanos:
 
         if "point" in geom_type:
             gdf_sel.plot(ax=ax_map, color=color_infra, markersize=12,
-                         marker="o", zorder=5, edgecolor="white", linewidth=0.8)
+                         marker="o", zorder=5, edgecolor="white",
+                         linewidth=0.8, alpha=alpha_infra)
         elif "line" in geom_type or "string" in geom_type:
-            gdf_sel.plot(ax=ax_map, color=color_infra, linewidth=2.5, zorder=5)
+            gdf_sel.plot(ax=ax_map, color=color_infra, linewidth=lw,
+                         zorder=5, alpha=alpha_infra)
         else:
             gdf_sel.plot(ax=ax_map, facecolor=color_infra + "55",
-                         edgecolor=color_infra, linewidth=1.8, zorder=5)
+                         edgecolor=color_infra, linewidth=lw,
+                         zorder=5, alpha=alpha_infra)
 
     def _construir_items_leyenda(self, gdf_sel, color_infra):
         """Construye items de leyenda para infra + capas extra."""

@@ -32,30 +32,37 @@ class PanelSimbologia:
         ttk.Scale(f, from_=0.5, to=5.0, variable=self._grosor_infra,
                   orient="horizontal").grid(row=1, column=0, sticky="ew", pady=(2, 6))
 
-        tk.Label(f, text="Trazo l\u00ednea infra:", font=FONT_SMALL,
+        tk.Label(f, text="Transparencia infra:", font=FONT_SMALL,
                  bg=COLOR_PANEL, fg=COLOR_TEXTO).grid(
                  row=2, column=0, sticky="w")
+        self._alpha_infra = tk.DoubleVar(value=1.0)
+        ttk.Scale(f, from_=0.1, to=1.0, variable=self._alpha_infra,
+                  orient="horizontal").grid(row=3, column=0, sticky="ew", pady=(2, 6))
+
+        tk.Label(f, text="Trazo l\u00ednea infra:", font=FONT_SMALL,
+                 bg=COLOR_PANEL, fg=COLOR_TEXTO).grid(
+                 row=4, column=0, sticky="w")
         self._trazo_infra = tk.StringVar(value="Continuo")
         ttk.Combobox(f, textvariable=self._trazo_infra,
                      values=list(TIPOS_TRAZO.keys()),
                      state="readonly", font=FONT_SMALL).grid(
-                     row=3, column=0, sticky="ew", pady=(2, 6))
+                     row=5, column=0, sticky="ew", pady=(2, 6))
 
         tk.Label(f, text="Marcador puntos:", font=FONT_SMALL,
                  bg=COLOR_PANEL, fg=COLOR_TEXTO).grid(
-                 row=4, column=0, sticky="w")
+                 row=6, column=0, sticky="w")
         self._marcador = tk.StringVar(value="C\u00edrculo")
         ttk.Combobox(f, textvariable=self._marcador,
                      values=list(MARCADORES.keys()),
                      state="readonly", font=FONT_SMALL).grid(
-                     row=5, column=0, sticky="ew", pady=(2, 6))
+                     row=7, column=0, sticky="ew", pady=(2, 6))
 
         # ── Color de montes ──
         tk.Label(f, text="Color montes:", font=FONT_SMALL,
                  bg=COLOR_PANEL, fg=COLOR_TEXTO).grid(
-                 row=6, column=0, sticky="w")
+                 row=8, column=0, sticky="w")
         col_montes_f = tk.Frame(f, bg=COLOR_PANEL)
-        col_montes_f.grid(row=7, column=0, sticky="ew", pady=(2, 6))
+        col_montes_f.grid(row=9, column=0, sticky="ew", pady=(2, 6))
         self._color_montes = "#1a5c10"
         self._lbl_col_montes = tk.Label(col_montes_f, bg=self._color_montes,
                                          width=4, relief="solid", bd=1)
@@ -67,16 +74,16 @@ class PanelSimbologia:
         # ── Capas extra ──
         tk.Label(f, text="Capas adicionales:", font=FONT_BOLD,
                  bg=COLOR_PANEL, fg=COLOR_TEXTO_GRIS).grid(
-                 row=8, column=0, sticky="w", pady=(6, 0))
+                 row=10, column=0, sticky="w", pady=(6, 0))
 
         self._frame_capas = tk.Frame(f, bg=COLOR_PANEL)
-        self._frame_capas.grid(row=9, column=0, sticky="ew", pady=(2, 4))
+        self._frame_capas.grid(row=11, column=0, sticky="ew", pady=(2, 4))
 
         # ── Botón aplicar ──
         tk.Button(f, text="Aplicar simbolog\u00eda", command=self._aplicar,
                   font=FONT_SMALL, bg=COLOR_ACENTO, fg="#1A1A2E",
                   relief="flat", cursor="hand2", pady=3).grid(
-                  row=10, column=0, sticky="ew", pady=(4, 4))
+                  row=12, column=0, sticky="ew", pady=(4, 4))
 
         f.columnconfigure(0, weight=1)
 
@@ -142,12 +149,16 @@ class PanelSimbologia:
             simb.facecolor = color_var["color"] + "44"
             gs.set_simbologia_capa(tipo, simb)
 
+        # Configuración infraestructuras (grosor, transparencia, trazo, marcador)
+        self.motor.config_infra = self.obtener_config_infra()
+
         self.callback_log("Simbolog\u00eda actualizada.", "info")
 
     def obtener_config_infra(self) -> dict:
         """Devuelve configuración de simbología de infraestructuras."""
         return {
             "linewidth": self._grosor_infra.get(),
+            "alpha": self._alpha_infra.get(),
             "linestyle": TIPOS_TRAZO.get(self._trazo_infra.get(), "-"),
             "marker": MARCADORES.get(self._marcador.get(), "o"),
         }
