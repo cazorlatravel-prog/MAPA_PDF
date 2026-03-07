@@ -4,6 +4,7 @@ progreso, portada, botón GENERAR.
 """
 
 import os
+import shutil
 import threading
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
@@ -14,6 +15,7 @@ from .estilos import (
     crear_frame_seccion, crear_boton,
 )
 from ..motor.maquetacion import ETIQUETAS_CAMPOS
+from ..motor.generador import GeneracionCancelada
 
 
 class PanelGeneracion:
@@ -181,10 +183,24 @@ class PanelGeneracion:
         )
         self._btn_generar.grid(row=13, column=0, columnspan=2, sticky="ew", pady=4)
 
+        # ── Botón PARAR ──
+        self._btn_parar = crear_boton(
+            f, "  PARAR GENERACI\u00d3N  ", self._parar_generacion,
+            icono="\u23f9", ancho=30,
+            color_bg="#CC3333", color_fg="white",
+        )
+        self._btn_parar.grid(row=14, column=0, columnspan=2, sticky="ew", pady=(0, 4))
+        self._btn_parar.configure(state="disabled")
+
         # ── Botón abrir carpeta ──
         crear_boton(f, "Abrir carpeta de salida",
                     self._abrir_carpeta, icono="\U0001f4c2").grid(
-                    row=14, column=0, columnspan=2, sticky="ew", pady=(0, 4))
+                    row=15, column=0, columnspan=2, sticky="ew", pady=(0, 4))
+
+        # ── Botón vaciar caché ──
+        crear_boton(f, "Vaciar cach\u00e9 de teselas",
+                    self._vaciar_cache, icono="\U0001f5d1").grid(
+                    row=16, column=0, columnspan=2, sticky="ew", pady=(0, 4))
 
         f.columnconfigure(0, weight=1)
         f.columnconfigure(1, weight=1)
@@ -413,6 +429,9 @@ class PanelGeneracion:
             messagebox.showwarning("Aviso", "Carga primero el shapefile de infraestructuras.")
             return
 
+        # Resetear bandera de cancelación
+        self.motor._cancelar.clear()
+
         # Auto-aplicar cajetín, plantilla y simbología antes de generar
         if self._auto_aplicar:
             self._auto_aplicar()
@@ -437,6 +456,7 @@ class PanelGeneracion:
                 return
 
             self._btn_generar.configure(state="disabled", text="\u23f3 Generando...")
+            self._btn_parar.configure(state="normal", text="\u23f9  PARAR GENERACI\u00d3N  ")
             self._progreso["value"] = 0
             self._progreso["maximum"] = len(valores_sel)
 
@@ -447,61 +467,14 @@ class PanelGeneracion:
             indices_filtro = dict(self._indices_filtrados)
 
             def _worker_agrupado():
-                self.callback_log(
-                    f"\n{'=' * 50}\nGenerando {len(valores_sel)} planos agrupados "
-                    f"por {campo_grupo}...", "info")
+                try:
+                    self.callback_log(
+                        f"\n{'=' * 50}\nGenerando {len(valores_sel)} planos agrupados "
+                        f"por {campo_grupo}...", "info")
 
-                self.motor.generar_serie_agrupada(
-                    campo_grupo=campo_grupo,
-                    valores=valores_sel,
-                    formato_key=cfg["formato"],
-                    proveedor=cfg["proveedor"],
-                    transparencia=cfg["transparencia"],
-                    campos=campos,
-                    color_infra=cfg["color_infra"],
-                    salida_dir=carpeta,
-                    escala_manual=escala_manual,
-                    callback_log=self.callback_log,
-                    callback_progreso=self._actualizar_progreso,
-                    indices_filtro=indices_filtro,
-                )
-
-                self._parent_window.after(0, self._fin_generacion)
-
-            threading.Thread(target=_worker_agrupado, daemon=True).start()
-        else:
-            indices = self._obtener_indices()
-            if not indices:
-                messagebox.showwarning("Aviso", "No hay infraestructuras seleccionadas.")
-                return
-
-            self._btn_generar.configure(state="disabled", text="\u23f3 Generando...")
-            self._progreso["value"] = 0
-            self._progreso["maximum"] = len(indices)
-
-            def _worker():
-                self.callback_log(
-                    f"\n{'=' * 50}\nIniciando generaci\u00f3n de {len(indices)} planos...",
-                    "info")
-
-                if multipagina:
-                    ruta_pdf = os.path.join(carpeta, "planos_forestales_completo.pdf")
-                    self.motor.generar_pdf_multipagina(
-                        indices=indices,
-                        formato_key=cfg["formato"],
-                        proveedor=cfg["proveedor"],
-                        transparencia=cfg["transparencia"],
-                        campos=campos,
-                        color_infra=cfg["color_infra"],
-                        ruta_pdf=ruta_pdf,
-                        escala_manual=escala_manual,
-                        incluir_portada=incluir_portada,
-                        callback_log=self.callback_log,
-                        callback_progreso=self._actualizar_progreso,
-                    )
-                else:
-                    self.motor.generar_serie(
-                        indices=indices,
+                    self.motor.generar_serie_agrupada(
+                        campo_grupo=campo_grupo,
+                        valores=valores_sel,
                         formato_key=cfg["formato"],
                         proveedor=cfg["proveedor"],
                         transparencia=cfg["transparencia"],
@@ -511,9 +484,63 @@ class PanelGeneracion:
                         escala_manual=escala_manual,
                         callback_log=self.callback_log,
                         callback_progreso=self._actualizar_progreso,
+                        indices_filtro=indices_filtro,
                     )
 
-                self._parent_window.after(0, self._fin_generacion)
+                    self._parent_window.after(0, self._fin_generacion)
+                except GeneracionCancelada:
+                    self._parent_window.after(0, self._fin_cancelacion)
+
+            threading.Thread(target=_worker_agrupado, daemon=True).start()
+        else:
+            indices = self._obtener_indices()
+            if not indices:
+                messagebox.showwarning("Aviso", "No hay infraestructuras seleccionadas.")
+                return
+
+            self._btn_generar.configure(state="disabled", text="\u23f3 Generando...")
+            self._btn_parar.configure(state="normal", text="\u23f9  PARAR GENERACI\u00d3N  ")
+            self._progreso["value"] = 0
+            self._progreso["maximum"] = len(indices)
+
+            def _worker():
+                try:
+                    self.callback_log(
+                        f"\n{'=' * 50}\nIniciando generaci\u00f3n de {len(indices)} planos...",
+                        "info")
+
+                    if multipagina:
+                        ruta_pdf = os.path.join(carpeta, "planos_forestales_completo.pdf")
+                        self.motor.generar_pdf_multipagina(
+                            indices=indices,
+                            formato_key=cfg["formato"],
+                            proveedor=cfg["proveedor"],
+                            transparencia=cfg["transparencia"],
+                            campos=campos,
+                            color_infra=cfg["color_infra"],
+                            ruta_pdf=ruta_pdf,
+                            escala_manual=escala_manual,
+                            incluir_portada=incluir_portada,
+                            callback_log=self.callback_log,
+                            callback_progreso=self._actualizar_progreso,
+                        )
+                    else:
+                        self.motor.generar_serie(
+                            indices=indices,
+                            formato_key=cfg["formato"],
+                            proveedor=cfg["proveedor"],
+                            transparencia=cfg["transparencia"],
+                            campos=campos,
+                            color_infra=cfg["color_infra"],
+                            salida_dir=carpeta,
+                            escala_manual=escala_manual,
+                            callback_log=self.callback_log,
+                            callback_progreso=self._actualizar_progreso,
+                        )
+
+                    self._parent_window.after(0, self._fin_generacion)
+                except GeneracionCancelada:
+                    self._parent_window.after(0, self._fin_cancelacion)
 
             threading.Thread(target=_worker, daemon=True).start()
 
@@ -526,25 +553,32 @@ class PanelGeneracion:
         campos = cfg.get("campos", [])
         escala_manual = cfg.get("escala_manual")
 
+        # Resetear bandera de cancelación
+        self.motor._cancelar.clear()
+
         self._btn_generar.configure(state="disabled", text="\u23f3 Generando lotes...")
+        self._btn_parar.configure(state="normal", text="\u23f9  PARAR GENERACI\u00d3N  ")
         self._progreso["value"] = 0
 
         def _worker_lotes():
-            self.callback_log(
-                f"\n{'=' * 50}\nIniciando generaci\u00f3n por lotes...", "info")
+            try:
+                self.callback_log(
+                    f"\n{'=' * 50}\nIniciando generaci\u00f3n por lotes...", "info")
 
-            self.motor.generar_lotes_csv(
-                ruta_csv=self._ruta_csv_completa,
-                proveedor=cfg["proveedor"],
-                transparencia=cfg["transparencia"],
-                campos=campos,
-                color_infra=cfg["color_infra"],
-                escala_manual=escala_manual,
-                callback_log=self.callback_log,
-                callback_progreso=self._actualizar_progreso,
-            )
+                self.motor.generar_lotes_csv(
+                    ruta_csv=self._ruta_csv_completa,
+                    proveedor=cfg["proveedor"],
+                    transparencia=cfg["transparencia"],
+                    campos=campos,
+                    color_infra=cfg["color_infra"],
+                    escala_manual=escala_manual,
+                    callback_log=self.callback_log,
+                    callback_progreso=self._actualizar_progreso,
+                )
 
-            self._parent_window.after(0, self._fin_generacion)
+                self._parent_window.after(0, self._fin_generacion)
+            except GeneracionCancelada:
+                self._parent_window.after(0, self._fin_cancelacion)
 
         threading.Thread(target=_worker_lotes, daemon=True).start()
 
@@ -560,12 +594,63 @@ class PanelGeneracion:
     def _fin_generacion(self):
         cfg = self.get_config()
         self._btn_generar.configure(state="normal", text="  GENERAR PLANOS  ")
+        self._btn_parar.configure(state="disabled", text="\u23f9  PARAR GENERACI\u00d3N  ")
         self.callback_log(
             f"\n\u2713 Proceso finalizado. Planos guardados en:\n{cfg['salida']}", "ok")
         messagebox.showinfo(
             "Completado",
             f"Planos generados correctamente.\n\nCarpeta: {cfg['salida']}",
         )
+
+    def _fin_cancelacion(self):
+        self._btn_generar.configure(state="normal", text="  GENERAR PLANOS  ")
+        self._btn_parar.configure(state="disabled", text="\u23f9  PARAR GENERACI\u00d3N  ")
+        self._lbl_progreso.configure(text="Generaci\u00f3n cancelada")
+        self.callback_log(
+            "\n\u26a0 Generaci\u00f3n cancelada por el usuario. "
+            "Los planos ya generados se han conservado.", "warn")
+        messagebox.showinfo(
+            "Cancelado",
+            "Generaci\u00f3n detenida.\n\n"
+            "Los planos generados antes de parar se han conservado.",
+        )
+
+    def _parar_generacion(self):
+        """Solicita cancelar la generación en curso."""
+        self.motor.cancelar_generacion()
+        self._btn_parar.configure(state="disabled", text="\u23f9  Parando...")
+        self.callback_log("\n\u26a0 Cancelando generaci\u00f3n...", "warn")
+
+    def _vaciar_cache(self):
+        """Elimina la caché de teselas descargadas (contextily)."""
+        import matplotlib.pyplot as plt
+        plt.close("all")
+
+        eliminados = []
+
+        # Caché de contextily
+        try:
+            import contextily as ctx
+            cache_dir = ctx.tile._calculate_cache_dir() if hasattr(ctx.tile, '_calculate_cache_dir') else None
+            if cache_dir is None:
+                cache_dir = os.path.join(os.path.expanduser("~"), ".cache", "contextily")
+            if os.path.isdir(cache_dir):
+                shutil.rmtree(cache_dir)
+                eliminados.append(f"contextily: {cache_dir}")
+        except Exception:
+            # Intentar ruta por defecto
+            cache_dir = os.path.join(os.path.expanduser("~"), ".cache", "contextily")
+            if os.path.isdir(cache_dir):
+                shutil.rmtree(cache_dir)
+                eliminados.append(f"contextily: {cache_dir}")
+
+        if eliminados:
+            msg = "Cach\u00e9 eliminada:\n" + "\n".join(f"  - {e}" for e in eliminados)
+            self.callback_log(f"\n\u2713 {msg}", "ok")
+            messagebox.showinfo("Cach\u00e9 vaciada", msg)
+        else:
+            self.callback_log("\nNo se encontr\u00f3 cach\u00e9 que eliminar.", "info")
+            messagebox.showinfo("Cach\u00e9", "No se encontr\u00f3 cach\u00e9 de teselas.")
 
     def _abrir_carpeta(self):
         cfg = self.get_config()

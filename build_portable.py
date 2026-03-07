@@ -25,7 +25,7 @@ import zipfile
 
 APP_NAME = "GeneradorPlanos_Portable"
 APP_VERSION = "2.0.0"
-APP_DESCRIPTION = "Generador de Planos Forestales - Cazorla Travel"
+APP_DESCRIPTION = "Generador de Planos Forestales - Jose Caballero"
 ICON_FILE = os.path.join("assets", "icon.ico")
 
 # Punto de entrada directo que evita la verificación de dependencias
@@ -146,7 +146,7 @@ VSVersionInfo(
         StringTable(
           u'040A04B0',
           [
-            StringStruct(u'CompanyName', u'Cazorla Travel'),
+            StringStruct(u'CompanyName', u'Jose Caballero'),
             StringStruct(u'FileDescription',
                          u'Generador de Planos Forestales'),
             StringStruct(u'FileVersion', u'{APP_VERSION}'),
@@ -156,7 +156,7 @@ VSVersionInfo(
                          u'Generador de Planos Forestales'),
             StringStruct(u'ProductVersion', u'{APP_VERSION}'),
             StringStruct(u'LegalCopyright',
-                         u'(c) Cazorla Travel'),
+                         u'(c) Jose Caballero'),
           ]
         )
       ]
@@ -211,7 +211,7 @@ def main():
 
     # Crear archivo de metadatos Windows
     version_file = crear_version_info()
-    print(f"  Metadatos Windows: v{APP_VERSION} - Cazorla Travel")
+    print(f"  Metadatos Windows: v{APP_VERSION} - Jose Caballero")
 
     cmd = [
         sys.executable, "-m", "PyInstaller",
@@ -287,7 +287,7 @@ def main():
         print("  Propiedades visibles en Windows Explorer:")
         print("    - Nombre: Generador de Planos Forestales")
         print(f"    - Version: {APP_VERSION}")
-        print("    - Empresa: Cazorla Travel")
+        print("    - Autor: Jose Caballero")
         print("=" * 60)
     else:
         print(f"\n  ERROR: Fallo la construccion (codigo {result.returncode})")

@@ -14,6 +14,11 @@ import matplotlib
 import matplotlib.pyplot as plt
 from shapely.ops import unary_union
 
+
+class GeneracionCancelada(Exception):
+    """Excepción lanzada cuando el usuario cancela la generación."""
+    pass
+
 from .escala import seleccionar_escala, FORMATOS, MARGENES_MM
 from .cartografia import añadir_fondo_cartografico
 from .maquetacion import MaquetadorPlano, ETIQUETAS_CAMPOS, crear_portada, crear_indice
@@ -88,6 +93,16 @@ class GeneradorPlanos:
         self._cajetin = {}
         self._plantilla = {}
         self.config_infra = {}  # linewidth, alpha, linestyle, marker
+        self._cancelar = threading.Event()
+
+    def cancelar_generacion(self):
+        """Señala que la generación en curso debe detenerse."""
+        self._cancelar.set()
+
+    def _check_cancelado(self):
+        """Lanza excepción si se ha solicitado cancelar."""
+        if self._cancelar.is_set():
+            raise GeneracionCancelada("Generación cancelada por el usuario.")
 
     # ── Configuración ────────────────────────────────────────────────────
 
@@ -404,6 +419,7 @@ class GeneradorPlanos:
         rutas = []
         total = len(indices)
         for i, idx in enumerate(indices):
+            self._check_cancelado()
             nombre = self.gdf_infra.iloc[idx].get("Nombre_Infra", f"#{idx}")
             if callback_log:
                 callback_log(f"\n[{i + 1}/{total}] Generando: {nombre}")
@@ -416,6 +432,8 @@ class GeneradorPlanos:
                     callback_log=callback_log,
                 )
                 rutas.append(ruta)
+            except GeneracionCancelada:
+                raise
             except Exception as e:
                 if callback_log:
                     callback_log(f"  \u2717 Error: {e}")
@@ -436,6 +454,7 @@ class GeneradorPlanos:
         rutas = []
         total = len(valores)
         for i, valor in enumerate(valores):
+            self._check_cancelado()
             if callback_log:
                 callback_log(f"\n[{i + 1}/{total}] Grupo: {campo_grupo} = {valor}")
             indices = self.obtener_indices_por_valor(campo_grupo, valor)
@@ -460,6 +479,8 @@ class GeneradorPlanos:
                     callback_log=callback_log,
                 )
                 rutas.append(ruta)
+            except GeneracionCancelada:
+                raise
             except Exception as e:
                 if callback_log:
                     callback_log(f"  \u2717 Error: {e}")
@@ -517,6 +538,7 @@ class GeneradorPlanos:
 
             # Planos
             for i, idx in enumerate(indices):
+                self._check_cancelado()
                 nombre = self.gdf_infra.iloc[idx].get("Nombre_Infra", f"#{idx}")
                 if callback_log:
                     callback_log(f"\n[{i + 1}/{total}] Generando: {nombre}")
@@ -603,6 +625,7 @@ class GeneradorPlanos:
         rutas = []
         total = len(lotes)
         for i, lote in enumerate(lotes):
+            self._check_cancelado()
             if callback_log:
                 callback_log(
                     f"\n[{i + 1}/{total}] Lote: {lote.get('nombre', lote['ruta_shp'])}")
