@@ -88,7 +88,7 @@ class MaquetadorPlano:
             top=gs_top, bottom=inf,
             width_ratios=[0.28, 0.42, 0.30],
             height_ratios=[RATIO_MAPA_ALTO, 1 - RATIO_MAPA_ALTO],
-            hspace=0.04, wspace=0.01,
+            hspace=0.012, wspace=0.008,
         )
 
         # Mapa principal: fila 0, ancho completo (3 columnas)
@@ -414,7 +414,7 @@ class MaquetadorPlano:
         ax.set_facecolor("#E8E8E0")
 
         for sp in ax.spines.values():
-            sp.set_linewidth(1.2)
+            sp.set_linewidth(1.0)
             sp.set_color("#2C3E50")
         ax.tick_params(labelbottom=False, labelleft=False,
                        bottom=False, left=False)
@@ -449,8 +449,12 @@ class MaquetadorPlano:
         except Exception:
             pass
 
-        ax.set_title("LOCALIZACIÓN", fontsize=5, fontweight="bold",
-                      color="#2C3E50", pad=2)
+        # Título dentro del panel (consistente con cajetín y datos)
+        ax.text(0.5, 0.97, "LOCALIZACIÓN", ha="center", va="top",
+                fontsize=5, fontweight="bold", color="white",
+                transform=ax.transAxes, zorder=12,
+                bbox=dict(boxstyle="round,pad=0.15", facecolor="#2C3E50",
+                          edgecolor="none"))
 
         # ── Escala del mapa de localización ──
         extent_m = xmax_m - xmin_m
