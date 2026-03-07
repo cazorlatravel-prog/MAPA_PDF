@@ -61,6 +61,20 @@ def _calcular_stats_grupo(gdf_grupo):
     return stats
 
 
+def _leer_geodatos(ruta: str, layer: str = None) -> gpd.GeoDataFrame:
+    """Lee un shapefile o geodatabase con fallback al driver OpenFileGDB."""
+    kwargs = {}
+    if layer:
+        kwargs["layer"] = layer
+    if ruta.lower().rstrip("/\\").endswith(".gdb"):
+        # Intentar primero con OpenFileGDB (más compatible con ArcGIS)
+        try:
+            return gpd.read_file(ruta, driver="OpenFileGDB", **kwargs)
+        except Exception:
+            pass
+    return gpd.read_file(ruta, **kwargs)
+
+
 class GeneradorPlanos:
     """Motor principal de generación de planos cartográficos profesionales."""
 
@@ -87,7 +101,7 @@ class GeneradorPlanos:
     def cargar_infraestructuras(self, ruta: str, layer: str = None) -> tuple:
         """Carga shapefile/GDB de infraestructuras y reproyecta a EPSG:25830."""
         try:
-            gdf = gpd.read_file(ruta, layer=layer)
+            gdf = _leer_geodatos(ruta, layer=layer)
             if gdf.crs is None:
                 gdf = gdf.set_crs("EPSG:4326")
             gdf = gdf.to_crs("EPSG:25830")
@@ -116,7 +130,7 @@ class GeneradorPlanos:
 
     def cargar_montes(self, ruta: str, layer: str = None) -> tuple:
         try:
-            gdf = gpd.read_file(ruta, layer=layer)
+            gdf = _leer_geodatos(ruta, layer=layer)
             if gdf.crs is None:
                 gdf = gdf.set_crs("EPSG:4326")
             gdf = gdf.to_crs("EPSG:25830")
