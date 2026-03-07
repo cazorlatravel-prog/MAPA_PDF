@@ -1,0 +1,8 @@
+geopandas>=0.14
+matplotlib>=3.8
+numpy>=1.26
+requests>=2.31
+Pillow>=10.0
+contextily>=1.6
+pyproj>=3.6
+reportlab>=4.0
