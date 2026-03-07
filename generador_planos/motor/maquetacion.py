@@ -1,15 +1,15 @@
 """
 Layout matplotlib del plano cartográfico profesional.
 
-Layout v3:
+Layout v4:
   - Cabecera compacta dentro del área imprimible (8 mm)
   - Mapa principal a ancho completo (~73 % del alto útil)
-  - Mini-mapa de localización con fondo topográfico IGN 1:250.000
-    superpuesto arriba-derecha (~1/6 del plano)
   - Grid UTM como marco exterior con coordenadas en los bordes
-  - Franja inferior con dos zonas:
-      · Izquierda (35 %): cajetín de proyecto + escala + norte
-      · Derecha  (65 %): datos de la infraestructura en 2 columnas
+  - Franja inferior con tres paneles alineados:
+      · Izquierda  (28 %): cajetín de proyecto + escala + norte
+      · Centro     (42 %): datos de la infraestructura (2 columnas)
+      · Derecha    (30 %): mapa de localización con fondo topográfico
+  - Campos dinámicos: se muestran las columnas reales del shapefile
 """
 
 import math
@@ -27,7 +27,7 @@ from .escala import (
     RATIO_MAPA_ANCHO, RATIO_MAPA_ALTO,
 )
 
-# ── Constantes ──────────────────────────────────────────────────────────
+# ── Etiquetas embellecidas para campos conocidos (opcional) ─────────────
 
 ETIQUETAS_CAMPOS = {
     "Provincia": "Provincia",
@@ -43,23 +43,9 @@ ETIQUETAS_CAMPOS = {
     "Tipo_Trabajos": "Tipo de Trabajos",
 }
 
-SPAIN_X = [
-    -9.2, -8.8, -8.2, -7.5, -6.8, -5.5, -4.5, -3.3,
-    -1.8, -0.5, 0.3, 1.8, 3.3, 3.3, 3.0, 2.0,
-    1.0, 0.2, -0.8, -1.7, -2.0, -1.8, -1.6, -2.5,
-    -4.5, -6.0, -7.2, -8.5, -9.2, -9.2,
-]
-SPAIN_Y = [
-    41.8, 43.7, 43.7, 43.7, 43.7, 43.7, 43.5, 43.4,
-    43.5, 43.4, 42.8, 42.3, 42.4, 41.0, 40.5, 40.8,
-    40.7, 40.0, 38.8, 37.5, 37.0, 36.6, 36.2, 36.0,
-    36.0, 36.2, 36.7, 37.5, 39.0, 41.8,
-]
-
 DPI = 150
-_CABECERA_MM = 8  # alto de la cabecera en mm
+_CABECERA_MM = 8
 
-# Declinación magnética aprox. para España (grados Este, 2024-2026)
 _DECL_MAG = {"oeste": 0.5, "centro": 1.0, "este": 1.8, "sur": 0.8}
 
 
@@ -73,12 +59,17 @@ def _estimar_declinacion(lon_deg):
     return _DECL_MAG["este"]
 
 
+def _etiqueta_campo(campo):
+    """Devuelve una etiqueta embellecida o el nombre del campo tal cual."""
+    return ETIQUETAS_CAMPOS.get(campo, campo)
+
+
 # ════════════════════════════════════════════════════════════════════════
 #  MaquetadorPlano
 # ════════════════════════════════════════════════════════════════════════
 
 class MaquetadorPlano:
-    """Crea la maquetación completa del plano cartográfico (layout v3)."""
+    """Crea la maquetación completa del plano cartográfico (layout v4)."""
 
     def __init__(self, formato_key: str, escala: int):
         self.formato_key = formato_key
@@ -86,9 +77,9 @@ class MaquetadorPlano:
         self.escala = escala
         self.fig = None
         self.ax_map = None
-        self.ax_info = None   # datos infraestructura (der)
-        self.ax_mini = None   # mini-mapa localización (inset)
-        self.ax_esc = None    # cajetín proyecto + escala + norte (izq)
+        self.ax_info = None   # datos infraestructura (centro)
+        self.ax_mini = None   # mapa localización (derecha)
+        self.ax_esc = None    # cajetín proyecto + escala + norte (izquierda)
 
     # ── Creación de la figura ──────────────────────────────────────────
 
@@ -104,33 +95,24 @@ class MaquetadorPlano:
         inf = MARGENES_MM["inf"] / self.fmt_mm[1]
         h_cab = _CABECERA_MM / self.fmt_mm[1]
 
-        # El GridSpec empieza debajo de la cabecera
         gs_top = 1 - sup - h_cab - 0.005
 
         gs = gridspec.GridSpec(
-            2, 2, figure=self.fig,
+            2, 3, figure=self.fig,
             left=izq, right=1 - der,
             top=gs_top, bottom=inf,
-            width_ratios=[0.35, 0.65],
+            width_ratios=[0.28, 0.42, 0.30],
             height_ratios=[RATIO_MAPA_ALTO, 1 - RATIO_MAPA_ALTO],
-            hspace=0.03, wspace=0.02,
+            hspace=0.03, wspace=0.015,
         )
 
-        # Mapa principal: fila 0, ancho completo
+        # Mapa principal: fila 0, ancho completo (3 columnas)
         self.ax_map = self.fig.add_subplot(gs[0, :])
 
-        # Franja inferior: cajetín/escala (izq) + datos infra (der)
-        self.ax_esc = self.fig.add_subplot(gs[1, 0])
-        self.ax_info = self.fig.add_subplot(gs[1, 1])
-
-        # Mini-mapa de localización: inset superpuesto arriba-derecha
-        map_pos = self.ax_map.get_position()
-        inset_w = (1 - izq - der) * 0.20
-        inset_h = (gs_top - inf) * RATIO_MAPA_ALTO * 0.30
-        inset_x = map_pos.x1 - inset_w - 0.008
-        inset_y = map_pos.y1 - inset_h - 0.008
-        self.ax_mini = self.fig.add_axes(
-            [inset_x, inset_y, inset_w, inset_h], zorder=20)
+        # Franja inferior: 3 paneles alineados
+        self.ax_esc = self.fig.add_subplot(gs[1, 0])    # cajetín (izq)
+        self.ax_info = self.fig.add_subplot(gs[1, 1])   # datos infra (centro)
+        self.ax_mini = self.fig.add_subplot(gs[1, 2])   # localización (der)
 
         return self.fig, self.ax_map, self.ax_info, self.ax_mini, self.ax_esc
 
@@ -158,7 +140,7 @@ class MaquetadorPlano:
             sp.set_linewidth(1.2)
             sp.set_color("#2C3E50")
 
-    # ── Grid UTM (marco + coordenadas en bordes) ──────────────────────
+    # ── Grid UTM ──────────────────────────────────────────────────────
 
     def dibujar_grid_utm(self, xmin, xmax, ymin, ymax):
         intervalo = INTERVALOS_GRID.get(self.escala, 1000)
@@ -188,7 +170,7 @@ class MaquetadorPlano:
                 ax.plot(x, y, "+", color="#2C3E50", markersize=3,
                         markeredgewidth=0.3, alpha=0.35, zorder=3)
 
-    # ── Etiquetas en el mapa ───────────────────────────────────────────
+    # ── Etiquetas ──────────────────────────────────────────────────────
 
     def dibujar_etiquetas_infra(self, gdf_sel, campo_etiqueta="Nombre_Infra",
                                  campo_mapeo=None):
@@ -213,7 +195,7 @@ class MaquetadorPlano:
                           edgecolor="#666666", linewidth=0.3, alpha=0.85),
             )
 
-    # ── Numeración de vértices ─────────────────────────────────────────
+    # ── Vértices ───────────────────────────────────────────────────────
 
     def dibujar_vertices_numerados(self, geom):
         coords = []
@@ -252,7 +234,7 @@ class MaquetadorPlano:
             coords.append((i, x, y))
         return coords
 
-    # ── Leyenda automática ─────────────────────────────────────────────
+    # ── Leyenda ────────────────────────────────────────────────────────
 
     def dibujar_leyenda(self, items_leyenda, stats_resumen=None):
         handles = []
@@ -293,13 +275,13 @@ class MaquetadorPlano:
                 self.ax_map.text(
                     0.01, 0.01, "\n".join(lines),
                     transform=self.ax_map.transAxes,
-                    fontsize=4.5, va="bottom", ha="left", color="#333333",
+                    fontsize=4.5, va="bottom", ha="left", color="#333",
                     bbox=dict(boxstyle="round,pad=0.3", facecolor="white",
-                              edgecolor="#CCCCCC", alpha=0.9),
+                              edgecolor="#CCC", alpha=0.9),
                     zorder=15,
                 )
 
-    # ── Panel de atributos (franja inferior DERECHA, 2 columnas) ──────
+    # ── Panel de atributos (centro, 2 columnas, campos dinámicos) ─────
 
     def dibujar_panel_atributos(self, row, campos_visibles, campo_mapeo=None):
         self.dibujar_panel_atributos_multi([row], campos_visibles, campo_mapeo)
@@ -311,6 +293,7 @@ class MaquetadorPlano:
         ax.set_ylim(0, 1)
         ax.axis("off")
 
+        # Fondo
         ax.add_patch(FancyBboxPatch(
             (0, 0), 1, 1, boxstyle="round,pad=0.01",
             facecolor="#F8F9FA", edgecolor="#2C3E50", linewidth=1.0, zorder=0))
@@ -319,28 +302,33 @@ class MaquetadorPlano:
         es_multi = n_rows > 1
         titulo = ("DATOS DE LAS INFRAESTRUCTURAS" if es_multi
                   else "DATOS DE LA INFRAESTRUCTURA")
-        ax.text(0.5, 0.96, titulo, ha="center", va="top", fontsize=6,
+        ax.text(0.5, 0.97, titulo, ha="center", va="top", fontsize=5.5,
                 fontweight="bold", color="white", transform=ax.transAxes,
-                bbox=dict(boxstyle="round,pad=0.2", facecolor="#2C3E50",
+                bbox=dict(boxstyle="round,pad=0.15", facecolor="#2C3E50",
                           edgecolor="none"))
 
-        campos_orden = list(ETIQUETAS_CAMPOS.keys())
-        campos_mostrar = [c for c in campos_orden if c in campos_visibles]
+        # Los campos visibles son los nombres reales de las columnas
+        # del shapefile. Se muestran todos, con etiqueta embellecida
+        # si está disponible en ETIQUETAS_CAMPOS.
+        campos_mostrar = list(campos_visibles) if campos_visibles else []
         n_campos = len(campos_mostrar)
         if n_campos == 0:
+            ax.text(0.5, 0.5, "Sin campos seleccionados", ha="center",
+                    va="center", fontsize=5, color="#999",
+                    transform=ax.transAxes)
             return
 
-        def _res(campo):
+        def _resolver_campo(campo):
+            """Obtiene el nombre real de la columna en el row."""
             if campo_mapeo and campo in campo_mapeo:
                 return campo_mapeo[campo]
             return campo
 
         if not es_multi:
-            # ── Layout 2 columnas para un registro ──
+            # ── 2 columnas, un solo registro ──
             row = rows[0]
             y_top = 0.88
-            y_bot = 0.04
-            # Dividir campos en 2 columnas
+            y_bot = 0.03
             mitad = math.ceil(n_campos / 2)
             col_izq = campos_mostrar[:mitad]
             col_der = campos_mostrar[mitad:]
@@ -351,43 +339,49 @@ class MaquetadorPlano:
                 n = len(col_campos)
                 if n == 0:
                     continue
-                row_h = (y_top - y_bot) / max(n, 1)
+                row_h = min((y_top - y_bot) / max(n, 1), 0.14)
                 for i, campo in enumerate(col_campos):
                     y = y_top - i * row_h
-                    valor = str(row.get(_res(campo), "\u2014"))
-                    etiq = ETIQUETAS_CAMPOS.get(campo, campo)
+                    campo_real = _resolver_campo(campo)
+                    valor = str(row.get(campo_real, "\u2014"))
+                    if valor == "nan":
+                        valor = "\u2014"
+                    etiq = _etiqueta_campo(campo)
+                    if len(etiq) > 18:
+                        etiq = etiq[:17] + "."
                     if i % 2 == 0:
                         ax.add_patch(Rectangle(
                             (x_base, y - row_h + 0.002), x_end - x_base,
                             row_h - 0.002,
                             facecolor="#E8F4F8", edgecolor="none", zorder=1))
                     ax.text(x_base + 0.02, y - row_h / 2, etiq + ":",
-                            ha="left", va="center", fontsize=5,
+                            ha="left", va="center", fontsize=4.5,
                             fontweight="bold", color="#2C3E50",
                             transform=ax.transAxes, zorder=2)
                     ax.text(x_end - 0.01, y - row_h / 2, valor,
-                            ha="right", va="center", fontsize=5,
+                            ha="right", va="center", fontsize=4.5,
                             color="#1A1A2E", transform=ax.transAxes, zorder=2)
 
-            # Línea separadora vertical central
-            ax.plot([0.50, 0.50], [y_top, y_bot], color="#CCCCCC",
-                    linewidth=0.5, transform=ax.transAxes, zorder=2)
+            # Separador vertical
+            ax.plot([0.50, 0.50], [y_top, y_bot], color="#CCC",
+                    linewidth=0.4, transform=ax.transAxes, zorder=2)
         else:
             # ── Tabla multi-registro ──
             max_cols = min(n_campos, 6)
             campos_tabla = campos_mostrar[:max_cols]
             y_start = 0.88
             total_filas = 1 + n_rows
-            row_h = (y_start - 0.04) / max(total_filas, 1)
-            fsz = max(3.5, min(5.0, 5.0 - (n_rows - 3) * 0.3))
+            row_h = (y_start - 0.03) / max(total_filas, 1)
+            fsz = max(3.5, min(4.5, 4.5 - (n_rows - 3) * 0.2))
             xl, xr = 0.02, 0.98
             col_w = (xr - xl) / max(len(campos_tabla), 1)
 
+            # Cabecera tabla
             ax.add_patch(Rectangle(
                 (xl, y_start - row_h), xr - xl, row_h,
                 facecolor="#2C3E50", edgecolor="none", zorder=1))
             for j, campo in enumerate(campos_tabla):
-                etiq = ETIQUETAS_CAMPOS.get(campo, campo)
+                etiq = _etiqueta_campo(campo)
                 if len(etiq) > 12:
                     etiq = etiq[:11] + "."
                 ax.text(xl + j * col_w + col_w / 2, y_start - row_h / 2,
@@ -402,7 +396,10 @@ class MaquetadorPlano:
                         (xl, y - row_h + 0.002), xr - xl, row_h - 0.002,
                         facecolor="#E8F4F8", edgecolor="none", zorder=1))
                 for j, campo in enumerate(campos_tabla):
-                    val = str(r.get(_res(campo), "\u2014"))
+                    campo_real = _resolver_campo(campo)
+                    val = str(r.get(campo_real, "\u2014"))
+                    if val == "nan":
+                        val = "\u2014"
                     if len(val) > 18:
                         val = val[:17] + "\u2026"
                     ax.text(xl + j * col_w + col_w / 2, y - row_h / 2,
@@ -419,17 +416,16 @@ class MaquetadorPlano:
                         [y_start, y_start - total_filas * row_h],
                         color="#AAA", linewidth=0.3,
                         transform=ax.transAxes, zorder=2)
-            ax.text(0.5, y_start - total_filas * row_h - 0.015,
+            ax.text(0.5, y_start - total_filas * row_h - 0.012,
                     f"{n_rows} infraestructuras", ha="center", va="top",
-                    fontsize=4.5, color="#555", style="italic",
+                    fontsize=4, color="#555", style="italic",
                     transform=ax.transAxes)
 
-    # ── Mapa de localización (inset con fondo topográfico) ─────────────
+    # ── Mapa de localización (panel inferior derecho) ──────────────────
 
     def dibujar_mapa_posicion(self, cx, cy):
         ax = self.ax_mini
 
-        # Extensión del mini-mapa en UTM (~1:250.000, ±15 km)
         radio = 15_000
         xmin_m, xmax_m = cx - radio, cx + radio
         ymin_m, ymax_m = cy - radio, cy + radio
@@ -438,15 +434,14 @@ class MaquetadorPlano:
         ax.set_ylim(ymin_m, ymax_m)
         ax.set_aspect("equal")
         ax.set_facecolor("#E8E8E0")
-        ax.patch.set_alpha(0.95)
 
         for sp in ax.spines.values():
-            sp.set_linewidth(1.2)
+            sp.set_linewidth(1.0)
             sp.set_color("#2C3E50")
         ax.tick_params(labelbottom=False, labelleft=False,
                        bottom=False, left=False)
 
-        # Intentar cargar fondo topográfico IGN
+        # Fondo topográfico IGN
         try:
             from .cartografia import _descargar_teselas_manual, CAPAS_BASE
             url = CAPAS_BASE.get("IGN Topográfico")
@@ -456,23 +451,21 @@ class MaquetadorPlano:
                 ax.set_xlim(xmin_m, xmax_m)
                 ax.set_ylim(ymin_m, ymax_m)
         except Exception:
-            # Fallback: dibujar silueta de España en lat/lon
-            # (requiere cambiar a coords geográficas)
             pass
 
         # Punto de localización
-        ax.plot(cx, cy, "o", color="white", markersize=8, zorder=5)
-        ax.plot(cx, cy, "o", color="#E74C3C", markersize=5, zorder=6,
-                markeredgecolor="white", markeredgewidth=0.5)
+        ax.plot(cx, cy, "o", color="white", markersize=7, zorder=5)
+        ax.plot(cx, cy, "o", color="#E74C3C", markersize=4.5, zorder=6,
+                markeredgecolor="white", markeredgewidth=0.4)
 
-        # Recuadro indicando la extensión del mapa principal
+        # Recuadro extensión del mapa principal
         try:
-            map_xlim = self.ax_map.get_xlim()
-            map_ylim = self.ax_map.get_ylim()
-            rect_w = map_xlim[1] - map_xlim[0]
-            rect_h = map_ylim[1] - map_ylim[0]
+            xlims = self.ax_map.get_xlim()
+            ylims = self.ax_map.get_ylim()
+            rw = xlims[1] - xlims[0]
+            rh = ylims[1] - ylims[0]
             ax.add_patch(Rectangle(
-                (map_xlim[0], map_ylim[0]), rect_w, rect_h,
+                (xlims[0], ylims[0]), rw, rh,
                 fill=False, edgecolor="#E74C3C", linewidth=1.0, zorder=7,
                 linestyle="--"))
         except Exception:
@@ -481,7 +474,7 @@ class MaquetadorPlano:
         ax.set_title("LOCALIZACIÓN", fontsize=5, fontweight="bold",
                       color="#2C3E50", pad=2)
 
-    # ── Cajetín + Escala + Norte (franja inferior IZQUIERDA) ──────────
+    # ── Cajetín + Escala + Norte (panel inferior izquierdo) ───────────
 
     def dibujar_barra_escala(self, proveedor: str, cx_utm=None, cy_utm=None,
                               cajetin=None):
@@ -502,7 +495,7 @@ class MaquetadorPlano:
 
         # ── Datos del cajetín ──
         y_pos = 0.87
-        line_h = 0.075
+        line_h = 0.072
         campos_caj = [
             ("Proyecto", cajetin.get("proyecto", "") if cajetin else ""),
             ("Nº Proyecto", cajetin.get("num_proyecto", "") if cajetin else ""),
@@ -514,44 +507,44 @@ class MaquetadorPlano:
             y = y_pos - i * line_h
             if i % 2 == 0:
                 ax.add_patch(Rectangle(
-                    (0.03, y - line_h + 0.004), 0.94, line_h - 0.004,
+                    (0.04, y - line_h + 0.003), 0.92, line_h - 0.003,
                     facecolor="#E8EEF2", edgecolor="none", zorder=1))
-            ax.text(0.06, y - line_h / 2, etiq + ":", ha="left", va="center",
-                    fontsize=4.5, fontweight="bold", color="#2C3E50", zorder=2)
-            ax.text(0.94, y - line_h / 2, str(valor), ha="right", va="center",
-                    fontsize=4.5, color="#1A1A2E", zorder=2)
+            ax.text(0.07, y - line_h / 2, etiq + ":", ha="left", va="center",
+                    fontsize=4.2, fontweight="bold", color="#2C3E50", zorder=2)
+            ax.text(0.93, y - line_h / 2, str(valor), ha="right", va="center",
+                    fontsize=4.2, color="#1A1A2E", zorder=2)
 
         # ── Separador ──
         sep_y = y_pos - len(campos_caj) * line_h - 0.005
-        ax.plot([0.06, 0.94], [sep_y, sep_y], color="#2C3E50", linewidth=0.5,
+        ax.plot([0.07, 0.93], [sep_y, sep_y], color="#2C3E50", linewidth=0.5,
                 zorder=2)
 
         # ── Barra de escala (mini) ──
         barra_m = BARRA_ESCALA_M.get(self.escala, 1000)
-        barra_frac = 0.45
-        esc_y = sep_y - 0.05
-        esc_x0 = 0.06
+        barra_frac = 0.50
+        esc_y = sep_y - 0.045
+        esc_x0 = 0.07
 
         n_seg = 4
         seg = barra_frac / n_seg
         for i in range(n_seg):
             c = "#1A1A2E" if i % 2 == 0 else "white"
             ax.add_patch(Rectangle(
-                (esc_x0 + i * seg, esc_y), seg, 0.035,
+                (esc_x0 + i * seg, esc_y), seg, 0.03,
                 facecolor=c, edgecolor="#1A1A2E", linewidth=0.4))
 
-        ax.text(esc_x0, esc_y - 0.025, "0", ha="center", va="top",
+        ax.text(esc_x0, esc_y - 0.02, "0", ha="center", va="top",
                 fontsize=3.5, color="#1A1A2E")
-        ax.text(esc_x0 + barra_frac, esc_y - 0.025, f"{barra_m} m",
+        ax.text(esc_x0 + barra_frac, esc_y - 0.02, f"{barra_m} m",
                 ha="center", va="top", fontsize=3.5, color="#1A1A2E")
-        ax.text(esc_x0 + barra_frac / 2, esc_y + 0.05,
+        ax.text(esc_x0 + barra_frac / 2, esc_y + 0.045,
                 f"Escala 1:{self.escala:,}", ha="center", va="bottom",
                 fontsize=5, fontweight="bold", color="#1A1A2E")
 
         # ── Norte geográfico (mini) ──
-        norte_x = 0.80
-        norte_y_base = esc_y - 0.01
-        norte_h = 0.10
+        norte_x = 0.82
+        norte_y_base = esc_y - 0.005
+        norte_h = 0.09
 
         decl = 0.0
         if cx_utm is not None and cy_utm is not None:
@@ -566,38 +559,35 @@ class MaquetadorPlano:
         ax.annotate("", xy=(norte_x, norte_y_base + norte_h),
                     xytext=(norte_x, norte_y_base),
                     arrowprops=dict(arrowstyle="->", color="#1A1A2E", lw=1.0))
-        ax.text(norte_x, norte_y_base + norte_h + 0.015, "N",
-                ha="center", va="bottom", fontsize=6, fontweight="bold",
+        ax.text(norte_x, norte_y_base + norte_h + 0.012, "N",
+                ha="center", va="bottom", fontsize=5.5, fontweight="bold",
                 color="#1A1A2E")
 
         if abs(decl) > 0.1:
             rad = math.radians(decl)
             nm_x = norte_x + 0.06
-            dx = math.sin(rad) * 0.05
+            dx = math.sin(rad) * 0.04
             dy = math.cos(rad) * norte_h
             ax.annotate("", xy=(nm_x + dx, norte_y_base + dy),
                         xytext=(nm_x, norte_y_base),
                         arrowprops=dict(arrowstyle="->", color="#E74C3C",
                                         lw=0.5, linestyle="--"))
-            ax.text(nm_x + dx, norte_y_base + dy + 0.015, "NM",
-                    ha="center", va="bottom", fontsize=3.5, color="#E74C3C")
-            ax.text(norte_x + 0.03, norte_y_base - 0.02,
-                    f"Decl: {decl:.1f}\u00b0E", ha="center", va="top",
-                    fontsize=3, color="#666")
+            ax.text(nm_x + dx, norte_y_base + dy + 0.012, "NM",
+                    ha="center", va="bottom", fontsize=3, color="#E74C3C")
 
         # ── Créditos ──
         fecha = date.today().strftime("%d/%m/%Y")
         ax.text(0.5, 0.02,
                 f"{proveedor} | ETRS89 UTM H30N | {fecha}",
-                ha="center", va="bottom", fontsize=3.5, color="#666",
+                ha="center", va="bottom", fontsize=3.2, color="#666",
                 style="italic")
 
-    # ── Cajetín (integrado en dibujar_barra_escala) ────────────────────
+    # ── Cajetín (integrado) ────────────────────────────────────────────
 
     def dibujar_cajetin(self, cajetin: dict):
-        pass  # integrado en dibujar_barra_escala
+        pass
 
-    # ── Cabecera (dentro del área imprimible) ──────────────────────────
+    # ── Cabecera ───────────────────────────────────────────────────────
 
     def dibujar_cabecera(self, row, titulo_grupo=None, num_plano_override=None,
                           cajetin=None, plantilla=None):
@@ -619,28 +609,22 @@ class MaquetadorPlano:
         sup_f = MARGENES_MM["sup"] / self.fmt_mm[1]
         h_cab = _CABECERA_MM / self.fmt_mm[1]
 
-        # Cabecera inmediatamente debajo del margen superior
         ax_cab = self.fig.add_axes([
-            izq_f,
-            1 - sup_f - h_cab,
-            1 - izq_f - der_f,
-            h_cab,
+            izq_f, 1 - sup_f - h_cab,
+            1 - izq_f - der_f, h_cab,
         ])
         ax_cab.set_xlim(0, 1)
         ax_cab.set_ylim(0, 1)
         ax_cab.axis("off")
 
-        # Fondo degradado simulado con dos rectángulos
         ax_cab.add_patch(Rectangle((0, 0), 1, 1, facecolor=c_fondo,
                                     edgecolor="none"))
         ax_cab.add_patch(Rectangle((0, 0), 1, 0.04, facecolor=c_acento,
-                                    edgecolor="none"))  # línea inferior acento
+                                    edgecolor="none"))
 
-        # Organización (izquierda)
         ax_cab.text(0.015, 0.55, org, ha="left", va="center", fontsize=4.5,
                     fontweight="bold", color=c_acento, linespacing=1.1)
 
-        # Título central
         if titulo_grupo:
             ax_cab.text(0.5, 0.60, titulo_grupo.upper(), ha="center",
                         va="center", fontsize=7, fontweight="bold",
@@ -654,7 +638,6 @@ class MaquetadorPlano:
         ax_cab.text(0.5, 0.20, subtit, ha="center", va="center",
                     fontsize=4.5, color="#95A5A6")
 
-        # Número de plano (derecha)
         if num_plano_override is not None:
             num = num_plano_override
         else:

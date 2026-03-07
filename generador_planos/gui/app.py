@@ -244,6 +244,9 @@ class App(tk.Tk):
         self.panel_generacion.actualizar_valores_si_agrupado()
         self.panel_filtros.actualizar_campos()
         self.panel_simbologia.actualizar_capas_extra()
+        # Actualizar checkboxes de campos con las columnas reales del shapefile
+        columnas = self.motor.obtener_columnas_shapefile()
+        self.panel_campos.actualizar_campos(columnas)
 
     def _on_filtro_aplicado(self, indices: list):
         self._poblar_tabla(indices)
