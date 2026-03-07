@@ -220,7 +220,7 @@ class GeneradorPlanos:
         # Infraestructuras seleccionadas (resaltadas)
         ci = self.config_infra
         lw = ci.get("linewidth", 2.5)
-        alpha_infra = ci.get("alpha", 1.0)
+        alpha_infra = ci.get("alpha", 0.65)
         campo_cat = ci.get("campo_categoria")
 
         geom_type = ""
