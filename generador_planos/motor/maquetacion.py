@@ -330,9 +330,10 @@ class MaquetadorPlano:
                         fontsize=6.5, color="#1A1A2E", transform=ax.transAxes,
                         zorder=2, wrap=True)
             for i in range(1, n_campos):
-                ax.axhline(y=y_start - i * row_h, xmin=0.02, xmax=0.98,
-                           color="#CCCCCC", linewidth=0.4,
-                           transform=ax.transAxes, zorder=2)
+                y_line = y_start - i * row_h
+                ax.plot([0.02, 0.98], [y_line, y_line],
+                        color="#CCCCCC", linewidth=0.4,
+                        transform=ax.transAxes, zorder=2)
         else:
             max_cols = min(n_campos, 6)
             campos_tabla = campos_mostrar[:max_cols]
@@ -370,9 +371,10 @@ class MaquetadorPlano:
                             color="#1A1A2E", transform=ax.transAxes, zorder=2)
 
             for r_idx in range(total_filas + 1):
-                ax.axhline(y=y_start - r_idx * row_h, xmin=x_left, xmax=x_right,
-                           color="#AAAAAA", linewidth=0.3,
-                           transform=ax.transAxes, zorder=2)
+                y_line = y_start - r_idx * row_h
+                ax.plot([x_left, x_right], [y_line, y_line],
+                        color="#AAAAAA", linewidth=0.3,
+                        transform=ax.transAxes, zorder=2)
             for j in range(len(campos_tabla) + 1):
                 x_line = x_left + j * col_w
                 ax.plot([x_line, x_line],
