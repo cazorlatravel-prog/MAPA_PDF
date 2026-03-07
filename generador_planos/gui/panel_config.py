@@ -1,6 +1,6 @@
 """
 Panel de configuración: formato de salida, cartografía de fondo,
-color de infraestructura y carpeta de salida.
+color de infraestructura, escala manual y carpeta de salida.
 """
 
 import os
@@ -14,7 +14,7 @@ from .estilos import (
     FONT_BOLD, FONT_SMALL, FONT_LABEL,
     crear_frame_seccion, crear_boton,
 )
-from ..motor.escala import FORMATOS
+from ..motor.escala import FORMATOS, ESCALAS
 from ..motor.cartografia import PROVIDERS_CTX
 
 
@@ -42,12 +42,28 @@ class PanelConfig:
                                state="readonly", font=FONT_LABEL)
         cb_prov.grid(row=3, column=0, sticky="ew", pady=(2, 8))
 
+        # ── Escala manual ──
+        tk.Label(f, text="Escala (0 = autom\u00e1tica):", font=FONT_BOLD,
+                 bg=COLOR_PANEL, fg=COLOR_TEXTO).grid(row=4, column=0, sticky="w")
+        escala_f = tk.Frame(f, bg=COLOR_PANEL)
+        escala_f.grid(row=5, column=0, sticky="ew", pady=(2, 8))
+
+        tk.Label(escala_f, text="1:", font=FONT_SMALL, bg=COLOR_PANEL,
+                 fg=COLOR_TEXTO).pack(side="left")
+        self._escala_manual = tk.StringVar(value="0")
+        self._cb_escala = ttk.Combobox(
+            escala_f, textvariable=self._escala_manual,
+            values=["0 (auto)"] + [f"{e:,}" for e in ESCALAS],
+            font=FONT_SMALL, width=12,
+        )
+        self._cb_escala.pack(side="left", padx=(2, 0))
+
         # ── Color infraestructura ──
         tk.Label(f, text="Color infraestructura:", font=FONT_BOLD,
-                 bg=COLOR_PANEL, fg=COLOR_TEXTO).grid(row=4, column=0, sticky="w")
+                 bg=COLOR_PANEL, fg=COLOR_TEXTO).grid(row=6, column=0, sticky="w")
         self._color_infra = "#E74C3C"
         btn_frame = tk.Frame(f, bg=COLOR_PANEL)
-        btn_frame.grid(row=5, column=0, sticky="ew", pady=(2, 8))
+        btn_frame.grid(row=7, column=0, sticky="ew", pady=(2, 8))
         self._lbl_color = tk.Label(btn_frame, bg=self._color_infra,
                                     width=4, relief="solid", bd=1)
         self._lbl_color.pack(side="left", padx=(0, 6))
@@ -57,19 +73,31 @@ class PanelConfig:
 
         # ── Carpeta de salida ──
         tk.Label(f, text="Carpeta de salida:", font=FONT_BOLD,
-                 bg=COLOR_PANEL, fg=COLOR_TEXTO).grid(row=6, column=0, sticky="w")
+                 bg=COLOR_PANEL, fg=COLOR_TEXTO).grid(row=8, column=0, sticky="w")
         self.salida = tk.StringVar(value=str(Path.home() / "Planos_Forestales"))
         tk.Label(f, textvariable=self.salida, font=FONT_SMALL,
                  bg=COLOR_PANEL, fg=COLOR_TEXTO_GRIS,
-                 wraplength=240, justify="left").grid(row=7, column=0, sticky="w")
+                 wraplength=240, justify="left").grid(row=9, column=0, sticky="w")
         crear_boton(f, "Seleccionar carpeta", self._elegir_carpeta,
-                    icono="\U0001f4c1").grid(row=8, column=0, sticky="ew", pady=(4, 4))
+                    icono="\U0001f4c1").grid(row=10, column=0, sticky="ew", pady=(4, 4))
 
         f.columnconfigure(0, weight=1)
 
     @property
     def color_infra(self) -> str:
         return self._color_infra
+
+    @property
+    def escala_manual(self) -> int:
+        """Devuelve la escala manual o None si es automática."""
+        txt = self._escala_manual.get().replace(",", "").strip()
+        if txt.startswith("0"):
+            return None
+        try:
+            val = int(txt)
+            return val if val > 0 else None
+        except ValueError:
+            return None
 
     def _elegir_color(self):
         color = colorchooser.askcolor(
@@ -86,7 +114,6 @@ class PanelConfig:
             self.salida.set(carpeta)
 
     def abrir_carpeta(self):
-        """Abre la carpeta de salida en el explorador de archivos."""
         carpeta = self.salida.get()
         os.makedirs(carpeta, exist_ok=True)
         if sys.platform == "win32":

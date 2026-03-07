@@ -1,8 +1,9 @@
 """
-Panel de carga de capas (Infraestructuras SHP + Montes SHP + Transparencia).
+Panel de carga de capas (Infraestructuras SHP + Montes SHP + Capas extra +
+Transparencia).
 
-Incluye previsualización rápida de la capa en un mini-canvas al cargarla
-y diálogo de mapeo de campos cuando el shapefile no tiene los nombres esperados.
+Incluye previsualización rápida de la capa en un mini-canvas al cargarla,
+diálogo de mapeo de campos y gestión de capas SHP adicionales.
 """
 
 import os
@@ -21,6 +22,7 @@ from .estilos import (
     crear_frame_seccion, crear_boton,
 )
 from ..motor.maquetacion import ETIQUETAS_CAMPOS
+from ..motor.capas_extra import TIPOS_CAPA
 
 CAMPOS_ESPERADOS = list(ETIQUETAS_CAMPOS.keys())
 
@@ -70,9 +72,35 @@ class PanelCapas:
                         orient="horizontal")
         sl.grid(row=7, column=0, sticky="ew", pady=(2, 4))
 
+        # ── Capas extra ──
+        tk.Label(f, text="Capas adicionales:", font=FONT_BOLD,
+                 bg=COLOR_PANEL, fg=COLOR_TEXTO).grid(
+                 row=8, column=0, sticky="w", pady=(6, 2))
+
+        self._frame_capas_extra = tk.Frame(f, bg=COLOR_PANEL)
+        self._frame_capas_extra.grid(row=9, column=0, sticky="ew")
+
+        btn_capas_f = tk.Frame(f, bg=COLOR_PANEL)
+        btn_capas_f.grid(row=10, column=0, sticky="ew", pady=(4, 2))
+        tk.Button(btn_capas_f, text="+ A\u00f1adir capa SHP",
+                  command=self._añadir_capa_extra, font=FONT_SMALL,
+                  bg=COLOR_BORDE, fg=COLOR_TEXTO, relief="flat",
+                  cursor="hand2", padx=4).pack(side="left", padx=(0, 4))
+        tk.Button(btn_capas_f, text="- Eliminar sel.",
+                  command=self._eliminar_capa_extra, font=FONT_SMALL,
+                  bg=COLOR_BORDE, fg=COLOR_TEXTO, relief="flat",
+                  cursor="hand2", padx=4).pack(side="left")
+
+        self._lista_capas = tk.Listbox(
+            self._frame_capas_extra, height=3, font=FONT_SMALL,
+            bg="#0D1117", fg=COLOR_TEXTO, selectbackground=COLOR_ACENTO,
+            selectforeground="#1A1A2E", relief="flat",
+        )
+        self._lista_capas.pack(fill="x", pady=(2, 0))
+
         # ── Mini-canvas de previsualización ──
         self._preview_frame = tk.Frame(f, bg=COLOR_PANEL, height=120)
-        self._preview_frame.grid(row=8, column=0, sticky="ew", pady=(4, 8))
+        self._preview_frame.grid(row=11, column=0, sticky="ew", pady=(4, 8))
         self._preview_frame.grid_propagate(False)
         self._canvas_widget = None
 
@@ -93,7 +121,6 @@ class PanelCapas:
             self.callback_tabla()
             self._previsualizar(self.motor.gdf_infra)
 
-            # Si hay campos faltantes, mostrar diálogo de mapeo
             if faltantes:
                 self._dialogo_mapeo_campos(faltantes)
         else:
@@ -117,8 +144,71 @@ class PanelCapas:
             self._ruta_montes.set("Error al cargar")
             self.callback_log(msg, "error")
 
+    def _añadir_capa_extra(self):
+        ruta = filedialog.askopenfilename(
+            title="Seleccionar Shapefile de capa adicional",
+            filetypes=[("Shapefile", "*.shp"), ("Todos", "*.*")],
+        )
+        if not ruta:
+            return
+
+        # Diálogo para nombre y tipo
+        dialog = tk.Toplevel()
+        dialog.title("Configurar capa")
+        dialog.configure(bg=COLOR_PANEL)
+        dialog.geometry("350x200")
+        dialog.transient()
+        dialog.grab_set()
+
+        tk.Label(dialog, text="Nombre de la capa:", font=FONT_BOLD,
+                 bg=COLOR_PANEL, fg=COLOR_TEXTO).pack(padx=10, pady=(10, 2))
+        nombre_var = tk.StringVar(
+            value=os.path.splitext(os.path.basename(ruta))[0])
+        tk.Entry(dialog, textvariable=nombre_var, font=FONT_SMALL,
+                 bg=COLOR_BORDE, fg=COLOR_TEXTO, insertbackground="white",
+                 relief="flat").pack(padx=10, fill="x")
+
+        tk.Label(dialog, text="Tipo de capa:", font=FONT_BOLD,
+                 bg=COLOR_PANEL, fg=COLOR_TEXTO).pack(padx=10, pady=(10, 2))
+        tipo_var = tk.StringVar(value="Personalizada")
+        ttk.Combobox(dialog, textvariable=tipo_var, values=TIPOS_CAPA,
+                     state="readonly", font=FONT_SMALL).pack(padx=10, fill="x")
+
+        def _aceptar():
+            nombre = nombre_var.get().strip() or "Capa"
+            tipo = tipo_var.get()
+            ok, msg, capa = self.motor.gestor_capas.cargar_capa(
+                ruta, nombre, tipo)
+            if ok:
+                self.callback_log(msg, "ok")
+                self._actualizar_lista_capas()
+            else:
+                self.callback_log(msg, "error")
+                messagebox.showerror("Error", msg)
+            dialog.destroy()
+
+        tk.Button(dialog, text="A\u00f1adir capa", command=_aceptar,
+                  font=FONT_SMALL, bg=COLOR_ACENTO, fg="#1A1A2E",
+                  relief="flat", cursor="hand2", pady=4).pack(
+                  padx=10, pady=10, fill="x")
+
+    def _eliminar_capa_extra(self):
+        sel = self._lista_capas.curselection()
+        if not sel:
+            return
+        nombre = self._lista_capas.get(sel[0]).split(" (")[0]
+        self.motor.gestor_capas.eliminar_capa(nombre)
+        self._actualizar_lista_capas()
+        self.callback_log(f"Capa '{nombre}' eliminada.", "info")
+
+    def _actualizar_lista_capas(self):
+        self._lista_capas.delete(0, "end")
+        for capa in self.motor.gestor_capas.capas:
+            vis = "\u2713" if capa.visible else "\u2717"
+            self._lista_capas.insert("end",
+                                      f"{capa.nombre} ({capa.tipo}) [{vis}]")
+
     def _previsualizar(self, gdf):
-        """Muestra una previsualización rápida de la capa en un mini-canvas."""
         if self._canvas_widget is not None:
             self._canvas_widget.get_tk_widget().destroy()
 
@@ -140,7 +230,6 @@ class PanelCapas:
         plt.close(fig)
 
     def _dialogo_mapeo_campos(self, faltantes):
-        """Muestra diálogo para mapear campos del shapefile a los esperados."""
         cols_disponibles = self.motor.obtener_columnas_shapefile()
         if not cols_disponibles:
             return

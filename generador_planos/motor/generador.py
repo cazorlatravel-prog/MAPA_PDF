@@ -2,7 +2,8 @@
 Motor principal de generación de planos cartográficos profesionales.
 
 Orquesta la carga de capas, selección de escala, maquetación y exportación
-a PDF individual, multipágina o agrupado por campo.
+a PDF individual, multipágina o agrupado por campo. Integra capas extra,
+simbología, etiquetas, vértices, leyenda, cajetín, portada e índice.
 """
 
 import os
@@ -15,10 +16,49 @@ from shapely.ops import unary_union
 
 from .escala import seleccionar_escala, FORMATOS, MARGENES_MM
 from .cartografia import añadir_fondo_cartografico
-from .maquetacion import MaquetadorPlano, ETIQUETAS_CAMPOS
+from .maquetacion import MaquetadorPlano, ETIQUETAS_CAMPOS, crear_portada, crear_indice
+from .capas_extra import GestorCapasExtra
+from .simbologia import GestorSimbologia
+from .proyecto import cargar_lotes_csv
 
 # Campos esperados en el shapefile
 CAMPOS_ATRIBUTOS = list(ETIQUETAS_CAMPOS.keys())
+
+
+def _auto_calcular_campos(gdf):
+    """Calcula longitud/superficie automáticamente si no existen en el GDF."""
+    if "Longitud" not in gdf.columns:
+        def _long(g):
+            gt = str(g.geom_type).lower()
+            if "line" in gt or "string" in gt:
+                return round(g.length, 1)
+            return 0.0
+        gdf["Longitud"] = gdf.geometry.apply(_long)
+
+    if "Superficie" not in gdf.columns:
+        def _sup(g):
+            gt = str(g.geom_type).lower()
+            if "polygon" in gt:
+                return round(g.area / 10000, 4)  # m² → ha
+            return 0.0
+        gdf["Superficie"] = gdf.geometry.apply(_sup)
+
+    return gdf
+
+
+def _calcular_stats_grupo(gdf_grupo):
+    """Calcula estadísticas resumen para un grupo de infraestructuras."""
+    stats = {"num_infraestructuras": len(gdf_grupo)}
+
+    if "Longitud" in gdf_grupo.columns:
+        total_m = gdf_grupo["Longitud"].astype(float).sum()
+        stats["total_longitud_km"] = total_m / 1000.0
+
+    if "Superficie" in gdf_grupo.columns:
+        total_ha = gdf_grupo["Superficie"].astype(float).sum()
+        stats["total_superficie_ha"] = total_ha
+
+    return stats
 
 
 class GeneradorPlanos:
@@ -29,8 +69,20 @@ class GeneradorPlanos:
         self.gdf_infra = None
         self.gdf_montes = None
         self._campo_mapeo = None  # {campo_esperado: campo_real}
+        self.gestor_capas = GestorCapasExtra()
+        self.gestor_simbologia = GestorSimbologia()
+        self._cajetin = {}
+        self._plantilla = {}
 
-    # ── Carga de capas ──────────────────────────────────────────────────
+    # ── Configuración ────────────────────────────────────────────────────
+
+    def set_cajetin(self, cajetin: dict):
+        self._cajetin = cajetin or {}
+
+    def set_plantilla(self, plantilla: dict):
+        self._plantilla = plantilla or {}
+
+    # ── Carga de capas ───────────────────────────────────────────────────
 
     def cargar_infraestructuras(self, ruta: str) -> tuple:
         """Carga shapefile de infraestructuras y reproyecta a EPSG:25830."""
@@ -39,6 +91,10 @@ class GeneradorPlanos:
             if gdf.crs is None:
                 gdf = gdf.set_crs("EPSG:4326")
             gdf = gdf.to_crs("EPSG:25830")
+
+            # Auto-calcular longitud/superficie si no existen
+            gdf = _auto_calcular_campos(gdf)
+
             self.gdf_infra = gdf
 
             cols = set(gdf.columns)
@@ -73,13 +129,9 @@ class GeneradorPlanos:
             return []
         return [c for c in self.gdf_infra.columns if c != "geometry"]
 
-    # ── Consulta para agrupación ────────────────────────────────────────
+    # ── Consulta para agrupación ─────────────────────────────────────────
 
     def obtener_valores_unicos(self, campo: str) -> list:
-        """Devuelve los valores únicos de un campo del shapefile.
-
-        Usa mapeo de campos si está definido.
-        """
         if self.gdf_infra is None:
             return []
         campo_real = campo
@@ -91,7 +143,6 @@ class GeneradorPlanos:
         return sorted([str(v) for v in valores])
 
     def obtener_indices_por_valor(self, campo: str, valor: str) -> list:
-        """Devuelve los índices de filas donde campo == valor."""
         if self.gdf_infra is None:
             return []
         campo_real = campo
@@ -102,7 +153,7 @@ class GeneradorPlanos:
         mask = self.gdf_infra[campo_real].astype(str) == str(valor)
         return list(self.gdf_infra.index[mask])
 
-    # ── Helpers internos ────────────────────────────────────────────────
+    # ── Helpers internos ─────────────────────────────────────────────────
 
     def _ensure_agg(self):
         if threading.current_thread() is not threading.main_thread():
@@ -110,7 +161,7 @@ class GeneradorPlanos:
 
     def _dibujar_capas_mapa(self, ax_map, gdf_sel, indices, xmin, xmax,
                              ymin, ymax, transparencia, color_infra):
-        """Dibuja fondo de montes, infra de fondo e infra seleccionadas."""
+        """Dibuja fondo de montes, capas extra, infra fondo e infra seleccionadas."""
         # Capa montes
         if self.gdf_montes is not None:
             montes_clip = self.gdf_montes.cx[xmin:xmax, ymin:ymax]
@@ -122,6 +173,10 @@ class GeneradorPlanos:
                     edgecolor="#1a5c10", linewidth=0.8, alpha=alpha,
                 )
 
+        # Capas extra
+        self.gestor_capas.dibujar_en_mapa(
+            ax_map, xmin, xmax, ymin, ymax, self.gestor_simbologia)
+
         # Infraestructuras de fondo (gris, todas en el viewport)
         infra_fondo = self.gdf_infra.cx[xmin:xmax, ymin:ymax]
         if not infra_fondo.empty:
@@ -131,9 +186,10 @@ class GeneradorPlanos:
             )
 
         # Infraestructuras seleccionadas (resaltadas)
+        geom_type = ""
         for geom_single in gdf_sel.geometry:
             geom_type = str(geom_single.geom_type).lower()
-            break  # detectar tipo del primer elemento
+            break
 
         if "point" in geom_type:
             gdf_sel.plot(ax=ax_map, color=color_infra, markersize=12,
@@ -144,13 +200,35 @@ class GeneradorPlanos:
             gdf_sel.plot(ax=ax_map, facecolor=color_infra + "55",
                          edgecolor=color_infra, linewidth=1.8, zorder=5)
 
-    # ── Generación de plano individual ──────────────────────────────────
+    def _construir_items_leyenda(self, gdf_sel, color_infra):
+        """Construye items de leyenda para infra + capas extra."""
+        items = []
+
+        # Infraestructuras
+        geom_type = ""
+        for g in gdf_sel.geometry:
+            if g is not None:
+                geom_type = str(g.geom_type).lower()
+                break
+        items.append(("Infraestructuras", color_infra, geom_type, "-", "o",
+                       color_infra + "55"))
+
+        # Montes
+        if self.gdf_montes is not None:
+            items.append(("Montes", "#1a5c10", "polygon", "-", None, "#22992244"))
+
+        # Capas extra
+        items.extend(self.gestor_capas.obtener_items_leyenda(self.gestor_simbologia))
+
+        return items
+
+    # ── Generación de plano individual ───────────────────────────────────
 
     def generar_plano(self, idx_fila: int, formato_key: str,
                       proveedor: str, transparencia_montes: float,
                       campos_visibles: list, color_infra: str,
-                      salida_dir: str, callback_log=None) -> str:
-        """Genera un plano individual para la fila idx_fila."""
+                      salida_dir: str, escala_manual: int = None,
+                      callback_log=None) -> str:
         self._ensure_agg()
 
         def log(msg):
@@ -160,7 +238,7 @@ class GeneradorPlanos:
         row = self.gdf_infra.iloc[idx_fila]
         geom = row.geometry
 
-        escala = seleccionar_escala(geom, formato_key)
+        escala = seleccionar_escala(geom, formato_key, escala_manual)
         log(f"  Escala elegida: 1:{escala:,}")
 
         maq = MaquetadorPlano(formato_key, escala)
@@ -183,15 +261,27 @@ class GeneradorPlanos:
         ax_map.set_xlim(xmin, xmax)
         ax_map.set_ylim(ymin, ymax)
 
+        # Etiquetas
+        maq.dibujar_etiquetas_infra(gdf_sel, campo_mapeo=self._campo_mapeo)
+
+        # Vértices numerados
+        maq.dibujar_vertices_numerados(geom)
+
+        # Leyenda
+        items_ley = self._construir_items_leyenda(gdf_sel, color_infra)
+        maq.dibujar_leyenda(items_ley)
+
         maq.dibujar_grid_utm(xmin, xmax, ymin, ymax)
         maq.dibujar_panel_atributos(row, campos_visibles,
                                      campo_mapeo=self._campo_mapeo)
 
         cx, cy = geom.centroid.x, geom.centroid.y
         maq.dibujar_mapa_posicion(cx, cy)
-        maq.dibujar_barra_escala(proveedor)
-        maq.dibujar_cabecera(row)
-        maq.dibujar_marcos()
+        maq.dibujar_barra_escala(proveedor, cx_utm=cx, cy_utm=cy,
+                                  cajetin=self._cajetin)
+        maq.dibujar_cabecera(row, cajetin=self._cajetin, plantilla=self._plantilla)
+        maq.dibujar_cajetin(self._cajetin)
+        maq.dibujar_marcos(plantilla=self._plantilla)
 
         nombre_infra = str(row.get("Nombre_Infra", f"infra_{idx_fila:04d}"))
         nombre_infra = "".join(c for c in nombre_infra if c.isalnum() or c in "_ -")[:40]
@@ -202,20 +292,15 @@ class GeneradorPlanos:
         log(f"  \u2713 Guardado: {nombre_arch}")
         return ruta_out
 
-    # ── Generación de plano agrupado ────────────────────────────────────
+    # ── Generación de plano agrupado ─────────────────────────────────────
 
     def generar_plano_agrupado(self, indices: list, campo_grupo: str,
                                 valor_grupo: str, formato_key: str,
                                 proveedor: str, transparencia_montes: float,
                                 campos_visibles: list, color_infra: str,
                                 salida_dir: str, num_plano: int = 1,
+                                escala_manual: int = None,
                                 callback_log=None) -> str:
-        """Genera un plano con varias infraestructuras agrupadas por un campo.
-
-        Todas las infraestructuras con indices se resaltan en el mapa y
-        sus atributos aparecen en la tabla del panel derecho.
-        La extensión del mapa se calcula sobre la unión de todas las geometrías.
-        """
         self._ensure_agg()
 
         def log(msg):
@@ -225,9 +310,8 @@ class GeneradorPlanos:
         gdf_grupo = self.gdf_infra.iloc[indices]
         rows = [self.gdf_infra.iloc[idx] for idx in indices]
 
-        # Unión de todas las geometrías para calcular extensión
         geom_union = unary_union(gdf_grupo.geometry)
-        escala = seleccionar_escala(geom_union, formato_key)
+        escala = seleccionar_escala(geom_union, formato_key, escala_manual)
         log(f"  Escala elegida: 1:{escala:,} ({len(indices)} infraestructuras)")
 
         maq = MaquetadorPlano(formato_key, escala)
@@ -236,14 +320,12 @@ class GeneradorPlanos:
         xmin, xmax, ymin, ymax = maq.calcular_extension_mapa(geom_union)
         maq.configurar_mapa_principal(xmin, xmax, ymin, ymax)
 
-        # Fondo cartográfico
         gdf_view = gdf_grupo.copy()
         añadir_fondo_cartografico(ax_map, gdf_view, proveedor,
                                   xmin=xmin, xmax=xmax, ymin=ymin, ymax=ymax)
         ax_map.set_xlim(xmin, xmax)
         ax_map.set_ylim(ymin, ymax)
 
-        # Capas
         self._dibujar_capas_mapa(ax_map, gdf_grupo, indices,
                                   xmin, xmax, ymin, ymax,
                                   transparencia_montes, color_infra)
@@ -251,30 +333,33 @@ class GeneradorPlanos:
         ax_map.set_xlim(xmin, xmax)
         ax_map.set_ylim(ymin, ymax)
 
-        # Grid UTM
+        # Etiquetas
+        maq.dibujar_etiquetas_infra(gdf_grupo, campo_mapeo=self._campo_mapeo)
+
+        # Leyenda con estadísticas
+        items_ley = self._construir_items_leyenda(gdf_grupo, color_infra)
+        stats = _calcular_stats_grupo(gdf_grupo)
+        maq.dibujar_leyenda(items_ley, stats_resumen=stats)
+
         maq.dibujar_grid_utm(xmin, xmax, ymin, ymax)
 
-        # Panel de atributos multi-fila
         maq.dibujar_panel_atributos_multi(rows, campos_visibles,
                                            campo_mapeo=self._campo_mapeo)
 
-        # Mapa de posición
         cx, cy = geom_union.centroid.x, geom_union.centroid.y
         maq.dibujar_mapa_posicion(cx, cy)
+        maq.dibujar_barra_escala(proveedor, cx_utm=cx, cy_utm=cy,
+                                  cajetin=self._cajetin)
 
-        # Barra de escala
-        maq.dibujar_barra_escala(proveedor)
-
-        # Cabecera con título de grupo
         etiq_campo = ETIQUETAS_CAMPOS.get(campo_grupo, campo_grupo)
         titulo_grupo = f"{etiq_campo}: {valor_grupo}"
         maq.dibujar_cabecera(rows[0], titulo_grupo=titulo_grupo,
-                              num_plano_override=num_plano)
+                              num_plano_override=num_plano,
+                              cajetin=self._cajetin, plantilla=self._plantilla)
 
-        # Marcos
-        maq.dibujar_marcos()
+        maq.dibujar_cajetin(self._cajetin)
+        maq.dibujar_marcos(plantilla=self._plantilla)
 
-        # Guardar
         nombre_safe = "".join(c for c in valor_grupo if c.isalnum() or c in "_ -")[:40]
         nombre_arch = f"plano_grupo_{num_plano:04d}_{nombre_safe}.pdf"
         ruta_out = os.path.join(salida_dir, nombre_arch)
@@ -283,13 +368,12 @@ class GeneradorPlanos:
         log(f"  \u2713 Guardado: {nombre_arch}")
         return ruta_out
 
-    # ── Generación en serie ─────────────────────────────────────────────
+    # ── Generación en serie ──────────────────────────────────────────────
 
     def generar_serie(self, indices: list, formato_key: str, proveedor: str,
                       transparencia: float, campos: list, color_infra: str,
-                      salida_dir: str, callback_log=None,
-                      callback_progreso=None) -> list:
-        """Genera planos en serie para los índices indicados."""
+                      salida_dir: str, escala_manual: int = None,
+                      callback_log=None, callback_progreso=None) -> list:
         rutas = []
         total = len(indices)
         for i, idx in enumerate(indices):
@@ -301,7 +385,8 @@ class GeneradorPlanos:
                     idx_fila=idx, formato_key=formato_key,
                     proveedor=proveedor, transparencia_montes=transparencia,
                     campos_visibles=campos, color_infra=color_infra,
-                    salida_dir=salida_dir, callback_log=callback_log,
+                    salida_dir=salida_dir, escala_manual=escala_manual,
+                    callback_log=callback_log,
                 )
                 rutas.append(ruta)
             except Exception as e:
@@ -311,18 +396,15 @@ class GeneradorPlanos:
                 callback_progreso(i + 1, total)
         return rutas
 
-    # ── Generación agrupada en serie ────────────────────────────────────
+    # ── Generación agrupada en serie ─────────────────────────────────────
 
     def generar_serie_agrupada(self, campo_grupo: str, valores: list,
                                 formato_key: str, proveedor: str,
                                 transparencia: float, campos: list,
                                 color_infra: str, salida_dir: str,
+                                escala_manual: int = None,
                                 callback_log=None,
                                 callback_progreso=None) -> list:
-        """Genera un plano por cada valor del campo de agrupación.
-
-        Cada plano muestra todas las infraestructuras que comparten ese valor.
-        """
         rutas = []
         total = len(valores)
         for i, valor in enumerate(valores):
@@ -342,6 +424,7 @@ class GeneradorPlanos:
                     proveedor=proveedor, transparencia_montes=transparencia,
                     campos_visibles=campos, color_infra=color_infra,
                     salida_dir=salida_dir, num_plano=i + 1,
+                    escala_manual=escala_manual,
                     callback_log=callback_log,
                 )
                 rutas.append(ruta)
@@ -352,20 +435,55 @@ class GeneradorPlanos:
                 callback_progreso(i + 1, total)
         return rutas
 
-    # ── PDF multipágina ─────────────────────────────────────────────────
+    # ── PDF multipágina ──────────────────────────────────────────────────
 
     def generar_pdf_multipagina(self, indices: list, formato_key: str,
                                  proveedor: str, transparencia: float,
                                  campos: list, color_infra: str,
-                                 ruta_pdf: str, callback_log=None,
+                                 ruta_pdf: str, escala_manual: int = None,
+                                 incluir_portada: bool = False,
+                                 callback_log=None,
                                  callback_progreso=None) -> str:
-        """Genera un único PDF multipágina con todos los planos."""
         from matplotlib.backends.backend_pdf import PdfPages
 
         self._ensure_agg()
         total = len(indices)
 
         with PdfPages(ruta_pdf) as pdf:
+            # Portada
+            if incluir_portada:
+                titulo = self._cajetin.get("proyecto", "PLANOS FORESTALES")
+                subtitulo = self._cajetin.get("subtitulo",
+                                               "PLANO DE INFRAESTRUCTURA FORESTAL")
+                datos = {
+                    "N\u00ba de planos": total,
+                    "Formato": formato_key,
+                    "Cartograf\u00eda": proveedor,
+                }
+                fig_portada = crear_portada(
+                    formato_key, titulo, subtitulo,
+                    datos_extra=datos,
+                    cajetin=self._cajetin, plantilla=self._plantilla,
+                )
+                pdf.savefig(fig_portada, dpi=150, facecolor="white")
+                plt.close(fig_portada)
+                if callback_log:
+                    callback_log("  \u2713 Portada a\u00f1adida")
+
+                # Índice
+                items_idx = []
+                for i, idx in enumerate(indices):
+                    nombre = str(self.gdf_infra.iloc[idx].get(
+                        "Nombre_Infra", f"Infraestructura #{idx}"))
+                    items_idx.append((i + 1, nombre, ""))
+                fig_indice = crear_indice(formato_key, items_idx,
+                                           plantilla=self._plantilla)
+                pdf.savefig(fig_indice, dpi=150, facecolor="white")
+                plt.close(fig_indice)
+                if callback_log:
+                    callback_log("  \u2713 \u00cdndice a\u00f1adido")
+
+            # Planos
             for i, idx in enumerate(indices):
                 nombre = self.gdf_infra.iloc[idx].get("Nombre_Infra", f"#{idx}")
                 if callback_log:
@@ -374,7 +492,7 @@ class GeneradorPlanos:
                     row = self.gdf_infra.iloc[idx]
                     geom = row.geometry
 
-                    escala = seleccionar_escala(geom, formato_key)
+                    escala = seleccionar_escala(geom, formato_key, escala_manual)
                     maq = MaquetadorPlano(formato_key, escala)
                     fig, ax_map, ax_info, ax_mini, ax_esc = maq.crear_figura()
 
@@ -396,15 +514,27 @@ class GeneradorPlanos:
                     ax_map.set_xlim(xmin, xmax)
                     ax_map.set_ylim(ymin, ymax)
 
+                    # Etiquetas y vértices
+                    maq.dibujar_etiquetas_infra(gdf_sel,
+                                                 campo_mapeo=self._campo_mapeo)
+                    maq.dibujar_vertices_numerados(geom)
+
+                    # Leyenda
+                    items_ley = self._construir_items_leyenda(gdf_sel, color_infra)
+                    maq.dibujar_leyenda(items_ley)
+
                     maq.dibujar_grid_utm(xmin, xmax, ymin, ymax)
                     maq.dibujar_panel_atributos(row, campos,
                                                  campo_mapeo=self._campo_mapeo)
 
                     cx, cy = geom.centroid.x, geom.centroid.y
                     maq.dibujar_mapa_posicion(cx, cy)
-                    maq.dibujar_barra_escala(proveedor)
-                    maq.dibujar_cabecera(row)
-                    maq.dibujar_marcos()
+                    maq.dibujar_barra_escala(proveedor, cx_utm=cx, cy_utm=cy,
+                                              cajetin=self._cajetin)
+                    maq.dibujar_cabecera(row, cajetin=self._cajetin,
+                                          plantilla=self._plantilla)
+                    maq.dibujar_cajetin(self._cajetin)
+                    maq.dibujar_marcos(plantilla=self._plantilla)
 
                     pdf.savefig(fig, dpi=150, facecolor="white")
                     plt.close(fig)
@@ -421,3 +551,55 @@ class GeneradorPlanos:
         if callback_log:
             callback_log(f"\n\u2713 PDF multipágina guardado: {ruta_pdf}")
         return ruta_pdf
+
+    # ── Generación por lotes desde CSV ───────────────────────────────────
+
+    def generar_lotes_csv(self, ruta_csv: str, proveedor: str,
+                           transparencia: float, campos: list,
+                           color_infra: str, escala_manual: int = None,
+                           callback_log=None,
+                           callback_progreso=None) -> list:
+        """Genera planos por lotes a partir de un CSV de configuración."""
+        lotes = cargar_lotes_csv(ruta_csv)
+        if not lotes:
+            if callback_log:
+                callback_log("No se encontraron lotes v\u00e1lidos en el CSV.", "warn")
+            return []
+
+        rutas = []
+        total = len(lotes)
+        for i, lote in enumerate(lotes):
+            if callback_log:
+                callback_log(
+                    f"\n[{i + 1}/{total}] Lote: {lote.get('nombre', lote['ruta_shp'])}")
+
+            ok, msg, faltantes = self.cargar_infraestructuras(lote["ruta_shp"])
+            if not ok:
+                if callback_log:
+                    callback_log(f"  \u2717 {msg}", "error")
+                if callback_progreso:
+                    callback_progreso(i + 1, total)
+                continue
+
+            formato = lote.get("formato", "A3 Horizontal")
+            carpeta = lote.get("carpeta_salida", ".")
+            os.makedirs(carpeta, exist_ok=True)
+
+            indices = list(range(len(self.gdf_infra)))
+            try:
+                resultados = self.generar_serie(
+                    indices=indices, formato_key=formato,
+                    proveedor=proveedor, transparencia=transparencia,
+                    campos=campos, color_infra=color_infra,
+                    salida_dir=carpeta, escala_manual=escala_manual,
+                    callback_log=callback_log,
+                )
+                rutas.extend(resultados)
+            except Exception as e:
+                if callback_log:
+                    callback_log(f"  \u2717 Error en lote: {e}", "error")
+
+            if callback_progreso:
+                callback_progreso(i + 1, total)
+
+        return rutas

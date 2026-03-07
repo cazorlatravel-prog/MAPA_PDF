@@ -8,12 +8,16 @@ Layout: 1100x780 px mínimo, redimensionable.
 │  CAPAS           │  TABLA DE INFRAESTRUCTURAS               │
 │  CONFIGURACIÓN   │                                          │
 │  CAMPOS PLANO    ├──────────────────────────────────────────┤
-│  GENERACIÓN      │  LOG DE PROCESO                          │
+│  FILTROS         │  LOG DE PROCESO                          │
+│  SIMBOLOGÍA      │                                          │
+│  CAJETÍN         │                                          │
+│  GENERACIÓN      │                                          │
 └──────────────────┴──────────────────────────────────────────┘
 """
 
+import os
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, filedialog, messagebox
 
 from .estilos import (
     COLOR_FONDO_APP, COLOR_ACENTO, COLOR_TEXTO_GRIS,
@@ -23,8 +27,12 @@ from .estilos import (
 from .panel_capas import PanelCapas
 from .panel_config import PanelConfig
 from .panel_campos import PanelCampos
+from .panel_filtros import PanelFiltros
+from .panel_simbologia import PanelSimbologia
+from .panel_cajetin import PanelCajetin
 from .panel_generacion import PanelGeneracion
 from ..motor.generador import GeneradorPlanos
+from ..motor.proyecto import Proyecto
 
 
 class App(tk.Tk):
@@ -32,7 +40,7 @@ class App(tk.Tk):
 
     def __init__(self):
         super().__init__()
-        self.title("Generador de Planos Forestales v1.0")
+        self.title("Generador de Planos Forestales v2.0")
         self.geometry("1100x780")
         self.minsize(1100, 780)
         self.configure(bg=COLOR_FONDO_APP)
@@ -81,6 +89,18 @@ class App(tk.Tk):
         )
         self.panel_config = PanelConfig(izq)
         self.panel_campos = PanelCampos(izq)
+        self.panel_filtros = PanelFiltros(
+            izq, self.motor,
+            callback_filtro=self._on_filtro_aplicado,
+        )
+        self.panel_simbologia = PanelSimbologia(
+            izq, self.motor,
+            callback_log=self._escribir_log,
+        )
+        self.panel_cajetin = PanelCajetin(
+            izq, self.motor,
+            callback_log=self._escribir_log,
+        )
         self.panel_generacion = PanelGeneracion(
             izq, self.motor,
             get_config=self._get_config,
@@ -100,6 +120,17 @@ class App(tk.Tk):
             barra, text="\U0001f5fa  GENERADOR DE PLANOS FORESTALES",
             font=("Helvetica", 16, "bold"), bg="#141B2D", fg=COLOR_ACENTO,
         ).pack(side="left", padx=16, pady=10)
+
+        # Botones de proyecto en la barra
+        btn_f = tk.Frame(barra, bg="#141B2D")
+        btn_f.pack(side="right", padx=8)
+
+        tk.Button(btn_f, text="Guardar proyecto", command=self._guardar_proyecto,
+                  font=("Helvetica", 9), bg="#2C3E50", fg="#ECF0F1",
+                  relief="flat", cursor="hand2", padx=6).pack(side="left", padx=2)
+        tk.Button(btn_f, text="Cargar proyecto", command=self._cargar_proyecto,
+                  font=("Helvetica", 9), bg="#2C3E50", fg="#ECF0F1",
+                  relief="flat", cursor="hand2", padx=6).pack(side="left", padx=2)
 
         tk.Label(
             barra, text="ETRS89 \u00b7 UTM H30N \u00b7 INFOCA",
@@ -166,7 +197,7 @@ class App(tk.Tk):
             self._log.configure(state="disabled")
         self.after(0, _do)
 
-    def _poblar_tabla(self):
+    def _poblar_tabla(self, indices=None):
         gdf = self.motor.gdf_infra
         if gdf is None:
             return
@@ -180,7 +211,11 @@ class App(tk.Tk):
                 return str(row[campo])
             return "\u2014"
 
-        for i, (_, row) in enumerate(gdf.iterrows()):
+        if indices is None:
+            indices = range(len(gdf))
+
+        for i in indices:
+            row = gdf.iloc[i]
             vals = [
                 i + 1,
                 _val(row, "Nombre_Infra"),
@@ -195,16 +230,19 @@ class App(tk.Tk):
 
         self._tabla.tag_configure("par", background="#1E2A3A")
         self._tabla.tag_configure("impar", background="#172030")
-        self._escribir_log(f"Tabla actualizada: {len(gdf)} infraestructuras.", "info")
+        n = len(list(indices)) if not isinstance(indices, range) else len(indices)
+        self._escribir_log(f"Tabla actualizada: {n} infraestructuras.", "info")
 
     def _on_tabla_cargada(self):
-        """Callback cuando se carga un nuevo shapefile."""
         self._poblar_tabla()
-        # Actualizar valores de agrupación si el modo agrupado está activo
         self.panel_generacion.actualizar_valores_si_agrupado()
+        self.panel_filtros.actualizar_campos()
+        self.panel_simbologia.actualizar_capas_extra()
+
+    def _on_filtro_aplicado(self, indices: list):
+        self._poblar_tabla(indices)
 
     def _get_config(self) -> dict:
-        """Devuelve la configuración actual para el panel de generación."""
         return {
             "formato": self.panel_config.formato.get(),
             "proveedor": self.panel_config.proveedor.get(),
@@ -212,5 +250,68 @@ class App(tk.Tk):
             "campos": self.panel_campos.obtener_campos_activos(),
             "color_infra": self.panel_config.color_infra,
             "salida": self.panel_config.salida.get(),
+            "escala_manual": self.panel_config.escala_manual,
             "tabla": self._tabla,
         }
+
+    # ── Guardar/Cargar proyecto ──────────────────────────────────────────
+
+    def _guardar_proyecto(self):
+        ruta = filedialog.asksaveasfilename(
+            title="Guardar proyecto",
+            defaultextension=".json",
+            filetypes=[("Proyecto JSON", "*.json")],
+        )
+        if not ruta:
+            return
+
+        p = Proyecto()
+        p.nombre = os.path.splitext(os.path.basename(ruta))[0]
+        p.formato = self.panel_config.formato.get()
+        p.proveedor = self.panel_config.proveedor.get()
+        p.escala_manual = self.panel_config.escala_manual
+        p.transparencia_montes = self.panel_capas.transparencia.get()
+        p.color_infra = self.panel_config.color_infra
+        p.campos_visibles = self.panel_campos.obtener_campos_activos()
+        p.carpeta_salida = self.panel_config.salida.get()
+        p.cajetin = self.panel_cajetin.obtener_cajetin()
+        p.plantilla = self.panel_cajetin.obtener_plantilla()
+        p.simbologia = self.motor.gestor_simbologia.to_dict()
+        p.capas_extra = self.motor.gestor_capas.to_dict()
+
+        try:
+            p.guardar(ruta)
+            self._escribir_log(f"Proyecto guardado: {ruta}", "ok")
+        except Exception as e:
+            self._escribir_log(f"Error al guardar proyecto: {e}", "error")
+            messagebox.showerror("Error", str(e))
+
+    def _cargar_proyecto(self):
+        ruta = filedialog.askopenfilename(
+            title="Cargar proyecto",
+            filetypes=[("Proyecto JSON", "*.json")],
+        )
+        if not ruta:
+            return
+
+        try:
+            p = Proyecto.cargar(ruta)
+            self.panel_config.formato.set(p.formato)
+            self.panel_config.proveedor.set(p.proveedor)
+            self.panel_capas.transparencia.set(p.transparencia_montes)
+            self.panel_config.salida.set(p.carpeta_salida)
+            self.panel_cajetin.cargar_desde_proyecto(p.cajetin, p.plantilla)
+
+            # Aplicar cajetín y plantilla al motor
+            self.motor.set_cajetin(p.cajetin)
+            self.motor.set_plantilla(p.plantilla)
+
+            # Simbología
+            if p.simbologia:
+                from ..motor.simbologia import GestorSimbologia
+                self.motor.gestor_simbologia = GestorSimbologia.from_dict(p.simbologia)
+
+            self._escribir_log(f"Proyecto cargado: {p.nombre}", "ok")
+        except Exception as e:
+            self._escribir_log(f"Error al cargar proyecto: {e}", "error")
+            messagebox.showerror("Error", str(e))

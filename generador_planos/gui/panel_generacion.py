@@ -1,12 +1,12 @@
 """
-Panel de generación: modo (todos/seleccionados/rango/agrupado), progreso, botón GENERAR.
-Incluye opción de PDF multipágina y agrupación por campo.
+Panel de generación: modo (todos/seleccionados/rango/agrupado/lotes CSV),
+progreso, portada, botón GENERAR.
 """
 
 import os
 import threading
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, filedialog
 
 from .estilos import (
     COLOR_PANEL, COLOR_TEXTO, COLOR_TEXTO_GRIS, COLOR_BORDE, COLOR_ACENTO,
@@ -20,10 +20,6 @@ class PanelGeneracion:
     """Panel de generación de planos con barra de progreso."""
 
     def __init__(self, parent, motor, get_config, callback_log):
-        """
-        get_config: callable que devuelve dict con:
-            formato, proveedor, transparencia, campos, color_infra, salida, tabla
-        """
         self.motor = motor
         self.get_config = get_config
         self.callback_log = callback_log
@@ -44,6 +40,7 @@ class PanelGeneracion:
             ("seleccion", "Seleccionados en tabla"),
             ("rango", "Rango:"),
             ("agrupado", "Agrupar por campo"),
+            ("lotes", "Generaci\u00f3n por lotes (CSV)"),
         ], start=1):
             tk.Radiobutton(
                 f, text=texto, variable=self._modo_gen, value=val,
@@ -71,9 +68,9 @@ class PanelGeneracion:
         self._rango_hasta.insert(0, "10")
         self._rango_hasta.pack(side="left")
 
-        # ── Panel de agrupación (se muestra/oculta según el modo) ──
+        # ── Panel de agrupación ──
         self._frame_agrupacion = tk.Frame(f, bg=COLOR_PANEL)
-        self._frame_agrupacion.grid(row=5, column=0, columnspan=2,
+        self._frame_agrupacion.grid(row=6, column=0, columnspan=2,
                                      sticky="ew", pady=(4, 0))
 
         tk.Label(self._frame_agrupacion, text="Campo de agrupaci\u00f3n:",
@@ -89,7 +86,6 @@ class PanelGeneracion:
         self._cb_campo_agrup.grid(row=0, column=1, sticky="ew", padx=(4, 0))
         self._cb_campo_agrup.bind("<<ComboboxSelected>>", self._on_campo_agrup_changed)
 
-        # Lista de valores únicos con checkboxes
         tk.Label(self._frame_agrupacion, text="Valores a generar:",
                  font=FONT_SMALL, bg=COLOR_PANEL, fg=COLOR_TEXTO_GRIS).grid(
                  row=1, column=0, columnspan=2, sticky="w", pady=(4, 0))
@@ -97,7 +93,6 @@ class PanelGeneracion:
         self._frame_valores = tk.Frame(self._frame_agrupacion, bg=COLOR_PANEL)
         self._frame_valores.grid(row=2, column=0, columnspan=2, sticky="ew")
 
-        # Canvas con scroll para la lista de valores
         self._canvas_valores = tk.Canvas(self._frame_valores, bg=COLOR_PANEL,
                                           highlightthickness=0, height=100)
         self._sb_valores = ttk.Scrollbar(self._frame_valores, orient="vertical",
@@ -114,7 +109,6 @@ class PanelGeneracion:
         self._canvas_valores.pack(side="left", fill="both", expand=True)
         self._sb_valores.pack(side="right", fill="y")
 
-        # Botones seleccionar todo / nada
         btn_sel_f = tk.Frame(self._frame_agrupacion, bg=COLOR_PANEL)
         btn_sel_f.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(2, 0))
         tk.Button(btn_sel_f, text="Todos", command=self._seleccionar_todos_valores,
@@ -124,33 +118,52 @@ class PanelGeneracion:
                   font=FONT_SMALL, bg=COLOR_BORDE, fg=COLOR_TEXTO,
                   relief="flat", cursor="hand2", padx=4).pack(side="left")
 
-        self._check_valores = {}  # {valor: BooleanVar}
-
+        self._check_valores = {}
         self._frame_agrupacion.columnconfigure(1, weight=1)
-
-        # Inicialmente ocultar la sección de agrupación
         self._frame_agrupacion.grid_remove()
 
-        # ── PDF multipágina ──
+        # ── Panel de lotes CSV ──
+        self._frame_lotes = tk.Frame(f, bg=COLOR_PANEL)
+        self._frame_lotes.grid(row=7, column=0, columnspan=2,
+                                sticky="ew", pady=(4, 0))
+        self._ruta_csv = tk.StringVar(value="Sin seleccionar")
+        tk.Label(self._frame_lotes, textvariable=self._ruta_csv,
+                 font=FONT_SMALL, bg=COLOR_PANEL, fg=COLOR_TEXTO_GRIS,
+                 wraplength=240).pack(anchor="w")
+        tk.Button(self._frame_lotes, text="Seleccionar CSV",
+                  command=self._seleccionar_csv, font=FONT_SMALL,
+                  bg=COLOR_BORDE, fg=COLOR_TEXTO, relief="flat",
+                  cursor="hand2", padx=4).pack(anchor="w", pady=(2, 0))
+        self._frame_lotes.grid_remove()
+
+        # ── Opciones PDF ──
         self._multipagina = tk.BooleanVar(value=False)
         tk.Checkbutton(
             f, text="PDF multipágina (un solo archivo)",
             variable=self._multipagina, font=FONT_SMALL,
             bg=COLOR_PANEL, fg=COLOR_TEXTO, selectcolor=COLOR_BORDE,
             activebackground=COLOR_PANEL, cursor="hand2",
-        ).grid(row=6, column=0, columnspan=2, sticky="w", pady=(6, 0))
+        ).grid(row=8, column=0, columnspan=2, sticky="w", pady=(6, 0))
+
+        self._incluir_portada = tk.BooleanVar(value=False)
+        tk.Checkbutton(
+            f, text="Incluir portada e \u00edndice",
+            variable=self._incluir_portada, font=FONT_SMALL,
+            bg=COLOR_PANEL, fg=COLOR_TEXTO, selectcolor=COLOR_BORDE,
+            activebackground=COLOR_PANEL, cursor="hand2",
+        ).grid(row=9, column=0, columnspan=2, sticky="w", pady=(2, 0))
 
         # ── Progreso ──
         tk.Label(f, text="Progreso:", font=FONT_SMALL,
                  bg=COLOR_PANEL, fg=COLOR_TEXTO_GRIS).grid(
-                 row=7, column=0, columnspan=2, sticky="w", pady=(10, 0))
+                 row=10, column=0, columnspan=2, sticky="w", pady=(10, 0))
 
         self._progreso = ttk.Progressbar(f, length=240, mode="determinate")
-        self._progreso.grid(row=8, column=0, columnspan=2, sticky="ew", pady=(2, 8))
+        self._progreso.grid(row=11, column=0, columnspan=2, sticky="ew", pady=(2, 8))
 
         self._lbl_progreso = tk.Label(f, text="\u2014", font=FONT_SMALL,
                                        bg=COLOR_PANEL, fg=COLOR_TEXTO_GRIS)
-        self._lbl_progreso.grid(row=9, column=0, columnspan=2, pady=(0, 8))
+        self._lbl_progreso.grid(row=12, column=0, columnspan=2, pady=(0, 8))
 
         # ── Botón GENERAR ──
         self._btn_generar = crear_boton(
@@ -158,33 +171,35 @@ class PanelGeneracion:
             icono="\U0001f5a8", ancho=30,
             color_bg=COLOR_ACENTO, color_fg="#1A1A2E",
         )
-        self._btn_generar.grid(row=10, column=0, columnspan=2, sticky="ew", pady=4)
+        self._btn_generar.grid(row=13, column=0, columnspan=2, sticky="ew", pady=4)
 
         # ── Botón abrir carpeta ──
         crear_boton(f, "Abrir carpeta de salida",
                     self._abrir_carpeta, icono="\U0001f4c2").grid(
-                    row=11, column=0, columnspan=2, sticky="ew", pady=(0, 4))
+                    row=14, column=0, columnspan=2, sticky="ew", pady=(0, 4))
 
         f.columnconfigure(0, weight=1)
         f.columnconfigure(1, weight=1)
 
-    # ── Eventos de agrupación ───────────────────────────────────────────
+    # ── Eventos ──────────────────────────────────────────────────────────
 
     def _on_modo_changed(self, *args):
-        """Muestra/oculta el panel de agrupación según el modo."""
-        if self._modo_gen.get() == "agrupado":
+        modo = self._modo_gen.get()
+        if modo == "agrupado":
             self._frame_agrupacion.grid()
+            self._frame_lotes.grid_remove()
             self._actualizar_valores_agrupacion()
+        elif modo == "lotes":
+            self._frame_agrupacion.grid_remove()
+            self._frame_lotes.grid()
         else:
             self._frame_agrupacion.grid_remove()
+            self._frame_lotes.grid_remove()
 
     def _on_campo_agrup_changed(self, event=None):
-        """Actualiza la lista de valores al cambiar el campo de agrupación."""
         self._actualizar_valores_agrupacion()
 
     def _actualizar_valores_agrupacion(self):
-        """Rellena la lista de checkboxes con los valores únicos del campo."""
-        # Limpiar
         for widget in self._inner_valores.winfo_children():
             widget.destroy()
         self._check_valores.clear()
@@ -201,7 +216,6 @@ class PanelGeneracion:
 
         for valor in valores:
             var = tk.BooleanVar(value=True)
-            # Contar cuántas infraestructuras tiene este valor
             n = len(self.motor.obtener_indices_por_valor(campo, valor))
             texto = f"{valor}  ({n} infra.)"
             cb = tk.Checkbutton(
@@ -221,15 +235,22 @@ class PanelGeneracion:
         for var in self._check_valores.values():
             var.set(False)
 
+    def _seleccionar_csv(self):
+        ruta = filedialog.askopenfilename(
+            title="Seleccionar CSV de lotes",
+            filetypes=[("CSV", "*.csv"), ("Todos", "*.*")],
+        )
+        if ruta:
+            self._ruta_csv.set(os.path.basename(ruta))
+            self._ruta_csv_completa = ruta
+
     def actualizar_valores_si_agrupado(self):
-        """Llamar desde fuera cuando se carga un nuevo shapefile."""
         if self._modo_gen.get() == "agrupado":
             self._actualizar_valores_agrupacion()
 
-    # ── Obtener índices ─────────────────────────────────────────────────
+    # ── Obtener índices ──────────────────────────────────────────────────
 
     def _obtener_indices(self) -> list:
-        """Obtiene los índices a generar según el modo seleccionado."""
         gdf = self.motor.gdf_infra
         if gdf is None:
             return []
@@ -254,17 +275,21 @@ class PanelGeneracion:
                 return list(range(max(0, desde), min(hasta, len(gdf))))
             except ValueError:
                 return []
-        else:  # agrupado - no usa índices directos
+        else:
             return []
 
-    # ── Generación ──────────────────────────────────────────────────────
+    # ── Generación ───────────────────────────────────────────────────────
 
     def _iniciar_generacion(self):
+        modo = self._modo_gen.get()
+
+        if modo == "lotes":
+            self._iniciar_generacion_lotes()
+            return
+
         if self.motor.gdf_infra is None:
             messagebox.showwarning("Aviso", "Carga primero el shapefile de infraestructuras.")
             return
-
-        modo = self._modo_gen.get()
 
         cfg = self.get_config()
         campos = cfg.get("campos", [])
@@ -276,9 +301,10 @@ class PanelGeneracion:
         os.makedirs(carpeta, exist_ok=True)
 
         multipagina = self._multipagina.get()
+        incluir_portada = self._incluir_portada.get()
+        escala_manual = cfg.get("escala_manual")
 
         if modo == "agrupado":
-            # Validar que hay valores seleccionados
             valores_sel = [v for v, var in self._check_valores.items() if var.get()]
             if not valores_sel:
                 messagebox.showwarning("Aviso", "Selecciona al menos un valor para agrupar.")
@@ -295,16 +321,6 @@ class PanelGeneracion:
                     f"\n{'=' * 50}\nGenerando {len(valores_sel)} planos agrupados "
                     f"por {campo_grupo}...", "info")
 
-                def _log(msg):
-                    self.callback_log(msg)
-
-                def _prog(actual, total):
-                    self._parent_window.after(
-                        0, lambda: self._progreso.__setitem__("value", actual))
-                    self._parent_window.after(
-                        0, lambda: self._lbl_progreso.configure(
-                            text=f"{actual}/{total} planos generados"))
-
                 self.motor.generar_serie_agrupada(
                     campo_grupo=campo_grupo,
                     valores=valores_sel,
@@ -314,8 +330,9 @@ class PanelGeneracion:
                     campos=campos,
                     color_infra=cfg["color_infra"],
                     salida_dir=carpeta,
-                    callback_log=_log,
-                    callback_progreso=_prog,
+                    escala_manual=escala_manual,
+                    callback_log=self.callback_log,
+                    callback_progreso=self._actualizar_progreso,
                 )
 
                 self._parent_window.after(0, self._fin_generacion)
@@ -336,16 +353,6 @@ class PanelGeneracion:
                     f"\n{'=' * 50}\nIniciando generaci\u00f3n de {len(indices)} planos...",
                     "info")
 
-                def _log(msg):
-                    self.callback_log(msg)
-
-                def _prog(actual, total):
-                    self._parent_window.after(
-                        0, lambda: self._progreso.__setitem__("value", actual))
-                    self._parent_window.after(
-                        0, lambda: self._lbl_progreso.configure(
-                            text=f"{actual}/{total} planos generados"))
-
                 if multipagina:
                     ruta_pdf = os.path.join(carpeta, "planos_forestales_completo.pdf")
                     self.motor.generar_pdf_multipagina(
@@ -356,8 +363,10 @@ class PanelGeneracion:
                         campos=campos,
                         color_infra=cfg["color_infra"],
                         ruta_pdf=ruta_pdf,
-                        callback_log=_log,
-                        callback_progreso=_prog,
+                        escala_manual=escala_manual,
+                        incluir_portada=incluir_portada,
+                        callback_log=self.callback_log,
+                        callback_progreso=self._actualizar_progreso,
                     )
                 else:
                     self.motor.generar_serie(
@@ -368,13 +377,54 @@ class PanelGeneracion:
                         campos=campos,
                         color_infra=cfg["color_infra"],
                         salida_dir=carpeta,
-                        callback_log=_log,
-                        callback_progreso=_prog,
+                        escala_manual=escala_manual,
+                        callback_log=self.callback_log,
+                        callback_progreso=self._actualizar_progreso,
                     )
 
                 self._parent_window.after(0, self._fin_generacion)
 
             threading.Thread(target=_worker, daemon=True).start()
+
+    def _iniciar_generacion_lotes(self):
+        if not hasattr(self, "_ruta_csv_completa"):
+            messagebox.showwarning("Aviso", "Selecciona primero un archivo CSV.")
+            return
+
+        cfg = self.get_config()
+        campos = cfg.get("campos", [])
+        escala_manual = cfg.get("escala_manual")
+
+        self._btn_generar.configure(state="disabled", text="\u23f3 Generando lotes...")
+        self._progreso["value"] = 0
+
+        def _worker_lotes():
+            self.callback_log(
+                f"\n{'=' * 50}\nIniciando generaci\u00f3n por lotes...", "info")
+
+            self.motor.generar_lotes_csv(
+                ruta_csv=self._ruta_csv_completa,
+                proveedor=cfg["proveedor"],
+                transparencia=cfg["transparencia"],
+                campos=campos,
+                color_infra=cfg["color_infra"],
+                escala_manual=escala_manual,
+                callback_log=self.callback_log,
+                callback_progreso=self._actualizar_progreso,
+            )
+
+            self._parent_window.after(0, self._fin_generacion)
+
+        threading.Thread(target=_worker_lotes, daemon=True).start()
+
+    def _actualizar_progreso(self, actual, total):
+        self._parent_window.after(
+            0, lambda: self._progreso.__setitem__("value", actual))
+        self._parent_window.after(
+            0, lambda: self._progreso.__setitem__("maximum", total))
+        self._parent_window.after(
+            0, lambda: self._lbl_progreso.configure(
+                text=f"{actual}/{total} planos generados"))
 
     def _fin_generacion(self):
         cfg = self.get_config()

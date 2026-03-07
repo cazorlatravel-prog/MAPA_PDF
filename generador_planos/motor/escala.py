@@ -46,15 +46,15 @@ RATIO_MAPA_ANCHO = 0.63
 RATIO_MAPA_ALTO = 0.82
 
 
-def seleccionar_escala(geom, formato_key: str) -> int:
+def seleccionar_escala(geom, formato_key: str, escala_manual: int = None) -> int:
     """Elige la escala más ajustada de la lista ESCALAS.
 
-    Calcula cuántos metros caben en el área de mapa para cada escala y
-    elige la primera que abarque la extensión de la geometría con un 20%
-    de margen.
-
-    Para geometrías tipo punto (extensión 0), se usa un radio mínimo de 500 m.
+    Si escala_manual está definida, la devuelve directamente (override del usuario).
+    Si no, calcula automáticamente según la extensión de la geometría.
     """
+    if escala_manual is not None and escala_manual > 0:
+        return escala_manual
+
     fmt_mm = FORMATOS[formato_key]
 
     ancho_util_mm = fmt_mm[0] - MARGENES_MM["izq"] - MARGENES_MM["der"]
