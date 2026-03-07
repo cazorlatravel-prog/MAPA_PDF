@@ -142,18 +142,34 @@ class MaquetadorPlano:
 
         ax.set_xticks(xs)
         ax.set_yticks(ys)
-        ax.set_xticklabels([f"{int(x):,}" for x in xs], fontsize=4,
+        ax.set_xticklabels([f"{int(x)}" for x in xs], fontsize=4,
                            color="#2C3E50", rotation=30, ha="right")
-        ax.set_yticklabels([f"{int(y):,}" for y in ys], fontsize=4.5,
+        ax.set_yticklabels([f"{int(y)}" for y in ys], fontsize=4.5,
                            color="#2C3E50")
         ax.tick_params(which="major", length=4, width=0.6, color="#2C3E50",
                        direction="out", labelbottom=True, labelleft=True,
                        pad=1)
 
+        # Líneas de cuadrícula completas (estilo cartográfico profesional)
+        for x in xs:
+            ax.axvline(x, color="#2C3E50", linewidth=0.15, alpha=0.4,
+                        linestyle=(0, (8, 6)), zorder=3)
+        for y in ys:
+            ax.axhline(y, color="#2C3E50", linewidth=0.15, alpha=0.4,
+                        linestyle=(0, (8, 6)), zorder=3)
+
+        # Cruces de intersección reforzadas
         for x in xs:
             for y in ys:
-                ax.plot(x, y, "+", color="#2C3E50", markersize=3,
-                        markeredgewidth=0.3, alpha=0.35, zorder=3)
+                ax.plot(x, y, "+", color="#2C3E50", markersize=4,
+                        markeredgewidth=0.5, alpha=0.5, zorder=4)
+
+        # Indicación del sistema de referencia (esquina inferior derecha del mapa)
+        ax.text(0.995, 0.005, "ETRS89 / UTM zona 30N · EPSG:25830",
+                ha="right", va="bottom", fontsize=3.2, color="#2C3E50",
+                transform=ax.transAxes, zorder=12,
+                bbox=dict(boxstyle="round,pad=0.12", facecolor="white",
+                          edgecolor="#BDC3C7", linewidth=0.3, alpha=0.85))
 
     # ── Etiquetas ──────────────────────────────────────────────────────
 
@@ -239,20 +255,29 @@ class MaquetadorPlano:
 
         if handles:
             leg = self.ax_map.legend(
-                handles=handles, loc="lower left", fontsize=5,
-                frameon=True, framealpha=0.9, facecolor="white",
-                edgecolor="#CCCCCC", borderpad=0.5, labelspacing=0.4,
+                handles=handles, loc="lower left", fontsize=4.5,
+                title="LEYENDA", title_fontsize=5,
+                frameon=True, framealpha=0.92, facecolor="white",
+                edgecolor="#2C3E50", borderpad=0.6, labelspacing=0.5,
+                handlelength=1.8, handletextpad=0.6,
+                shadow=False, fancybox=True,
             )
             leg.set_zorder(15)
+            leg.get_title().set_fontweight("bold")
+            leg.get_title().set_color("#2C3E50")
+            leg.get_frame().set_linewidth(0.6)
 
 
     # ── Panel de atributos (centro, 2 columnas, campos dinámicos) ─────
 
-    def dibujar_panel_atributos(self, row, campos_visibles, campo_mapeo=None):
-        self.dibujar_panel_atributos_multi([row], campos_visibles, campo_mapeo)
+    def dibujar_panel_atributos(self, row, campos_visibles, campo_mapeo=None,
+                                campo_encabezado=None):
+        self.dibujar_panel_atributos_multi([row], campos_visibles, campo_mapeo,
+                                            campo_encabezado=campo_encabezado)
 
     def dibujar_panel_atributos_multi(self, rows, campos_visibles,
-                                       campo_mapeo=None):
+                                       campo_mapeo=None,
+                                       campo_encabezado=None):
         ax = self.ax_info
         ax.set_xlim(0, 1)
         ax.set_ylim(0, 1)
@@ -333,12 +358,24 @@ class MaquetadorPlano:
                     (x0, card_top - header_h), col_w, header_h,
                     facecolor="#2C3E50", edgecolor="none", zorder=1))
 
-                # Obtener nombre de la infra (primer campo o Nombre_Infra)
-                nombre_campo = _resolver_campo(
-                    "Nombre_Infra" if "Nombre_Infra" in campos_mostrar
-                    else campos_mostrar[0])
-                nombre = str(r.get(nombre_campo, f"Infra. {row_idx + 1}"))
-                if nombre == "nan":
+                # Obtener nombre para el encabezado de la ficha
+                nombre = None
+                if campo_encabezado:
+                    # El usuario eligió un campo concreto
+                    clave = _resolver_campo(campo_encabezado)
+                    val = str(r.get(clave, ""))
+                    if val and val != "nan":
+                        nombre = val
+                if not nombre:
+                    # Fallback automático: buscar NOMBRE_INF
+                    for candidato in ["NOMBRE_INF", "Nombre_Infra", "NOMBRE INF",
+                                      "nombre_inf", "Nombre_inf"]:
+                        clave = _resolver_campo(candidato)
+                        val = str(r.get(clave, ""))
+                        if val and val != "nan":
+                            nombre = val
+                            break
+                if not nombre:
                     nombre = f"Infra. {row_idx + 1}"
                 if len(nombre) > max_val + 8:
                     nombre = nombre[:max_val + 7] + "\u2026"
@@ -494,100 +531,322 @@ class MaquetadorPlano:
 
     # ── Cajetín + Escala + Norte (panel inferior izquierdo) ───────────
 
-    def dibujar_barra_escala(self, proveedor: str, cx_utm=None, cy_utm=None, cajetin=None):
+    def dibujar_barra_escala(self, proveedor: str, cx_utm=None, cy_utm=None,
+                             cajetin=None, items_categoria=None):
         ax = self.ax_esc
         ax.set_xlim(0, 1)
         ax.set_ylim(0, 1)
         ax.axis("off")
 
-        ax.add_patch(FancyBboxPatch(
-            (0, 0), 1, 1, boxstyle="round,pad=0.01",
-            facecolor="#F0F0F0", edgecolor="#2C3E50", linewidth=1.0, zorder=0))
+        caj = cajetin or {}
+        COL_DARK = "#1C2333"
+        COL_MID = "#2C3E50"
+        COL_LIGHT = "#F7F8FA"
+        COL_ACCENT = "#2980B9"
+        COL_LINE = "#BDC3C7"
+        COL_TXT = "#1A1A2E"
 
-        # ── Título ──
-        ax.text(0.5, 0.97, "CAJETÍN DE PROYECTO", ha="center", va="top",
-                fontsize=4.5, fontweight="bold", color="white",
-                bbox=dict(boxstyle="round,pad=0.12", facecolor="#2C3E50",
-                          edgecolor="none"))
+        # ── Fondo general ──
+        ax.add_patch(Rectangle((0, 0), 1, 1,
+                                facecolor="white", edgecolor=COL_DARK,
+                                linewidth=1.2, zorder=0))
 
-        # ── Datos del cajetín ──
-        y_pos = 0.86
-        line_h = 0.058
+        # ═══════════════════════════════════════════════════════════════
+        # ZONA SUPERIOR: Logo + Organización (banda oscura)
+        # ═══════════════════════════════════════════════════════════════
+        header_h = 0.14
+        header_y = 1.0 - header_h
+        ax.add_patch(Rectangle((0, header_y), 1, header_h,
+                                facecolor=COL_DARK, edgecolor="none", zorder=1))
+        # Línea de acento bajo la cabecera
+        ax.add_patch(Rectangle((0, header_y - 0.008), 1, 0.008,
+                                facecolor=COL_ACCENT, edgecolor="none", zorder=1))
+
+        org = caj.get("organizacion", "")
+        logo_path = caj.get("logo_path", "")
+
+        x_txt = 0.06
+        if logo_path:
+            try:
+                from PIL import Image as PILImage
+                img = PILImage.open(logo_path)
+                # Calcular posición del logo dentro del axes
+                logo_size = header_h * 0.75
+                logo_ax = ax.inset_axes([0.02, header_y + header_h * 0.12,
+                                          0.10, logo_size],
+                                         transform=ax.transAxes)
+                logo_ax.imshow(img, aspect="equal")
+                logo_ax.axis("off")
+                x_txt = 0.14
+            except Exception:
+                pass
+
+        if org:
+            ax.text(x_txt, header_y + header_h * 0.50, org.upper(),
+                    ha="left", va="center", fontsize=5.5, fontweight="bold",
+                    color="white", zorder=2)
+        else:
+            ax.text(0.5, header_y + header_h * 0.50, "CAJETÍN DE PROYECTO",
+                    ha="center", va="center", fontsize=5.5, fontweight="bold",
+                    color="white", zorder=2)
+
+        # ═══════════════════════════════════════════════════════════════
+        # MINI-LEYENDA DE CATEGORÍAS (entre cabecera y tabla de datos)
+        # ═══════════════════════════════════════════════════════════════
+        cat_zone_h = 0.0  # espacio reservado para categorías
+        cat_top = header_y - 0.018
+
+        if items_categoria and len(items_categoria) > 0:
+            n_cat = len(items_categoria)
+            cat_row_h = min(0.032, 0.20 / max(n_cat, 1))
+            cat_zone_h = cat_row_h * n_cat + 0.03  # filas + título + padding
+
+            # Título
+            ax.text(0.5, cat_top - 0.005, "SIMBOLOGÍA",
+                    ha="center", va="top", fontsize=4.2, fontweight="bold",
+                    color=COL_DARK, zorder=3)
+
+            margin_x = 0.05
+            line_x0 = margin_x + 0.02
+            line_x1 = margin_x + 0.12
+            text_x = line_x1 + 0.03
+            y_start = cat_top - 0.022
+
+            for i, (label, color, geom_type, linestyle, marker,
+                    facecolor) in enumerate(items_categoria):
+                y = y_start - i * cat_row_h
+
+                # Dibujar muestra de trazo/símbolo
+                if "point" in geom_type:
+                    ax.plot((line_x0 + line_x1) / 2, y, marker=marker or "o",
+                            color=color, markersize=4, markeredgecolor="white",
+                            markeredgewidth=0.3, transform=ax.transAxes,
+                            zorder=3)
+                elif "line" in geom_type or "string" in geom_type:
+                    ax.plot([line_x0, line_x1], [y, y], color=color,
+                            linewidth=2.0, linestyle=linestyle or "-",
+                            transform=ax.transAxes, zorder=3, solid_capstyle="round")
+                else:
+                    # Polígono: rectángulo relleno
+                    rect_w = line_x1 - line_x0
+                    rect_h = cat_row_h * 0.55
+                    ax.add_patch(Rectangle(
+                        (line_x0, y - rect_h / 2), rect_w, rect_h,
+                        facecolor=facecolor or (color + "55"),
+                        edgecolor=color, linewidth=0.6,
+                        transform=ax.transAxes, zorder=3))
+
+                # Etiqueta
+                txt = str(label)[:22]
+                ax.text(text_x, y, txt, ha="left", va="center",
+                        fontsize=3.8, color=COL_TXT,
+                        transform=ax.transAxes, zorder=3)
+
+            # Línea separadora bajo las categorías
+            sep_y = y_start - n_cat * cat_row_h - 0.006
+            ax.plot([margin_x, 1 - margin_x], [sep_y, sep_y],
+                    color=COL_LINE, linewidth=0.5, transform=ax.transAxes,
+                    zorder=2)
+
+        # ═══════════════════════════════════════════════════════════════
+        # ZONA DE DATOS: tabla de campos del proyecto
+        # ═══════════════════════════════════════════════════════════════
+        data_top = header_y - 0.018 - cat_zone_h  # desplazar según categorías
+        margin_x = 0.05
+
+        fecha = date.today().strftime("%d/%m/%Y")
+        srs = "ETRS89 UTM H30N"
+
         campos_caj = [
-            ("Proyecto", cajetin.get("proyecto", "") if cajetin else ""),
-            ("Nº Proyecto", cajetin.get("num_proyecto", "") if cajetin else ""),
-            ("Autor", cajetin.get("autor", "") if cajetin else ""),
-            ("Revisión", cajetin.get("revision", "") if cajetin else ""),
-            ("Firma", cajetin.get("firma", "") if cajetin else ""),
+            ("PROYECTO", caj.get("proyecto", "")),
+            ("N\u00ba PROYECTO", caj.get("num_proyecto", "")),
+            ("AUTOR", caj.get("autor", "")),
+            ("REVISI\u00d3N", caj.get("revision", "")),
+            ("FIRMA", caj.get("firma", "")),
+            ("FECHA", fecha),
+            ("SRC", srs),
+            ("ESCALA", f"1:{self.escala:,}".replace(",", ".")),
         ]
+
+        n_campos = len(campos_caj)
+        # Espacio disponible entre data_top y la zona de la barra de escala
+        barra_zone_h = 0.22  # reservar para barra + créditos
+        data_h = data_top - barra_zone_h
+        row_h = data_h / max(n_campos, 1)
+
         for i, (etiq, valor) in enumerate(campos_caj):
-            y = y_pos - i * line_h
+            y_top_row = data_top - i * row_h
+            y_bot_row = y_top_row - row_h
+            y_mid = (y_top_row + y_bot_row) / 2
+
+            # Fondo alternado
             if i % 2 == 0:
                 ax.add_patch(Rectangle(
-                    (0.04, y - line_h + 0.002), 0.92, line_h - 0.002,
-                    facecolor="#E8EEF2", edgecolor="none", zorder=1))
-            ax.text(0.07, y - line_h / 2, etiq + ":", ha="left", va="center",
-                    fontsize=3.8, fontweight="bold", color="#2C3E50", zorder=2)
-            ax.text(0.93, y - line_h / 2, str(valor), ha="right", va="center",
-                    fontsize=3.8, color="#1A1A2E", zorder=2)
+                    (margin_x, y_bot_row), 1 - 2 * margin_x, row_h,
+                    facecolor=COL_LIGHT, edgecolor="none", zorder=1))
 
-        # ── Separador ──
-        sep_y = y_pos - len(campos_caj) * line_h - 0.005
-        ax.plot([0.07, 0.93], [sep_y, sep_y], color="#2C3E50", linewidth=0.5,
-                zorder=2)
+            # Línea separadora fina
+            ax.plot([margin_x, 1 - margin_x], [y_bot_row, y_bot_row],
+                    color=COL_LINE, linewidth=0.3, zorder=2)
 
-        # ── Barra de escala (mini) ──
+            # Etiqueta
+            ax.text(margin_x + 0.02, y_mid, etiq,
+                    ha="left", va="center", fontsize=4.2,
+                    fontweight="bold", color=COL_MID, zorder=3)
+            # Valor
+            ax.text(1 - margin_x - 0.02, y_mid, str(valor),
+                    ha="right", va="center", fontsize=4.2,
+                    color=COL_TXT, zorder=3)
+
+        # Línea superior de la tabla
+        ax.plot([margin_x, 1 - margin_x], [data_top, data_top],
+                color=COL_MID, linewidth=0.6, zorder=2)
+
+        # ═══════════════════════════════════════════════════════════════
+        # ZONA INFERIOR: Barra de escala gráfica profesional
+        # ═══════════════════════════════════════════════════════════════
         barra_m = BARRA_ESCALA_M.get(self.escala, 1000)
-        barra_frac = 0.50
-        esc_y = sep_y - 0.045
-        esc_x0 = 0.07
+        barra_frac = 0.55
+        esc_y = 0.10
+        bar_h = 0.022
 
+        # Subdivisión izquierda (1 segmento extra antes del 0)
+        sub_m = barra_m // 4  # subdivisión = 1/4 de la barra principal
+        sub_frac = barra_frac / 4  # fracción gráfica de la subdivisión
+        esc_x0 = (1 - barra_frac - sub_frac) / 2  # inicio con subdivisión
+
+        # Formato de escala con punto (convención española)
+        escala_txt = f"1:{self.escala:,}".replace(",", ".")
+
+        # Texto de escala sobre la barra
+        ax.text(0.5, esc_y + 0.058, f"Escala {escala_txt}",
+                ha="center", va="bottom", fontsize=5.5, fontweight="bold",
+                color=COL_DARK, zorder=3)
+
+        # ── Subdivisión izquierda (antes del 0): 4 micro-segmentos ──
+        n_micro = 4
+        micro_seg = sub_frac / n_micro
+        for i in range(n_micro):
+            c = COL_DARK if i % 2 == 0 else "white"
+            ax.add_patch(Rectangle(
+                (esc_x0 + i * micro_seg, esc_y), micro_seg, bar_h,
+                facecolor=c, edgecolor=COL_DARK, linewidth=0.3, zorder=2))
+
+        # ── Barra principal: 4 segmentos ──
         n_seg = 4
         seg = barra_frac / n_seg
+        main_x0 = esc_x0 + sub_frac  # el 0 está aquí
         for i in range(n_seg):
-            c = "#1A1A2E" if i % 2 == 0 else "white"
+            c = COL_DARK if i % 2 == 0 else "white"
             ax.add_patch(Rectangle(
-                (esc_x0 + i * seg, esc_y), seg, 0.03,
-                facecolor=c, edgecolor="#1A1A2E", linewidth=0.4))
+                (main_x0 + i * seg, esc_y), seg, bar_h,
+                facecolor=c, edgecolor=COL_DARK, linewidth=0.3, zorder=2))
 
-        ax.text(esc_x0, esc_y - 0.02, "0", ha="center", va="top",
-                fontsize=3.5, color="#1A1A2E")
-        ax.text(esc_x0 + barra_frac, esc_y - 0.02, f"{barra_m} m",
-                ha="center", va="top", fontsize=3.5, color="#1A1A2E")
-        ax.text(esc_x0 + barra_frac / 2, esc_y + 0.045,
-                f"Escala 1:{self.escala:,}", ha="center", va="bottom",
-                fontsize=5, fontweight="bold", color="#1A1A2E")
+        # ── Ticks y etiquetas ──
+        tick_y_top = esc_y + bar_h + 0.003
+        tick_y_bot = esc_y - 0.003
+        label_y = esc_y - 0.018
 
-        # ── Créditos ──
-        fecha = date.today().strftime("%d/%m/%Y")
-        ax.text(0.5, 0.02,
-                f"{proveedor} | ETRS89 UTM H30N | {fecha}",
-                ha="center", va="bottom", fontsize=3.2, color="#666",
-                style="italic")
+        # Tick y etiqueta de subdivisión (izquierda del 0)
+        ax.plot([esc_x0, esc_x0], [esc_y, tick_y_top],
+                color=COL_DARK, linewidth=0.4, transform=ax.transAxes, zorder=3)
+        ax.text(esc_x0, label_y, f"{sub_m}", ha="center", va="top",
+                fontsize=3, color=COL_TXT, zorder=3)
+
+        # Tick y etiqueta del 0
+        ax.plot([main_x0, main_x0], [esc_y, tick_y_top],
+                color=COL_DARK, linewidth=0.4, transform=ax.transAxes, zorder=3)
+        ax.text(main_x0, label_y, "0", ha="center", va="top",
+                fontsize=3.5, fontweight="bold", color=COL_TXT, zorder=3)
+
+        # Ticks intermedios y final
+        for i in range(1, n_seg + 1):
+            x_tick = main_x0 + i * seg
+            ax.plot([x_tick, x_tick], [esc_y, tick_y_top],
+                    color=COL_DARK, linewidth=0.4,
+                    transform=ax.transAxes, zorder=3)
+            dist = int(barra_m * i / n_seg)
+            # Formatear distancias: usar km si >= 1000
+            if dist >= 1000:
+                txt = f"{dist // 1000} km" if dist % 1000 == 0 else f"{dist} m"
+            else:
+                txt = f"{dist} m"
+            ax.text(x_tick, label_y, txt, ha="center", va="top",
+                    fontsize=3, color=COL_TXT, zorder=3)
+
+        # ── Créditos: cartografía base ──
+        ax.text(0.5, 0.015, f"Base cartogr\u00e1fica: {proveedor}",
+                ha="center", va="bottom", fontsize=3.0, color="#888",
+                style="italic", zorder=3)
 
     # ── Rosa de los vientos (dentro del mapa principal, arriba-izquierda) ──
 
     def dibujar_norte_en_mapa(self):
-        """Dibuja la flecha de norte dentro del mapa principal (esquina sup-izq)."""
+        """Dibuja una rosa de los vientos profesional dentro del mapa (esquina sup-izq)."""
         ax = self.ax_map
-        nx, ny_base = 0.04, 0.88
-        nh = 0.04
+        from matplotlib.patches import Polygon as MplPolygon
 
-        # Fondo semitransparente
-        ax.add_patch(FancyBboxPatch(
-            (nx - 0.012, ny_base - 0.008), 0.024, nh + 0.025,
-            boxstyle="round,pad=0.004", facecolor="white", edgecolor="#2C3E50",
-            linewidth=0.3, alpha=0.85, transform=ax.transAxes, zorder=14))
+        # Centro y tamaño en coordenadas de ejes
+        cx, cy = 0.045, 0.91
+        r = 0.022  # radio de la rosa
 
-        ax.annotate("", xy=(nx, ny_base + nh),
-                    xytext=(nx, ny_base),
-                    xycoords="axes fraction", textcoords="axes fraction",
-                    arrowprops=dict(arrowstyle="->,head_width=0.2,head_length=0.15",
-                                    color="#1A1A2E", lw=0.6),
-                    zorder=15)
-        ax.text(nx, ny_base + nh + 0.006, "N",
-                ha="center", va="bottom", fontsize=3, fontweight="bold",
-                color="#1A1A2E", transform=ax.transAxes, zorder=15)
+        # Fondo circular semitransparente
+        circle_bg = plt.Circle((cx, cy - 0.005), r + 0.012,
+                                facecolor="white", edgecolor="#2C3E50",
+                                linewidth=0.5, alpha=0.90,
+                                transform=ax.transAxes, zorder=14)
+        ax.add_patch(circle_bg)
+
+        # Triángulos de la rosa (N, S, E, W)
+        # Norte (punta arriba) — mitad oscura y mitad clara
+        tri_n_l = MplPolygon(
+            [(cx, cy + r * 1.1), (cx - r * 0.3, cy), (cx, cy)],
+            facecolor="#1A1A2E", edgecolor="#1A1A2E", linewidth=0.3,
+            transform=ax.transAxes, zorder=15)
+        tri_n_r = MplPolygon(
+            [(cx, cy + r * 1.1), (cx + r * 0.3, cy), (cx, cy)],
+            facecolor="#666666", edgecolor="#1A1A2E", linewidth=0.3,
+            transform=ax.transAxes, zorder=15)
+        # Sur
+        tri_s_l = MplPolygon(
+            [(cx, cy - r * 1.1), (cx - r * 0.3, cy), (cx, cy)],
+            facecolor="#AAAAAA", edgecolor="#1A1A2E", linewidth=0.3,
+            transform=ax.transAxes, zorder=15)
+        tri_s_r = MplPolygon(
+            [(cx, cy - r * 1.1), (cx + r * 0.3, cy), (cx, cy)],
+            facecolor="#DDDDDD", edgecolor="#1A1A2E", linewidth=0.3,
+            transform=ax.transAxes, zorder=15)
+        # Este
+        tri_e_l = MplPolygon(
+            [(cx + r * 1.1, cy), (cx, cy + r * 0.3), (cx, cy)],
+            facecolor="#888888", edgecolor="#1A1A2E", linewidth=0.3,
+            transform=ax.transAxes, zorder=15)
+        tri_e_r = MplPolygon(
+            [(cx + r * 1.1, cy), (cx, cy - r * 0.3), (cx, cy)],
+            facecolor="#CCCCCC", edgecolor="#1A1A2E", linewidth=0.3,
+            transform=ax.transAxes, zorder=15)
+        # Oeste
+        tri_w_l = MplPolygon(
+            [(cx - r * 1.1, cy), (cx, cy - r * 0.3), (cx, cy)],
+            facecolor="#888888", edgecolor="#1A1A2E", linewidth=0.3,
+            transform=ax.transAxes, zorder=15)
+        tri_w_r = MplPolygon(
+            [(cx - r * 1.1, cy), (cx, cy + r * 0.3), (cx, cy)],
+            facecolor="#CCCCCC", edgecolor="#1A1A2E", linewidth=0.3,
+            transform=ax.transAxes, zorder=15)
+
+        for tri in [tri_n_l, tri_n_r, tri_s_l, tri_s_r,
+                    tri_e_l, tri_e_r, tri_w_l, tri_w_r]:
+            ax.add_patch(tri)
+
+        # Punto central
+        ax.plot(cx, cy, "o", color="#1A1A2E", markersize=1.5,
+                transform=ax.transAxes, zorder=16)
+
+        # Letra "N" sobre el triángulo norte
+        ax.text(cx, cy + r * 1.1 + 0.008, "N",
+                ha="center", va="bottom", fontsize=4.5, fontweight="bold",
+                color="#1A1A2E", transform=ax.transAxes, zorder=16)
 
     # ── Cajetín (integrado) ────────────────────────────────────────────
 

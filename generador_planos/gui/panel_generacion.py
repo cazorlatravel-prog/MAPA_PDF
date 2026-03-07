@@ -543,6 +543,7 @@ class PanelGeneracion:
         if not campos:
             messagebox.showwarning("Aviso", "Selecciona al menos un campo.")
             return
+        campo_encabezado = cfg.get("campo_encabezado")
 
         carpeta = cfg["salida"]
         os.makedirs(carpeta, exist_ok=True)
@@ -587,6 +588,7 @@ class PanelGeneracion:
                         callback_log=self.callback_log,
                         callback_progreso=self._actualizar_progreso,
                         indices_filtro=indices_filtro,
+                        campo_encabezado=campo_encabezado,
                     )
 
                     self._parent_window.after(0, self._fin_generacion)
@@ -625,6 +627,7 @@ class PanelGeneracion:
                             incluir_portada=incluir_portada,
                             callback_log=self.callback_log,
                             callback_progreso=self._actualizar_progreso,
+                            campo_encabezado=campo_encabezado,
                         )
                     else:
                         self.motor.generar_serie(
@@ -638,6 +641,7 @@ class PanelGeneracion:
                             escala_manual=escala_manual,
                             callback_log=self.callback_log,
                             callback_progreso=self._actualizar_progreso,
+                            campo_encabezado=campo_encabezado,
                         )
 
                     self._parent_window.after(0, self._fin_generacion)
@@ -654,6 +658,7 @@ class PanelGeneracion:
         cfg = self.get_config()
         campos = cfg.get("campos", [])
         escala_manual = cfg.get("escala_manual")
+        campo_encabezado = cfg.get("campo_encabezado")
 
         # Resetear bandera de cancelación
         self.motor._cancelar.clear()
@@ -676,6 +681,7 @@ class PanelGeneracion:
                     escala_manual=escala_manual,
                     callback_log=self.callback_log,
                     callback_progreso=self._actualizar_progreso,
+                    campo_encabezado=campo_encabezado,
                 )
 
                 self._parent_window.after(0, self._fin_generacion)

@@ -221,36 +221,84 @@ class GeneradorPlanos:
         ci = self.config_infra
         lw = ci.get("linewidth", 2.5)
         alpha_infra = ci.get("alpha", 1.0)
+        campo_cat = ci.get("campo_categoria")
 
         geom_type = ""
         for geom_single in gdf_sel.geometry:
             geom_type = str(geom_single.geom_type).lower()
             break
 
-        if "point" in geom_type:
-            gdf_sel.plot(ax=ax_map, color=color_infra, markersize=12,
-                         marker="o", zorder=5, edgecolor="white",
-                         linewidth=0.8, alpha=alpha_infra)
-        elif "line" in geom_type or "string" in geom_type:
-            gdf_sel.plot(ax=ax_map, color=color_infra, linewidth=lw,
-                         zorder=5, alpha=alpha_infra)
+        # ── Categorización por campo ──
+        if campo_cat and campo_cat in gdf_sel.columns:
+            # Resolver campo real por mapeo si existe
+            campo_real = campo_cat
+            if self._campo_mapeo and campo_cat in self._campo_mapeo:
+                campo_real = self._campo_mapeo[campo_cat]
+
+            valores_unicos = gdf_sel[campo_real].astype(str).unique()
+            for valor in valores_unicos:
+                simb = self.gestor_simbologia.obtener_simbologia_infra(
+                    campo_cat, valor)
+                mask = gdf_sel[campo_real].astype(str) == valor
+                gdf_cat = gdf_sel[mask]
+                if gdf_cat.empty:
+                    continue
+                c = simb.color
+                ls = simb.linestyle
+                if "point" in geom_type:
+                    gdf_cat.plot(ax=ax_map, color=c, markersize=12,
+                                 marker=simb.marker, zorder=5,
+                                 edgecolor="white", linewidth=0.8,
+                                 alpha=alpha_infra)
+                elif "line" in geom_type or "string" in geom_type:
+                    gdf_cat.plot(ax=ax_map, color=c, linewidth=lw,
+                                 linestyle=ls, zorder=5,
+                                 alpha=alpha_infra)
+                else:
+                    gdf_cat.plot(ax=ax_map, facecolor=simb.facecolor,
+                                 edgecolor=c, linewidth=lw,
+                                 linestyle=ls, zorder=5,
+                                 alpha=alpha_infra)
         else:
-            gdf_sel.plot(ax=ax_map, facecolor=color_infra + "55",
-                         edgecolor=color_infra, linewidth=lw,
-                         zorder=5, alpha=alpha_infra)
+            # Sin categoría: color único
+            if "point" in geom_type:
+                gdf_sel.plot(ax=ax_map, color=color_infra, markersize=12,
+                             marker="o", zorder=5, edgecolor="white",
+                             linewidth=0.8, alpha=alpha_infra)
+            elif "line" in geom_type or "string" in geom_type:
+                gdf_sel.plot(ax=ax_map, color=color_infra, linewidth=lw,
+                             zorder=5, alpha=alpha_infra)
+            else:
+                gdf_sel.plot(ax=ax_map, facecolor=color_infra + "55",
+                             edgecolor=color_infra, linewidth=lw,
+                             zorder=5, alpha=alpha_infra)
 
     def _construir_items_leyenda(self, gdf_sel, color_infra):
         """Construye items de leyenda para infra + capas extra."""
         items = []
 
-        # Infraestructuras
         geom_type = ""
         for g in gdf_sel.geometry:
             if g is not None:
                 geom_type = str(g.geom_type).lower()
                 break
-        items.append(("Infraestructuras", color_infra, geom_type, "-", "o",
-                       color_infra + "55"))
+
+        # Infraestructuras: por categoría o color único
+        campo_cat = self.config_infra.get("campo_categoria")
+        if campo_cat and campo_cat in gdf_sel.columns:
+            campo_real = campo_cat
+            if self._campo_mapeo and campo_cat in self._campo_mapeo:
+                campo_real = self._campo_mapeo[campo_cat]
+            valores_unicos = sorted(gdf_sel[campo_real].astype(str).unique())
+            for valor in valores_unicos:
+                simb = self.gestor_simbologia.obtener_simbologia_infra(
+                    campo_cat, valor)
+                label = str(valor)[:25]
+                items.append((label, simb.color, geom_type, simb.linestyle,
+                              simb.marker, simb.facecolor))
+        else:
+            items.append(("Infraestructuras", color_infra, geom_type, "-", "o",
+                           color_infra + "55"))
 
         # Montes
         if self.gdf_montes is not None:
@@ -261,13 +309,43 @@ class GeneradorPlanos:
 
         return items
 
+    def _construir_items_categoria(self, gdf_sel):
+        """Construye items de categoría (solo infra categorizadas) para mini-leyenda."""
+        campo_cat = self.config_infra.get("campo_categoria")
+        if not campo_cat or campo_cat not in gdf_sel.columns:
+            return None
+
+        items = []
+        geom_type = ""
+        for g in gdf_sel.geometry:
+            if g is not None:
+                geom_type = str(g.geom_type).lower()
+                break
+
+        campo_real = campo_cat
+        if self._campo_mapeo and campo_cat in self._campo_mapeo:
+            campo_real = self._campo_mapeo[campo_cat]
+
+        # Todos los valores conocidos en el gestor de simbología
+        if campo_cat in self.gestor_simbologia.categorias:
+            todos_valores = sorted(self.gestor_simbologia.categorias[campo_cat].keys())
+        else:
+            todos_valores = sorted(gdf_sel[campo_real].astype(str).unique())
+
+        for valor in todos_valores:
+            simb = self.gestor_simbologia.obtener_simbologia_infra(campo_cat, valor)
+            label = str(valor)[:25]
+            items.append((label, simb.color, geom_type, simb.linestyle,
+                          simb.marker, simb.facecolor))
+        return items if items else None
+
     # ── Generación de plano individual ───────────────────────────────────
 
     def generar_plano(self, idx_fila: int, formato_key: str,
                       proveedor: str, transparencia_montes: float,
                       campos_visibles: list, color_infra: str,
                       salida_dir: str, escala_manual: int = None,
-                      callback_log=None) -> str:
+                      callback_log=None, campo_encabezado: str = None) -> str:
         self._ensure_agg()
 
         def log(msg):
@@ -312,12 +390,15 @@ class GeneradorPlanos:
 
         maq.dibujar_grid_utm(xmin, xmax, ymin, ymax)
         maq.dibujar_panel_atributos(row, campos_visibles,
-                                     campo_mapeo=self._campo_mapeo)
+                                     campo_mapeo=self._campo_mapeo,
+                                     campo_encabezado=campo_encabezado)
 
         cx, cy = geom.centroid.x, geom.centroid.y
         maq.dibujar_mapa_posicion(cx, cy)
+        items_cat = self._construir_items_categoria(gdf_sel)
         maq.dibujar_barra_escala(proveedor, cx_utm=cx, cy_utm=cy,
-                                  cajetin=self._cajetin)
+                                  cajetin=self._cajetin,
+                                  items_categoria=items_cat)
         maq.dibujar_norte_en_mapa()
         maq.dibujar_cabecera(row, cajetin=self._cajetin, plantilla=self._plantilla)
         maq.dibujar_cajetin(self._cajetin)
@@ -340,7 +421,8 @@ class GeneradorPlanos:
                                 campos_visibles: list, color_infra: str,
                                 salida_dir: str, num_plano: int = 1,
                                 escala_manual: int = None,
-                                callback_log=None) -> str:
+                                callback_log=None,
+                                campo_encabezado: str = None) -> str:
         self._ensure_agg()
 
         def log(msg):
@@ -387,12 +469,15 @@ class GeneradorPlanos:
         maq.dibujar_grid_utm(xmin, xmax, ymin, ymax)
 
         maq.dibujar_panel_atributos_multi(rows, campos_visibles,
-                                           campo_mapeo=self._campo_mapeo)
+                                           campo_mapeo=self._campo_mapeo,
+                                           campo_encabezado=campo_encabezado)
 
         cx, cy = geom_union.centroid.x, geom_union.centroid.y
         maq.dibujar_mapa_posicion(cx, cy)
+        items_cat = self._construir_items_categoria(gdf_grupo)
         maq.dibujar_barra_escala(proveedor, cx_utm=cx, cy_utm=cy,
-                                  cajetin=self._cajetin)
+                                  cajetin=self._cajetin,
+                                  items_categoria=items_cat)
         maq.dibujar_norte_en_mapa()
 
         etiq_campo = ETIQUETAS_CAMPOS.get(campo_grupo, campo_grupo)
@@ -417,7 +502,8 @@ class GeneradorPlanos:
     def generar_serie(self, indices: list, formato_key: str, proveedor: str,
                       transparencia: float, campos: list, color_infra: str,
                       salida_dir: str, escala_manual: int = None,
-                      callback_log=None, callback_progreso=None) -> list:
+                      callback_log=None, callback_progreso=None,
+                      campo_encabezado: str = None) -> list:
         rutas = []
         total = len(indices)
         for i, idx in enumerate(indices):
@@ -432,6 +518,7 @@ class GeneradorPlanos:
                     campos_visibles=campos, color_infra=color_infra,
                     salida_dir=salida_dir, escala_manual=escala_manual,
                     callback_log=callback_log,
+                    campo_encabezado=campo_encabezado,
                 )
                 rutas.append(ruta)
             except GeneracionCancelada:
@@ -452,7 +539,8 @@ class GeneradorPlanos:
                                 escala_manual: int = None,
                                 callback_log=None,
                                 callback_progreso=None,
-                                indices_filtro: dict = None) -> list:
+                                indices_filtro: dict = None,
+                                campo_encabezado: str = None) -> list:
         rutas = []
         total = len(valores)
         for i, valor in enumerate(valores):
@@ -479,6 +567,7 @@ class GeneradorPlanos:
                     salida_dir=salida_dir, num_plano=i + 1,
                     escala_manual=escala_manual,
                     callback_log=callback_log,
+                    campo_encabezado=campo_encabezado,
                 )
                 rutas.append(ruta)
             except GeneracionCancelada:
@@ -498,7 +587,8 @@ class GeneradorPlanos:
                                  ruta_pdf: str, escala_manual: int = None,
                                  incluir_portada: bool = False,
                                  callback_log=None,
-                                 callback_progreso=None) -> str:
+                                 callback_progreso=None,
+                                 campo_encabezado: str = None) -> str:
         from matplotlib.backends.backend_pdf import PdfPages
 
         self._ensure_agg()
@@ -583,12 +673,15 @@ class GeneradorPlanos:
 
                     maq.dibujar_grid_utm(xmin, xmax, ymin, ymax)
                     maq.dibujar_panel_atributos(row, campos,
-                                                 campo_mapeo=self._campo_mapeo)
+                                                 campo_mapeo=self._campo_mapeo,
+                                                 campo_encabezado=campo_encabezado)
 
                     cx, cy = geom.centroid.x, geom.centroid.y
                     maq.dibujar_mapa_posicion(cx, cy)
+                    items_cat = self._construir_items_categoria(gdf_sel)
                     maq.dibujar_barra_escala(proveedor, cx_utm=cx, cy_utm=cy,
-                                              cajetin=self._cajetin)
+                                              cajetin=self._cajetin,
+                                              items_categoria=items_cat)
                     maq.dibujar_norte_en_mapa()
                     maq.dibujar_cabecera(row, cajetin=self._cajetin,
                                           plantilla=self._plantilla)
@@ -617,7 +710,8 @@ class GeneradorPlanos:
                            transparencia: float, campos: list,
                            color_infra: str, escala_manual: int = None,
                            callback_log=None,
-                           callback_progreso=None) -> list:
+                           callback_progreso=None,
+                           campo_encabezado: str = None) -> list:
         """Genera planos por lotes a partir de un CSV de configuración."""
         lotes = cargar_lotes_csv(ruta_csv)
         if not lotes:
@@ -653,6 +747,7 @@ class GeneradorPlanos:
                     campos=campos, color_infra=color_infra,
                     salida_dir=carpeta, escala_manual=escala_manual,
                     callback_log=callback_log,
+                    campo_encabezado=campo_encabezado,
                 )
                 rutas.extend(resultados)
             except Exception as e:

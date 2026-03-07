@@ -152,14 +152,13 @@ class App(tk.Tk):
         )
         lf.pack(fill="both", expand=True, padx=4, pady=(4, 4))
 
-        cols = ["#", "Nombre_Infra", "Municipio", "Monte",
-                "Tipo_Trabajos", "Longitud", "Superficie"]
+        # Tabla con columna placeholder; se reconfigura al cargar shapefile
+        self._tabla_frame = lf
+        cols = ["#"]
         self._tabla = ttk.Treeview(lf, columns=cols, show="headings",
                                     selectmode="extended")
-        for col in cols:
-            ancho = 60 if col == "#" else 130
-            self._tabla.heading(col, text=col)
-            self._tabla.column(col, width=ancho, minwidth=40)
+        self._tabla.heading("#", text="#")
+        self._tabla.column("#", width=60, minwidth=40)
 
         sb_v = ttk.Scrollbar(lf, orient="vertical", command=self._tabla.yview)
         sb_h = ttk.Scrollbar(lf, orient="horizontal", command=self._tabla.xview)
@@ -168,6 +167,15 @@ class App(tk.Tk):
         self._tabla.pack(side="left", fill="both", expand=True)
         sb_v.pack(side="right", fill="y")
         sb_h.pack(side="bottom", fill="x")
+
+    def _reconfigurar_tabla(self, columnas: list):
+        """Reconfigura las columnas de la tabla con las columnas reales del shapefile."""
+        cols = ["#"] + columnas
+        self._tabla.configure(columns=cols)
+        for col in cols:
+            ancho = 50 if col == "#" else 120
+            self._tabla.heading(col, text=col)
+            self._tabla.column(col, width=ancho, minwidth=40)
 
     def _crear_panel_log(self, parent):
         lf = tk.LabelFrame(
@@ -211,27 +219,20 @@ class App(tk.Tk):
         for item in self._tabla.get_children():
             self._tabla.delete(item)
 
-        cols_existentes = list(gdf.columns)
-
-        def _val(row, campo):
-            if campo in cols_existentes:
-                return str(row[campo])
-            return "\u2014"
+        # Columnas reales del shapefile (sin geometry)
+        columnas = [c for c in gdf.columns if c != "geometry"]
 
         if indices is None:
             indices = range(len(gdf))
 
         for i in indices:
             row = gdf.iloc[i]
-            vals = [
-                i + 1,
-                _val(row, "Nombre_Infra"),
-                _val(row, "Municipio"),
-                _val(row, "Monte"),
-                _val(row, "Tipo_Trabajos"),
-                _val(row, "Longitud"),
-                _val(row, "Superficie"),
-            ]
+            vals = [i + 1]
+            for col in columnas:
+                v = str(row.get(col, "\u2014"))
+                if v == "nan":
+                    v = "\u2014"
+                vals.append(v)
             tag = "par" if i % 2 == 0 else "impar"
             self._tabla.insert("", "end", values=vals, tags=(tag,))
 
@@ -241,13 +242,16 @@ class App(tk.Tk):
         self._escribir_log(f"Tabla actualizada: {n} infraestructuras.", "info")
 
     def _on_tabla_cargada(self):
+        # Obtener columnas reales y reconfigurar tabla
+        columnas = self.motor.obtener_columnas_shapefile()
+        self._reconfigurar_tabla(columnas)
         self._poblar_tabla()
         self.panel_generacion.actualizar_campos_agrupacion()
         self.panel_generacion.actualizar_valores_si_agrupado()
         self.panel_filtros.actualizar_campos()
         self.panel_simbologia.actualizar_capas_extra()
+        self.panel_simbologia.actualizar_campo_categoria()
         # Actualizar checkboxes de campos con las columnas reales del shapefile
-        columnas = self.motor.obtener_columnas_shapefile()
         self.panel_campos.actualizar_campos(columnas)
         self.panel_cajetin.actualizar_campos_subtitulo(columnas)
 
@@ -269,6 +273,7 @@ class App(tk.Tk):
             "proveedor": self.panel_config.proveedor.get(),
             "transparencia": self.panel_capas.transparencia.get(),
             "campos": self.panel_campos.obtener_campos_activos(),
+            "campo_encabezado": self.panel_campos.obtener_campo_encabezado(),
             "color_infra": self.panel_config.color_infra,
             "salida": self.panel_config.salida.get(),
             "escala_manual": self.panel_config.escala_manual,
