@@ -30,7 +30,7 @@ BARRA_ESCALA_M = {
     30000: 5000,
 }
 
-MARGENES_MM = {"izq": 20, "der": 15, "sup": 15, "inf": 30}
+MARGENES_MM = {"izq": 15, "der": 15, "sup": 10, "inf": 12}
 
 FORMATOS = {
     "A4 Vertical":   (210, 297),
@@ -42,8 +42,8 @@ FORMATOS = {
 }
 
 # Proporción del mapa principal respecto al ancho/alto útil
-RATIO_MAPA_ANCHO = 0.63
-RATIO_MAPA_ALTO = 0.82
+RATIO_MAPA_ANCHO = 1.0
+RATIO_MAPA_ALTO = 0.75
 
 
 def seleccionar_escala(geom, formato_key: str, escala_manual: int = None) -> int:
