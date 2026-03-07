@@ -20,9 +20,9 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
 import matplotlib
-matplotlib.use("Agg")
+matplotlib.use("TkAgg")
 import matplotlib.pyplot as plt
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 from matplotlib.patches import Rectangle as MplRectangle
 
 from .estilos import (
@@ -200,7 +200,7 @@ class App(tk.Tk):
 
     def _crear_panel_mapa_general(self, parent):
         """Vista previa del mapa general con todas las capas cargadas."""
-        # Barra de herramientas
+        # Barra superior con botones
         toolbar = tk.Frame(parent, bg=COLOR_PANEL, height=32)
         toolbar.pack(fill="x", padx=2, pady=(2, 0))
         toolbar.pack_propagate(False)
@@ -218,28 +218,78 @@ class App(tk.Tk):
         self._mapa_frame.pack(fill="both", expand=True, padx=2, pady=2)
         self._mapa_canvas = None
         self._mapa_fig = None
+        self._mapa_toolbar = None
+        self._mapa_click_cid = None
+
+        # Panel inferior para info al hacer clic
+        self._info_frame = tk.Frame(parent, bg="#0D1117")
+        self._info_frame.pack(fill="x", padx=2, pady=(0, 2))
+        self._info_tabla = None
 
     def _actualizar_mapa_general(self):
-        """Redibuja el mapa general con las capas cargadas."""
+        """Redibuja el mapa general con capas base + vectoriales + interactividad."""
         gdf = self.motor.gdf_infra
         if gdf is None:
             self._lbl_mapa_info.configure(text="No hay infraestructuras cargadas")
             return
 
-        # Limpiar canvas anterior
+        # Limpiar canvas, toolbar y panel info anteriores
+        if self._mapa_toolbar is not None:
+            self._mapa_toolbar.destroy()
+            self._mapa_toolbar = None
         if self._mapa_canvas is not None:
             self._mapa_canvas.get_tk_widget().destroy()
         if self._mapa_fig is not None:
             plt.close(self._mapa_fig)
+        if self._info_tabla is not None:
+            self._info_tabla.destroy()
+            self._info_tabla = None
 
         fig, ax = plt.subplots(1, 1, figsize=(8, 5), dpi=96)
         fig.patch.set_facecolor("#0D1117")
-        ax.set_facecolor("#172030")
+        ax.set_facecolor("#E8E8E0")
         self._mapa_fig = fig
+        self._mapa_ax = ax
 
-        # Infraestructuras: por categoría o color único
+        # ── Extensión del mapa basada en todas las infraestructuras ──
+        bounds = gdf.total_bounds  # [minx, miny, maxx, maxy]
+        pad_x = (bounds[2] - bounds[0]) * 0.15 or 1000
+        pad_y = (bounds[3] - bounds[1]) * 0.15 or 1000
+        xmin, xmax = bounds[0] - pad_x, bounds[2] + pad_x
+        ymin, ymax = bounds[1] - pad_y, bounds[3] + pad_y
+        ax.set_xlim(xmin, xmax)
+        ax.set_ylim(ymin, ymax)
+
+        # ── Fondo cartográfico (mismas teselas que el PDF) ──
+        proveedor = self.panel_config.proveedor.get()
+        try:
+            from ..motor.cartografia import añadir_fondo_cartografico
+            añadir_fondo_cartografico(ax, gdf, proveedor,
+                                       xmin=xmin, xmax=xmax,
+                                       ymin=ymin, ymax=ymax)
+            ax.set_xlim(xmin, xmax)
+            ax.set_ylim(ymin, ymax)
+        except Exception:
+            pass
+
+        # ── Montes ──
+        if self.motor.gdf_montes is not None:
+            montes_clip = self.motor.gdf_montes.cx[xmin:xmax, ymin:ymax]
+            if not montes_clip.empty:
+                trans = self.panel_capas.transparencia.get()
+                montes_clip.plot(ax=ax, facecolor="#22992244",
+                                 edgecolor="#1a5c10", linewidth=0.5,
+                                 alpha=trans, zorder=1)
+
+        # ── Capas extra (con simbología) ──
+        self.motor.gestor_capas.dibujar_en_mapa(
+            ax, xmin, xmax, ymin, ymax, self.motor.gestor_simbologia)
+
+        # ── Infraestructuras ──
         ci = self.motor.config_infra
         campo_cat = ci.get("campo_categoria")
+        lw = ci.get("linewidth", 2.5)
+        alpha_infra = ci.get("alpha", 0.65)
         color_infra = "#E74C3C"
 
         if campo_cat and campo_cat in gdf.columns:
@@ -254,46 +304,124 @@ class App(tk.Tk):
                 mask = gdf[campo_real].astype(str) == valor
                 gdf_cat = gdf[mask]
                 if not gdf_cat.empty:
-                    gdf_cat.plot(ax=ax, color=simb.color, linewidth=1.2,
-                                 label=str(valor)[:20], alpha=0.9)
+                    gdf_cat.plot(ax=ax, color=simb.color, linewidth=lw,
+                                 linestyle=simb.linestyle,
+                                 label=str(valor)[:20], alpha=alpha_infra,
+                                 zorder=5)
         else:
-            gdf.plot(ax=ax, color=color_infra, linewidth=1.2,
-                     label="Infraestructuras", alpha=0.9)
+            gdf.plot(ax=ax, color=color_infra, linewidth=lw,
+                     label="Infraestructuras", alpha=alpha_infra, zorder=5)
 
-        # Montes
-        if self.motor.gdf_montes is not None:
-            self.motor.gdf_montes.plot(ax=ax, facecolor="#22992244",
-                                        edgecolor="#1a5c10", linewidth=0.5,
-                                        alpha=0.5, label="Montes")
+        ax.legend(loc="upper right", fontsize=6, framealpha=0.85,
+                  facecolor="white", edgecolor="#BDC3C7", labelcolor="#333")
 
-        # Capas extra
-        for capa in self.motor.gestor_capas.capas:
-            if capa.visible and capa.gdf is not None:
-                simb = self.motor.gestor_simbologia.obtener_simbologia_capa(capa.nombre)
-                capa.gdf.plot(ax=ax, color=simb.color, linewidth=0.8,
-                              alpha=simb.alpha, label=capa.nombre)
-
-        ax.legend(loc="upper right", fontsize=7, framealpha=0.85,
-                  facecolor="#1C2333", edgecolor="#2C3E50", labelcolor=COLOR_TEXTO)
-
-        # Estilo del mapa
-        ax.tick_params(colors=COLOR_TEXTO_GRIS, labelsize=6)
+        # Estilo
+        ax.tick_params(colors="#555", labelsize=6)
         for sp in ax.spines.values():
             sp.set_color("#2C3E50")
-        ax.set_title("Vista general de capas cargadas", fontsize=9,
-                      color=COLOR_ACENTO, fontweight="bold", pad=8)
 
         fig.tight_layout(pad=0.5)
 
+        # ── Canvas + toolbar de navegación (zoom, pan, home) ──
         self._mapa_canvas = FigureCanvasTkAgg(fig, master=self._mapa_frame)
         self._mapa_canvas.draw()
+
+        # Toolbar de matplotlib: zoom, pan, home, guardar
+        self._mapa_toolbar = NavigationToolbar2Tk(
+            self._mapa_canvas, self._mapa_frame)
+        self._mapa_toolbar.configure(bg=COLOR_PANEL)
+        self._mapa_toolbar.update()
+        self._mapa_toolbar.pack(side="bottom", fill="x")
         self._mapa_canvas.get_tk_widget().pack(fill="both", expand=True)
+
+        # ── Clic para inspeccionar infraestructura ──
+        self._mapa_click_cid = fig.canvas.mpl_connect(
+            "button_press_event", self._on_mapa_click)
 
         n_infra = len(gdf)
         n_capas = len(self.motor.gestor_capas.capas)
         montes = "Sí" if self.motor.gdf_montes is not None else "No"
         self._lbl_mapa_info.configure(
-            text=f"{n_infra} infraestructuras · {n_capas} capas extra · Montes: {montes}")
+            text=f"{n_infra} infra · {n_capas} capas · Montes: {montes} · "
+                 f"Clic en infraestructura para ver info")
+
+    def _on_mapa_click(self, event):
+        """Al hacer clic en el mapa, busca la infraestructura más cercana y muestra sus datos."""
+        if event.inaxes is None or event.xdata is None:
+            return
+        # Solo actuar en modo normal (no zoom/pan activo)
+        if self._mapa_toolbar and self._mapa_toolbar.mode:
+            return
+
+        gdf = self.motor.gdf_infra
+        if gdf is None:
+            return
+
+        from shapely.geometry import Point
+        click_pt = Point(event.xdata, event.ydata)
+
+        # Calcular distancia de cada infraestructura al punto clicado
+        distancias = gdf.geometry.distance(click_pt)
+        idx_min = distancias.idxmin()
+        dist_min = distancias[idx_min]
+
+        # Umbral: solo si el clic está lo bastante cerca (5% del viewport)
+        ax = self._mapa_ax
+        xlim = ax.get_xlim()
+        ylim = ax.get_ylim()
+        umbral = max(xlim[1] - xlim[0], ylim[1] - ylim[0]) * 0.05
+        if dist_min > umbral:
+            return
+
+        row = gdf.loc[idx_min]
+        columnas = [c for c in gdf.columns if c != "geometry"]
+
+        # Crear tabla de info
+        if self._info_tabla is not None:
+            self._info_tabla.destroy()
+
+        info_lf = tk.LabelFrame(
+            self._info_frame,
+            text=f" Infraestructura #{idx_min + 1} ",
+            font=FONT_BOLD, bg="#0D1117", fg=COLOR_ACENTO,
+            bd=1, relief="solid",
+        )
+        info_lf.pack(fill="x", padx=2, pady=2)
+        self._info_tabla = info_lf
+
+        tree = ttk.Treeview(info_lf, columns=columnas, show="headings",
+                             height=3, selectmode="browse")
+        for col in columnas:
+            tree.heading(col, text=col)
+            tree.column(col, width=100, minwidth=40)
+
+        vals = []
+        for col in columnas:
+            v = str(row.get(col, "—"))
+            if v == "nan":
+                v = "—"
+            vals.append(v)
+        tree.insert("", "end", values=vals, tags=("sel",))
+        tree.tag_configure("sel", background="#1E3A5F")
+
+        sb_h = ttk.Scrollbar(info_lf, orient="horizontal", command=tree.xview)
+        tree.configure(xscrollcommand=sb_h.set)
+        sb_h.pack(side="bottom", fill="x")
+        tree.pack(fill="x", expand=True)
+
+        # Resaltar la infraestructura seleccionada en el mapa
+        geom = row.geometry
+        if geom is not None:
+            cx, cy = geom.centroid.x, geom.centroid.y
+            # Limpiar marcador anterior si existe
+            if hasattr(self, '_marcador_sel') and self._marcador_sel:
+                for m in self._marcador_sel:
+                    m.remove()
+            self._marcador_sel = ax.plot(
+                cx, cy, "o", color="#FFFF00", markersize=12,
+                markeredgecolor="#E74C3C", markeredgewidth=2,
+                zorder=10, alpha=0.9)
+            self._mapa_canvas.draw_idle()
 
     # ── Mapa Posición (pestaña 3) ────────────────────────────────────────
 
