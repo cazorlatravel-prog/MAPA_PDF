@@ -103,7 +103,7 @@ class MaquetadorPlano:
             top=gs_top, bottom=inf,
             width_ratios=[0.28, 0.42, 0.30],
             height_ratios=[RATIO_MAPA_ALTO, 1 - RATIO_MAPA_ALTO],
-            hspace=0.03, wspace=0.015,
+            hspace=0.07, wspace=0.015,
         )
 
         # Mapa principal: fila 0, ancho completo (3 columnas)
@@ -157,8 +157,8 @@ class MaquetadorPlano:
 
         ax.set_xticks(xs)
         ax.set_yticks(ys)
-        ax.set_xticklabels([f"{int(x):,}" for x in xs], fontsize=4.5,
-                           color="#2C3E50", rotation=45, ha="right")
+        ax.set_xticklabels([f"{int(x):,}" for x in xs], fontsize=4,
+                           color="#2C3E50", rotation=30, ha="right")
         ax.set_yticklabels([f"{int(y):,}" for y in ys], fontsize=4.5,
                            color="#2C3E50")
         ax.tick_params(which="major", length=4, width=0.6, color="#2C3E50",
