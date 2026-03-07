@@ -41,6 +41,16 @@ import os
 if getattr(sys, 'frozen', False):
     base = sys._MEIPASS
     sys.path.insert(0, base)
+    # Forzar importación de matplotlib antes de cualquier otro import
+    # para que PyInstaller lo resuelva correctamente
+    os.environ["MPLBACKEND"] = "Agg"
+
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import matplotlib.backends.backend_agg
+import matplotlib.backends.backend_pdf
+import matplotlib.backends.backend_svg
 
 from generador_planos.gui.app import App
 
@@ -194,6 +204,23 @@ def main():
     print("=" * 60)
     print()
 
+    # Verificar dependencias principales
+    print("  Verificando dependencias...")
+    faltantes = []
+    for mod_name in ["matplotlib", "geopandas", "numpy", "pyproj",
+                     "shapely", "contextily", "PIL", "reportlab"]:
+        try:
+            __import__(mod_name)
+        except ImportError:
+            faltantes.append(mod_name)
+    if faltantes:
+        print(f"  FALTAN módulos: {', '.join(faltantes)}")
+        print("  Ejecuta: pip install -r requirements.txt")
+        sys.exit(1)
+
+    import matplotlib
+    print(f"  matplotlib {matplotlib.__version__} en: {os.path.dirname(matplotlib.__file__)}")
+
     # Verificar PyInstaller
     try:
         import PyInstaller
@@ -213,6 +240,29 @@ def main():
     version_file = crear_version_info()
     print(f"  Metadatos Windows: v{APP_VERSION} - Jose Caballero")
 
+    # Detectar rutas de site-packages para que PyInstaller encuentre todo
+    import site
+    site_dirs = []
+    try:
+        site_dirs += site.getsitepackages()
+    except AttributeError:
+        pass
+    try:
+        usp = site.getusersitepackages()
+        if isinstance(usp, str):
+            site_dirs.append(usp)
+    except AttributeError:
+        pass
+    # Añadir directorio padre de matplotlib como ruta extra
+    mpl_dir = os.path.dirname(matplotlib.__file__)
+    mpl_parent = os.path.dirname(mpl_dir)
+    if mpl_parent not in site_dirs:
+        site_dirs.append(mpl_parent)
+    site_dirs = [d for d in site_dirs if os.path.isdir(d)]
+    print(f"  Rutas de búsqueda para PyInstaller: {len(site_dirs)}")
+    for d in site_dirs:
+        print(f"    - {d}")
+
     cmd = [
         sys.executable, "-m", "PyInstaller",
         "--name", APP_NAME,
@@ -223,6 +273,10 @@ def main():
         "--version-file", version_file,
     ]
 
+    # Añadir rutas de site-packages explícitamente
+    for sp in site_dirs:
+        cmd.extend(["--paths", sp])
+
     # Icono
     if os.path.exists(ICON_FILE):
         cmd.extend(["--icon", ICON_FILE])
@@ -231,6 +285,15 @@ def main():
     # Collect-all para paquetes complejos
     for pkg in COLLECT_ALL:
         cmd.extend(["--collect-all", pkg])
+
+    # Collect-submodules para paquetes que fallan con solo collect-all
+    for pkg in ["matplotlib", "matplotlib.backends", "geopandas",
+                "pyproj", "shapely", "contextily"]:
+        cmd.extend(["--collect-submodules", pkg])
+
+    # Collect-data para paquetes con archivos de datos necesarios
+    for pkg in ["matplotlib", "pyproj", "certifi"]:
+        cmd.extend(["--collect-data", pkg])
 
     # Hidden imports
     for mod in HIDDEN_IMPORTS:

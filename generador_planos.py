@@ -340,6 +340,9 @@ class GeneradorPlanos:
         # ── Grid de coordenadas (ETRS89 UTM) ──
         self._dibujar_grid(ax_map, xmin, xmax, ymin, ymax, escala)
 
+        # ── Leyenda (sólo infraestructuras visibles en el mapa) ──
+        self._dibujar_leyenda(ax_map, infra_fondo, gdf_sel, color_infra)
+
         # ── Estilo del eje del mapa ──
         ax_map.tick_params(which="both", length=0)
         for spine in ax_map.spines.values():
@@ -374,6 +377,89 @@ class GeneradorPlanos:
         log(f"  ✓ Guardado: {nombre_arch}")
         return ruta_out
 
+    # ── Leyenda de infraestructuras visibles ────────────────────────────────
+
+    def _dibujar_leyenda(self, ax, infra_visibles, gdf_seleccionada, color_infra):
+        """Dibuja una leyenda elegante sólo con las infraestructuras visibles."""
+        # Determinar tipos visibles
+        col_tipo = None
+        for col_name in ["Tipo_Trabajos", "Nombre_Infra", "TIPO", "tipo"]:
+            if infra_visibles is not None and not infra_visibles.empty:
+                if col_name in infra_visibles.columns:
+                    col_tipo = col_name
+                    break
+
+        if col_tipo is None or infra_visibles is None or infra_visibles.empty:
+            return
+
+        tipos_visibles = infra_visibles[col_tipo].dropna().unique()
+        if len(tipos_visibles) == 0:
+            return
+
+        # Limitar a máximo 8 tipos para que quepa la leyenda
+        tipos_visibles = sorted(set(str(t) for t in tipos_visibles if str(t).strip()))[:8]
+        if not tipos_visibles:
+            return
+
+        # Paleta de colores profesional para la leyenda
+        paleta = ["#E74C3C", "#3498DB", "#2ECC71", "#F39C12",
+                  "#9B59B6", "#1ABC9C", "#E67E22", "#34495E"]
+
+        # Determinar tipo de geometría para los símbolos
+        geom_type = str(infra_visibles.iloc[0].geometry.geom_type).lower()
+
+        handles = []
+        for i, tipo in enumerate(tipos_visibles):
+            color = paleta[i % len(paleta)]
+            label = str(tipo)[:30]  # Limitar longitud
+
+            if "point" in geom_type:
+                h = Line2D([0], [0], marker='o', color='none',
+                           markerfacecolor=color, markeredgecolor='white',
+                           markersize=6, label=label)
+            elif "line" in geom_type or "string" in geom_type:
+                h = Line2D([0], [0], color=color, linewidth=2, label=label)
+            else:
+                h = mpatches.Patch(facecolor=color + "88",
+                                   edgecolor=color, linewidth=1,
+                                   label=label)
+            handles.append(h)
+
+        # Añadir entrada para la infraestructura seleccionada
+        sel_label = "Infra. seleccionada"
+        if "point" in geom_type:
+            h_sel = Line2D([0], [0], marker='o', color='none',
+                           markerfacecolor=color_infra, markeredgecolor='white',
+                           markersize=7, markeredgewidth=1.2, label=sel_label)
+        elif "line" in geom_type or "string" in geom_type:
+            h_sel = Line2D([0], [0], color=color_infra, linewidth=3, label=sel_label)
+        else:
+            h_sel = mpatches.Patch(facecolor=color_infra + "55",
+                                   edgecolor=color_infra, linewidth=2,
+                                   label=sel_label)
+        handles.append(h_sel)
+
+        legend = ax.legend(
+            handles=handles,
+            loc="lower left",
+            fontsize=5,
+            frameon=True,
+            fancybox=True,
+            shadow=True,
+            framealpha=0.92,
+            facecolor="white",
+            edgecolor="#2C3E50",
+            title="SIMBOLOGÍA",
+            title_fontsize=6,
+            borderpad=0.8,
+            labelspacing=0.5,
+            handlelength=1.5,
+            handleheight=0.8,
+        )
+        legend.get_title().set_fontweight("bold")
+        legend.get_title().set_color("#2C3E50")
+        legend.set_zorder(10)
+
     # ── Grid de coordenadas ────────────────────────────────────────────────
 
     def _dibujar_grid(self, ax, xmin, xmax, ymin, ymax, escala):
@@ -388,25 +474,37 @@ class GeneradorPlanos:
         }
         intervalo = intervalos.get(escala, 1000)
 
+        # Margen para evitar que los números se solapen con los bordes/cajetines
+        margen_x = (xmax - xmin) * 0.03
+        margen_y = (ymax - ymin) * 0.06  # mayor margen inferior
+
         # Líneas verticales
         x0 = math.ceil(xmin / intervalo) * intervalo
         xs = np.arange(x0, xmax, intervalo)
+        # Filtrar las líneas demasiado cercanas a los bordes
+        xs = [x for x in xs if x > xmin + margen_x and x < xmax - margen_x]
         for x in xs:
             ax.axvline(x, color="#2255AA", linewidth=0.25, linestyle="--",
                        alpha=0.5, zorder=2)
-            ax.text(x, ymin + (ymax - ymin) * 0.01, f"{int(x):,}",
-                    ha="center", va="bottom", fontsize=5.5, color="#2255AA",
-                    rotation=90, alpha=0.8)
+            ax.text(x, ymax - (ymax - ymin) * 0.01, f"{int(x):,}",
+                    ha="center", va="top", fontsize=5, color="#2255AA",
+                    rotation=90, alpha=0.8,
+                    bbox=dict(boxstyle="round,pad=0.1", facecolor="white",
+                              edgecolor="none", alpha=0.6))
 
         # Líneas horizontales
         y0 = math.ceil(ymin / intervalo) * intervalo
         ys = np.arange(y0, ymax, intervalo)
+        # Filtrar las líneas demasiado cercanas a los bordes
+        ys = [y for y in ys if y > ymin + margen_y and y < ymax - margen_y]
         for y in ys:
             ax.axhline(y, color="#2255AA", linewidth=0.25, linestyle="--",
                        alpha=0.5, zorder=2)
             ax.text(xmin + (xmax - xmin) * 0.005, y, f"{int(y):,}",
-                    ha="left", va="center", fontsize=5.5, color="#2255AA",
-                    alpha=0.8)
+                    ha="left", va="center", fontsize=5, color="#2255AA",
+                    alpha=0.8,
+                    bbox=dict(boxstyle="round,pad=0.1", facecolor="white",
+                              edgecolor="none", alpha=0.6))
 
         # Cruces en intersecciones
         for x in xs:
@@ -469,13 +567,22 @@ class GeneradorPlanos:
                                   facecolor="#E8F4F8", edgecolor="none", zorder=1)
                 ax.add_patch(rect)
 
-            ax.text(0.04, y - row_h / 2, etiq + ":",
-                    ha="left", va="center", fontsize=6.5, fontweight="bold",
+            # Etiqueta (parte superior de la fila)
+            ax.text(0.04, y - row_h * 0.3, etiq + ":",
+                    ha="left", va="center", fontsize=6, fontweight="bold",
                     color="#2C3E50", transform=ax.transAxes, zorder=2)
-            ax.text(0.98, y - row_h / 2, valor,
-                    ha="right", va="center", fontsize=6.5,
-                    color="#1A1A2E", transform=ax.transAxes, zorder=2,
-                    wrap=True)
+
+            # Valor (misma línea, tras la etiqueta)
+            # Ajustar tamaño de fuente para valores largos
+            val_fontsize = 6
+            if len(valor) > 35:
+                val_fontsize = 5
+            if len(valor) > 50:
+                val_fontsize = 4.5
+
+            ax.text(0.04, y - row_h * 0.7, valor,
+                    ha="left", va="center", fontsize=val_fontsize,
+                    color="#1A1A2E", transform=ax.transAxes, zorder=2)
 
         # Línea separadora bajo cada campo
         for i in range(1, n):

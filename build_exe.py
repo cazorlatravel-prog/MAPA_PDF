@@ -31,6 +31,14 @@ import os
 if getattr(sys, 'frozen', False):
     base = sys._MEIPASS
     sys.path.insert(0, base)
+    os.environ["MPLBACKEND"] = "Agg"
+
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import matplotlib.backends.backend_agg
+import matplotlib.backends.backend_pdf
+import matplotlib.backends.backend_svg
 
 from generador_planos.gui.app import App
 
@@ -103,6 +111,26 @@ def construir_exe(modo_onefile=False):
     with open(LAUNCHER_SCRIPT, "w", encoding="utf-8") as f:
         f.write(LAUNCHER_CODE)
 
+    # Detectar rutas de site-packages para que PyInstaller encuentre todo
+    import site
+    import matplotlib
+    site_dirs = []
+    try:
+        site_dirs += site.getsitepackages()
+    except AttributeError:
+        pass
+    try:
+        usp = site.getusersitepackages()
+        if isinstance(usp, str):
+            site_dirs.append(usp)
+    except AttributeError:
+        pass
+    mpl_parent = os.path.dirname(os.path.dirname(matplotlib.__file__))
+    if mpl_parent not in site_dirs:
+        site_dirs.append(mpl_parent)
+    site_dirs = [d for d in site_dirs if os.path.isdir(d)]
+    print(f"  Site-packages: {len(site_dirs)} rutas detectadas")
+
     cmd = [
         sys.executable, "-m", "PyInstaller",
         "--name", APP_NAME,
@@ -110,6 +138,10 @@ def construir_exe(modo_onefile=False):
         "--noconfirm",
         "--clean",
     ]
+
+    # Añadir rutas de site-packages explícitamente
+    for sp in site_dirs:
+        cmd.extend(["--paths", sp])
 
     # Icono
     if os.path.exists(ICON_FILE):
@@ -125,6 +157,15 @@ def construir_exe(modo_onefile=False):
     # Collect-all para paquetes complejos
     for pkg in COLLECT_ALL:
         cmd.extend(["--collect-all", pkg])
+
+    # Collect-submodules para paquetes que fallan con solo collect-all
+    for pkg in ["matplotlib", "matplotlib.backends", "geopandas",
+                "pyproj", "shapely", "contextily"]:
+        cmd.extend(["--collect-submodules", pkg])
+
+    # Collect-data para paquetes con archivos de datos necesarios
+    for pkg in ["matplotlib", "pyproj", "certifi"]:
+        cmd.extend(["--collect-data", pkg])
 
     # Hidden imports
     for mod in HIDDEN_IMPORTS:

@@ -273,8 +273,9 @@ class GeneradorPlanos:
                              edgecolor=color_infra, linewidth=lw,
                              zorder=5, alpha=alpha_infra)
 
-    def _construir_items_leyenda(self, gdf_sel, color_infra):
-        """Construye items de leyenda para infra + capas extra."""
+    def _construir_items_leyenda(self, gdf_sel, color_infra,
+                                  xmin=None, xmax=None, ymin=None, ymax=None):
+        """Construye items de leyenda sólo con las infraestructuras seleccionadas."""
         items = []
 
         geom_type = ""
@@ -283,7 +284,7 @@ class GeneradorPlanos:
                 geom_type = str(g.geom_type).lower()
                 break
 
-        # Infraestructuras: por categoría o color único
+        # Solo categorías presentes en las infraestructuras seleccionadas
         campo_cat = self.config_infra.get("campo_categoria")
         if campo_cat and campo_cat in gdf_sel.columns:
             campo_real = campo_cat
@@ -300,17 +301,23 @@ class GeneradorPlanos:
             items.append(("Infraestructuras", color_infra, geom_type, "-", "o",
                            color_infra + "55"))
 
-        # Montes
+        # Montes (solo si hay montes visibles en el extent)
         if self.gdf_montes is not None:
-            items.append(("Montes", "#1a5c10", "polygon", "-", None, "#22992244"))
+            if xmin is not None:
+                montes_vis = self.gdf_montes.cx[xmin:xmax, ymin:ymax]
+                if not montes_vis.empty:
+                    items.append(("Montes", "#1a5c10", "polygon", "-", None, "#22992244"))
+            else:
+                items.append(("Montes", "#1a5c10", "polygon", "-", None, "#22992244"))
 
         # Capas extra
         items.extend(self.gestor_capas.obtener_items_leyenda(self.gestor_simbologia))
 
         return items
 
-    def _construir_items_categoria(self, gdf_sel):
-        """Construye items de categoría (solo infra categorizadas) para mini-leyenda."""
+    def _construir_items_categoria(self, gdf_sel,
+                                     xmin=None, xmax=None, ymin=None, ymax=None):
+        """Construye items de categoría sólo con las infra seleccionadas."""
         campo_cat = self.config_infra.get("campo_categoria")
         if not campo_cat or campo_cat not in gdf_sel.columns:
             return None
@@ -326,13 +333,10 @@ class GeneradorPlanos:
         if self._campo_mapeo and campo_cat in self._campo_mapeo:
             campo_real = self._campo_mapeo[campo_cat]
 
-        # Todos los valores conocidos en el gestor de simbología
-        if campo_cat in self.gestor_simbologia.categorias:
-            todos_valores = sorted(self.gestor_simbologia.categorias[campo_cat].keys())
-        else:
-            todos_valores = sorted(gdf_sel[campo_real].astype(str).unique())
+        # Solo categorías de las infraestructuras seleccionadas para el plano
+        valores_visibles = sorted(gdf_sel[campo_real].astype(str).unique())
 
-        for valor in todos_valores:
+        for valor in valores_visibles:
             simb = self.gestor_simbologia.obtener_simbologia_infra(campo_cat, valor)
             label = str(valor)[:25]
             items.append((label, simb.color, geom_type, simb.linestyle,
@@ -384,8 +388,9 @@ class GeneradorPlanos:
             maq.dibujar_etiquetas_infra(gdf_sel, campo_etiqueta=campo_etiq,
                                          campo_mapeo=self._campo_mapeo)
 
-        # Leyenda
-        items_ley = self._construir_items_leyenda(gdf_sel, color_infra)
+        # Leyenda (solo infraestructuras visibles en el extent)
+        items_ley = self._construir_items_leyenda(gdf_sel, color_infra,
+                                                   xmin, xmax, ymin, ymax)
         maq.dibujar_leyenda(items_ley)
 
         maq.dibujar_grid_utm(xmin, xmax, ymin, ymax)
@@ -395,7 +400,8 @@ class GeneradorPlanos:
 
         cx, cy = geom.centroid.x, geom.centroid.y
         maq.dibujar_mapa_posicion(cx, cy)
-        items_cat = self._construir_items_categoria(gdf_sel)
+        items_cat = self._construir_items_categoria(gdf_sel,
+                                                     xmin, xmax, ymin, ymax)
         maq.dibujar_barra_escala(proveedor, cx_utm=cx, cy_utm=cy,
                                   cajetin=self._cajetin,
                                   items_categoria=items_cat)
@@ -461,8 +467,9 @@ class GeneradorPlanos:
             maq.dibujar_etiquetas_infra(gdf_grupo, campo_etiqueta=campo_etiq,
                                          campo_mapeo=self._campo_mapeo)
 
-        # Leyenda con estadísticas
-        items_ley = self._construir_items_leyenda(gdf_grupo, color_infra)
+        # Leyenda con estadísticas (solo infraestructuras visibles en el extent)
+        items_ley = self._construir_items_leyenda(gdf_grupo, color_infra,
+                                                   xmin, xmax, ymin, ymax)
         stats = _calcular_stats_grupo(gdf_grupo)
         maq.dibujar_leyenda(items_ley, stats_resumen=stats)
 
@@ -474,7 +481,8 @@ class GeneradorPlanos:
 
         cx, cy = geom_union.centroid.x, geom_union.centroid.y
         maq.dibujar_mapa_posicion(cx, cy)
-        items_cat = self._construir_items_categoria(gdf_grupo)
+        items_cat = self._construir_items_categoria(gdf_grupo,
+                                                     xmin, xmax, ymin, ymax)
         maq.dibujar_barra_escala(proveedor, cx_utm=cx, cy_utm=cy,
                                   cajetin=self._cajetin,
                                   items_categoria=items_cat)

@@ -135,20 +135,29 @@ class MaquetadorPlano:
             sp.set_linewidth(1.5)
             sp.set_color("#1C2333")
 
+        # Margenes para filtrar etiquetas demasiado cerca de los bordes
+        margen_x = (xmax - xmin) * 0.03
+        margen_y = (ymax - ymin) * 0.04
+
         x0 = math.ceil(xmin / intervalo) * intervalo
         xs = np.arange(x0, xmax, intervalo)
         y0 = math.ceil(ymin / intervalo) * intervalo
         ys = np.arange(y0, ymax, intervalo)
 
-        ax.set_xticks(xs)
-        ax.set_yticks(ys)
-        ax.set_xticklabels([f"{int(x)}" for x in xs], fontsize=4,
-                           color="#2C3E50", rotation=30, ha="right")
-        ax.set_yticklabels([f"{int(y)}" for y in ys], fontsize=4.5,
+        # Filtrar ticks cercanos a los bordes
+        xs_filt = [x for x in xs if x > xmin + margen_x and x < xmax - margen_x]
+        ys_filt = [y for y in ys if y > ymin + margen_y and y < ymax - margen_y]
+
+        ax.set_xticks(xs_filt)
+        ax.set_yticks(ys_filt)
+        ax.set_xticklabels([f"{int(x)}" for x in xs_filt], fontsize=4,
+                           color="#2C3E50", rotation=30, ha="left")
+        ax.set_yticklabels([f"{int(y)}" for y in ys_filt], fontsize=4.5,
                            color="#2C3E50")
+        # Mover etiquetas X arriba para evitar solapamiento con cajetines inferiores
         ax.tick_params(which="major", length=4, width=0.6, color="#2C3E50",
-                       direction="out", labelbottom=True, labelleft=True,
-                       pad=1)
+                       direction="out", labelbottom=False, labeltop=True,
+                       labelleft=True, pad=1)
 
         # Líneas de cuadrícula completas (estilo cartográfico profesional)
         for x in xs:
@@ -341,9 +350,9 @@ class MaquetadorPlano:
         # Tamaños de fuente fijos
         fsz_header = 3.5
         fsz_field = 3.2
-        # Truncado adaptativo según espacio disponible
-        max_label = max(8, min(18, 18 - (max_per_col - 2)))
-        max_val = max(10, min(22, 22 - (max_per_col - 2)))
+        # Truncado adaptativo según espacio disponible (más generoso)
+        max_label = max(12, min(22, 22 - (max_per_col - 2)))
+        max_val = max(18, min(35, 35 - (max_per_col - 2)))
 
         for col_idx, indices_col in enumerate([col_izq, col_der]):
             x0 = col_x[col_idx]
@@ -410,8 +419,12 @@ class MaquetadorPlano:
                             ha="left", va="center", fontsize=fsz_field,
                             fontweight="bold", color="#2C3E50",
                             transform=ax.transAxes, zorder=2)
+                    # Reducir fuente para valores largos
+                    fsz_val = fsz_field
+                    if len(valor) > 20:
+                        fsz_val = max(2.5, fsz_field - 0.4)
                     ax.text(x1 - 0.01, fy - field_h / 2, valor,
-                            ha="right", va="center", fontsize=fsz_field,
+                            ha="right", va="center", fontsize=fsz_val,
                             color="#1A1A2E", transform=ax.transAxes, zorder=2)
 
                 # Borde de la ficha
@@ -977,8 +990,7 @@ class MaquetadorPlano:
         copyright_text = cajetin.get("copyright", "") if cajetin else ""
         if not copyright_text:
             copyright_text = (
-                "Mapa creado con APP Generador Mapas Forestales / "
-                "Jose Caballero Sánchez / Aplicación Open Source de uso gratuito"
+                "APP PLANOS PDF COPYRIGHT: JOSE CABALLERO SÁNCHEZ (CAZORLA-2026)"
             )
         ax.text(
             1.8, self.fmt_mm[1] / 2, copyright_text,
