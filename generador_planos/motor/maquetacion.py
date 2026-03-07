@@ -515,70 +515,145 @@ class MaquetadorPlano:
         ax.set_ylim(0, 1)
         ax.axis("off")
 
-        ax.add_patch(FancyBboxPatch(
-            (0, 0), 1, 1, boxstyle="round,pad=0.01",
-            facecolor="#F0F0F0", edgecolor="#2C3E50", linewidth=1.0, zorder=0))
+        caj = cajetin or {}
+        COL_DARK = "#1C2333"
+        COL_MID = "#2C3E50"
+        COL_LIGHT = "#F7F8FA"
+        COL_ACCENT = "#2980B9"
+        COL_LINE = "#BDC3C7"
+        COL_TXT = "#1A1A2E"
 
-        # ── Título ──
-        ax.text(0.5, 0.97, "CAJETÍN DE PROYECTO", ha="center", va="top",
-                fontsize=4.5, fontweight="bold", color="white",
-                bbox=dict(boxstyle="round,pad=0.12", facecolor="#2C3E50",
-                          edgecolor="none"))
+        # ── Fondo general ──
+        ax.add_patch(Rectangle((0, 0), 1, 1,
+                                facecolor="white", edgecolor=COL_DARK,
+                                linewidth=1.2, zorder=0))
 
-        # ── Datos del cajetín ──
-        y_pos = 0.86
-        line_h = 0.058
+        # ═══════════════════════════════════════════════════════════════
+        # ZONA SUPERIOR: Logo + Organización (banda oscura)
+        # ═══════════════════════════════════════════════════════════════
+        header_h = 0.14
+        header_y = 1.0 - header_h
+        ax.add_patch(Rectangle((0, header_y), 1, header_h,
+                                facecolor=COL_DARK, edgecolor="none", zorder=1))
+        # Línea de acento bajo la cabecera
+        ax.add_patch(Rectangle((0, header_y - 0.008), 1, 0.008,
+                                facecolor=COL_ACCENT, edgecolor="none", zorder=1))
+
+        org = caj.get("organizacion", "")
+        logo_path = caj.get("logo_path", "")
+
+        x_txt = 0.06
+        if logo_path:
+            try:
+                from PIL import Image as PILImage
+                img = PILImage.open(logo_path)
+                # Calcular posición del logo dentro del axes
+                logo_size = header_h * 0.75
+                logo_ax = ax.inset_axes([0.02, header_y + header_h * 0.12,
+                                          0.10, logo_size],
+                                         transform=ax.transAxes)
+                logo_ax.imshow(img, aspect="equal")
+                logo_ax.axis("off")
+                x_txt = 0.14
+            except Exception:
+                pass
+
+        if org:
+            ax.text(x_txt, header_y + header_h * 0.50, org.upper(),
+                    ha="left", va="center", fontsize=5.5, fontweight="bold",
+                    color="white", zorder=2)
+        else:
+            ax.text(0.5, header_y + header_h * 0.50, "CAJETÍN DE PROYECTO",
+                    ha="center", va="center", fontsize=5.5, fontweight="bold",
+                    color="white", zorder=2)
+
+        # ═══════════════════════════════════════════════════════════════
+        # ZONA DE DATOS: tabla de campos del proyecto
+        # ═══════════════════════════════════════════════════════════════
+        data_top = header_y - 0.018  # justo bajo línea acento
+        margin_x = 0.05
+
+        fecha = date.today().strftime("%d/%m/%Y")
+        srs = "ETRS89 UTM H30N"
+
         campos_caj = [
-            ("Proyecto", cajetin.get("proyecto", "") if cajetin else ""),
-            ("Nº Proyecto", cajetin.get("num_proyecto", "") if cajetin else ""),
-            ("Autor", cajetin.get("autor", "") if cajetin else ""),
-            ("Revisión", cajetin.get("revision", "") if cajetin else ""),
-            ("Firma", cajetin.get("firma", "") if cajetin else ""),
+            ("PROYECTO", caj.get("proyecto", "")),
+            ("N\u00ba PROYECTO", caj.get("num_proyecto", "")),
+            ("AUTOR", caj.get("autor", "")),
+            ("REVISI\u00d3N", caj.get("revision", "")),
+            ("FIRMA", caj.get("firma", "")),
+            ("FECHA", fecha),
+            ("SRC", srs),
+            ("ESCALA", f"1:{self.escala:,}"),
         ]
+
+        n_campos = len(campos_caj)
+        # Espacio disponible entre data_top y la zona de la barra de escala
+        barra_zone_h = 0.22  # reservar para barra + créditos
+        data_h = data_top - barra_zone_h
+        row_h = data_h / max(n_campos, 1)
+
         for i, (etiq, valor) in enumerate(campos_caj):
-            y = y_pos - i * line_h
+            y_top_row = data_top - i * row_h
+            y_bot_row = y_top_row - row_h
+            y_mid = (y_top_row + y_bot_row) / 2
+
+            # Fondo alternado
             if i % 2 == 0:
                 ax.add_patch(Rectangle(
-                    (0.04, y - line_h + 0.002), 0.92, line_h - 0.002,
-                    facecolor="#E8EEF2", edgecolor="none", zorder=1))
-            ax.text(0.07, y - line_h / 2, etiq + ":", ha="left", va="center",
-                    fontsize=3.8, fontweight="bold", color="#2C3E50", zorder=2)
-            ax.text(0.93, y - line_h / 2, str(valor), ha="right", va="center",
-                    fontsize=3.8, color="#1A1A2E", zorder=2)
+                    (margin_x, y_bot_row), 1 - 2 * margin_x, row_h,
+                    facecolor=COL_LIGHT, edgecolor="none", zorder=1))
 
-        # ── Separador ──
-        sep_y = y_pos - len(campos_caj) * line_h - 0.005
-        ax.plot([0.07, 0.93], [sep_y, sep_y], color="#2C3E50", linewidth=0.5,
-                zorder=2)
+            # Línea separadora fina
+            ax.plot([margin_x, 1 - margin_x], [y_bot_row, y_bot_row],
+                    color=COL_LINE, linewidth=0.3, zorder=2)
 
-        # ── Barra de escala (mini) ──
+            # Etiqueta
+            ax.text(margin_x + 0.02, y_mid, etiq,
+                    ha="left", va="center", fontsize=4.2,
+                    fontweight="bold", color=COL_MID, zorder=3)
+            # Valor
+            ax.text(1 - margin_x - 0.02, y_mid, str(valor),
+                    ha="right", va="center", fontsize=4.2,
+                    color=COL_TXT, zorder=3)
+
+        # Línea superior de la tabla
+        ax.plot([margin_x, 1 - margin_x], [data_top, data_top],
+                color=COL_MID, linewidth=0.6, zorder=2)
+
+        # ═══════════════════════════════════════════════════════════════
+        # ZONA INFERIOR: Barra de escala gráfica
+        # ═══════════════════════════════════════════════════════════════
         barra_m = BARRA_ESCALA_M.get(self.escala, 1000)
-        barra_frac = 0.50
-        esc_y = sep_y - 0.045
-        esc_x0 = 0.07
+        barra_frac = 0.55
+        esc_y = 0.10
+        esc_x0 = (1 - barra_frac) / 2  # centrada
 
+        # Texto de escala sobre la barra
+        ax.text(0.5, esc_y + 0.065, f"Escala 1:{self.escala:,}",
+                ha="center", va="bottom", fontsize=5.5, fontweight="bold",
+                color=COL_DARK, zorder=3)
+
+        # Barra segmentada
         n_seg = 4
         seg = barra_frac / n_seg
+        bar_h = 0.028
         for i in range(n_seg):
-            c = "#1A1A2E" if i % 2 == 0 else "white"
+            c = COL_DARK if i % 2 == 0 else "white"
             ax.add_patch(Rectangle(
-                (esc_x0 + i * seg, esc_y), seg, 0.03,
-                facecolor=c, edgecolor="#1A1A2E", linewidth=0.4))
+                (esc_x0 + i * seg, esc_y), seg, bar_h,
+                facecolor=c, edgecolor=COL_DARK, linewidth=0.4, zorder=2))
 
-        ax.text(esc_x0, esc_y - 0.02, "0", ha="center", va="top",
-                fontsize=3.5, color="#1A1A2E")
-        ax.text(esc_x0 + barra_frac, esc_y - 0.02, f"{barra_m} m",
-                ha="center", va="top", fontsize=3.5, color="#1A1A2E")
-        ax.text(esc_x0 + barra_frac / 2, esc_y + 0.045,
-                f"Escala 1:{self.escala:,}", ha="center", va="bottom",
-                fontsize=5, fontweight="bold", color="#1A1A2E")
+        # Etiquetas de distancia
+        ax.text(esc_x0, esc_y - 0.015, "0", ha="center", va="top",
+                fontsize=3.5, color=COL_TXT, zorder=3)
+        ax.text(esc_x0 + barra_frac, esc_y - 0.015, f"{barra_m} m",
+                ha="center", va="top", fontsize=3.5, color=COL_TXT, zorder=3)
 
-        # ── Créditos ──
-        fecha = date.today().strftime("%d/%m/%Y")
-        ax.text(0.5, 0.02,
-                f"{proveedor} | ETRS89 UTM H30N | {fecha}",
-                ha="center", va="bottom", fontsize=3.2, color="#666",
-                style="italic")
+        # ── Créditos: cartografía base ──
+        ax.text(0.5, 0.015, f"Base cartogr\u00e1fica: {proveedor}",
+                ha="center", va="bottom", fontsize=3.0, color="#888",
+                style="italic", zorder=3)
 
     # ── Rosa de los vientos (dentro del mapa principal, arriba-izquierda) ──
 
