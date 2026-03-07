@@ -74,7 +74,7 @@ def main():
         sys.exit(1)
 
     # Importar después de verificar dependencias
-    from gui.app import App
+    from generador_planos.gui.app import App
 
     app = App()
     app.mainloop()
