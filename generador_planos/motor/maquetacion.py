@@ -43,7 +43,7 @@ ETIQUETAS_CAMPOS = {
     "Tipo_Trabajos": "Tipo de Trabajos",
 }
 
-DPI = 150
+DPI = 300  # calidad de impresión
 _CABECERA_MM = 8
 
 _DECL_MAG = {"oeste": 0.5, "centro": 1.0, "este": 1.8, "sur": 0.8}
@@ -665,6 +665,15 @@ class MaquetadorPlano:
         ax.add_patch(Rectangle(
             (5, 5), self.fmt_mm[0] - 10, self.fmt_mm[1] - 10,
             fill=False, edgecolor=c_int, linewidth=0.5))
+
+        # Marca lateral discreta (borde derecho, vertical)
+        ax.text(
+            self.fmt_mm[0] - 1.5, self.fmt_mm[1] / 2,
+            "Mapa creado con APP Generador Mapas Forestales / "
+            "Jose Caballero Sánchez / Aplicación Open Source de uso gratuito",
+            rotation=90, ha="center", va="center",
+            fontsize=3, color="#B0B0B0", alpha=0.5,
+        )
 
     def guardar(self, ruta_out: str):
         self.fig.savefig(ruta_out, format="pdf", dpi=DPI,

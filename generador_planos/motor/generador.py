@@ -264,9 +264,6 @@ class GeneradorPlanos:
         # Etiquetas
         maq.dibujar_etiquetas_infra(gdf_sel, campo_mapeo=self._campo_mapeo)
 
-        # Vértices numerados
-        maq.dibujar_vertices_numerados(geom)
-
         # Leyenda
         items_ley = self._construir_items_leyenda(gdf_sel, color_infra)
         maq.dibujar_leyenda(items_ley)
@@ -465,7 +462,7 @@ class GeneradorPlanos:
                     datos_extra=datos,
                     cajetin=self._cajetin, plantilla=self._plantilla,
                 )
-                pdf.savefig(fig_portada, dpi=150, facecolor="white")
+                pdf.savefig(fig_portada, dpi=300, facecolor="white")
                 plt.close(fig_portada)
                 if callback_log:
                     callback_log("  \u2713 Portada a\u00f1adida")
@@ -478,7 +475,7 @@ class GeneradorPlanos:
                     items_idx.append((i + 1, nombre, ""))
                 fig_indice = crear_indice(formato_key, items_idx,
                                            plantilla=self._plantilla)
-                pdf.savefig(fig_indice, dpi=150, facecolor="white")
+                pdf.savefig(fig_indice, dpi=300, facecolor="white")
                 plt.close(fig_indice)
                 if callback_log:
                     callback_log("  \u2713 \u00cdndice a\u00f1adido")
@@ -517,7 +514,6 @@ class GeneradorPlanos:
                     # Etiquetas y vértices
                     maq.dibujar_etiquetas_infra(gdf_sel,
                                                  campo_mapeo=self._campo_mapeo)
-                    maq.dibujar_vertices_numerados(geom)
 
                     # Leyenda
                     items_ley = self._construir_items_leyenda(gdf_sel, color_infra)
@@ -536,7 +532,7 @@ class GeneradorPlanos:
                     maq.dibujar_cajetin(self._cajetin)
                     maq.dibujar_marcos(plantilla=self._plantilla)
 
-                    pdf.savefig(fig, dpi=150, facecolor="white")
+                    pdf.savefig(fig, dpi=300, facecolor="white")
                     plt.close(fig)
 
                     if callback_log:
