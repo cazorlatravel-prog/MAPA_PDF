@@ -561,23 +561,23 @@ class MaquetadorPlano:
     def dibujar_norte_en_mapa(self):
         """Dibuja la flecha de norte dentro del mapa principal (esquina sup-izq)."""
         ax = self.ax_map
-        nx, ny_base = 0.06, 0.82
-        nh = 0.12
+        nx, ny_base = 0.04, 0.88
+        nh = 0.04
 
         # Fondo semitransparente
         ax.add_patch(FancyBboxPatch(
-            (nx - 0.025, ny_base - 0.015), 0.05, nh + 0.06,
-            boxstyle="round,pad=0.008", facecolor="white", edgecolor="#2C3E50",
-            linewidth=0.5, alpha=0.85, transform=ax.transAxes, zorder=14))
+            (nx - 0.012, ny_base - 0.008), 0.024, nh + 0.025,
+            boxstyle="round,pad=0.004", facecolor="white", edgecolor="#2C3E50",
+            linewidth=0.3, alpha=0.85, transform=ax.transAxes, zorder=14))
 
         ax.annotate("", xy=(nx, ny_base + nh),
                     xytext=(nx, ny_base),
                     xycoords="axes fraction", textcoords="axes fraction",
-                    arrowprops=dict(arrowstyle="->,head_width=0.4,head_length=0.3",
-                                    color="#1A1A2E", lw=1.2),
+                    arrowprops=dict(arrowstyle="->,head_width=0.2,head_length=0.15",
+                                    color="#1A1A2E", lw=0.6),
                     zorder=15)
-        ax.text(nx, ny_base + nh + 0.015, "N",
-                ha="center", va="bottom", fontsize=7, fontweight="bold",
+        ax.text(nx, ny_base + nh + 0.006, "N",
+                ha="center", va="bottom", fontsize=3, fontweight="bold",
                 color="#1A1A2E", transform=ax.transAxes, zorder=15)
 
     # ── Cajetín (integrado) ────────────────────────────────────────────
