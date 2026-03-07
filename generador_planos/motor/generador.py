@@ -125,6 +125,9 @@ class GeneradorPlanos:
             # Auto-calcular longitud/superficie si no existen
             gdf = _auto_calcular_campos(gdf)
 
+            # Construir índice espacial para consultas .cx[] rápidas
+            gdf.sindex
+
             self.gdf_infra = gdf
 
             cols = set(gdf.columns)
@@ -150,6 +153,8 @@ class GeneradorPlanos:
             if gdf.crs is None:
                 gdf = gdf.set_crs("EPSG:4326")
             gdf = gdf.to_crs("EPSG:25830")
+            # Construir índice espacial para consultas .cx[] rápidas
+            gdf.sindex
             self.gdf_montes = gdf
             origen = f"capa '{layer}'" if layer else os.path.basename(ruta)
             return True, f"\u2713 Capa montes ({origen}): {len(gdf)} elementos"

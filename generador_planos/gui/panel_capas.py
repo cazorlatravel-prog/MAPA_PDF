@@ -8,6 +8,7 @@ y gestión de capas SHP/GDB adicionales.
 """
 
 import os
+import threading
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
@@ -133,6 +134,34 @@ class PanelCapas:
 
         f.columnconfigure(0, weight=1)
 
+    def _ejecutar_en_hilo(self, tarea, callback_ok, callback_error=None,
+                           msg_carga="Cargando..."):
+        """Ejecuta una tarea pesada en un hilo secundario con feedback visual."""
+        self.callback_log(f"\u23f3 {msg_carga}", "info")
+
+        def _worker():
+            try:
+                resultado = tarea()
+            except Exception as e:
+                resultado = ("error", str(e))
+
+            # Volver al hilo principal para actualizar la GUI
+            try:
+                self._preview_frame.after(0, lambda: _on_done(resultado))
+            except Exception:
+                pass
+
+        def _on_done(resultado):
+            if isinstance(resultado, tuple) and len(resultado) > 0 and resultado[0] == "error":
+                if callback_error:
+                    callback_error(resultado[1])
+                else:
+                    self.callback_log(f"Error: {resultado[1]}", "error")
+            else:
+                callback_ok(resultado)
+
+        threading.Thread(target=_worker, daemon=True).start()
+
     def _cargar_infra(self):
         ruta = filedialog.askopenfilename(
             title="Seleccionar Shapefile de Infraestructuras",
@@ -141,19 +170,25 @@ class PanelCapas:
         if not ruta:
             return
 
-        ok, msg, faltantes = self.motor.cargar_infraestructuras(ruta)
-        if ok:
-            self._ruta_infra.set(os.path.basename(ruta))
-            self.callback_log(msg, "ok")
-            self.callback_tabla()
-            self._previsualizar(self.motor.gdf_infra)
+        def tarea():
+            return self.motor.cargar_infraestructuras(ruta)
 
-            if faltantes:
-                self._dialogo_mapeo_campos(faltantes)
-        else:
-            self._ruta_infra.set("Error al cargar")
-            self.callback_log(msg, "error")
-            messagebox.showerror("Error", msg)
+        def on_ok(resultado):
+            ok, msg, faltantes = resultado
+            if ok:
+                self._ruta_infra.set(os.path.basename(ruta))
+                self.callback_log(msg, "ok")
+                self.callback_tabla()
+                self._previsualizar(self.motor.gdf_infra)
+                if faltantes:
+                    self._dialogo_mapeo_campos(faltantes)
+            else:
+                self._ruta_infra.set("Error al cargar")
+                self.callback_log(msg, "error")
+                messagebox.showerror("Error", msg)
+
+        self._ejecutar_en_hilo(tarea, on_ok,
+                                msg_carga="Cargando infraestructuras...")
 
     def _cargar_montes(self):
         ruta = filedialog.askopenfilename(
@@ -163,13 +198,20 @@ class PanelCapas:
         if not ruta:
             return
 
-        ok, msg = self.motor.cargar_montes(ruta)
-        if ok:
-            self._ruta_montes.set(os.path.basename(ruta))
-            self.callback_log(msg, "ok")
-        else:
-            self._ruta_montes.set("Error al cargar")
-            self.callback_log(msg, "error")
+        def tarea():
+            return self.motor.cargar_montes(ruta)
+
+        def on_ok(resultado):
+            ok, msg = resultado
+            if ok:
+                self._ruta_montes.set(os.path.basename(ruta))
+                self.callback_log(msg, "ok")
+            else:
+                self._ruta_montes.set("Error al cargar")
+                self.callback_log(msg, "error")
+
+        self._ejecutar_en_hilo(tarea, on_ok,
+                                msg_carga="Cargando montes...")
 
     # ── GDB helpers ────────────────────────────────────────────────────
 
@@ -307,18 +349,25 @@ class PanelCapas:
         if not ruta:
             return
 
-        ok, msg, faltantes = self.motor.cargar_infraestructuras(ruta, layer=capa)
-        if ok:
-            self._ruta_infra.set(f"{os.path.basename(ruta)}\n{capa}")
-            self.callback_log(msg, "ok")
-            self.callback_tabla()
-            self._previsualizar(self.motor.gdf_infra)
-            if faltantes:
-                self._dialogo_mapeo_campos(faltantes)
-        else:
-            self._ruta_infra.set("Error al cargar")
-            self.callback_log(msg, "error")
-            messagebox.showerror("Error", msg)
+        def tarea():
+            return self.motor.cargar_infraestructuras(ruta, layer=capa)
+
+        def on_ok(resultado):
+            ok, msg, faltantes = resultado
+            if ok:
+                self._ruta_infra.set(f"{os.path.basename(ruta)}\n{capa}")
+                self.callback_log(msg, "ok")
+                self.callback_tabla()
+                self._previsualizar(self.motor.gdf_infra)
+                if faltantes:
+                    self._dialogo_mapeo_campos(faltantes)
+            else:
+                self._ruta_infra.set("Error al cargar")
+                self.callback_log(msg, "error")
+                messagebox.showerror("Error", msg)
+
+        self._ejecutar_en_hilo(tarea, on_ok,
+                                msg_carga=f"Cargando GDB ({capa})...")
 
     def _cargar_montes_gdb(self):
         """Carga capa de montes desde una geodatabase."""
@@ -327,13 +376,20 @@ class PanelCapas:
         if not ruta:
             return
 
-        ok, msg = self.motor.cargar_montes(ruta, layer=capa)
-        if ok:
-            self._ruta_montes.set(f"{os.path.basename(ruta)}\n{capa}")
-            self.callback_log(msg, "ok")
-        else:
-            self._ruta_montes.set("Error al cargar")
-            self.callback_log(msg, "error")
+        def tarea():
+            return self.motor.cargar_montes(ruta, layer=capa)
+
+        def on_ok(resultado):
+            ok, msg = resultado
+            if ok:
+                self._ruta_montes.set(f"{os.path.basename(ruta)}\n{capa}")
+                self.callback_log(msg, "ok")
+            else:
+                self._ruta_montes.set("Error al cargar")
+                self.callback_log(msg, "error")
+
+        self._ejecutar_en_hilo(tarea, on_ok,
+                                msg_carga=f"Cargando GDB montes ({capa})...")
 
     def _añadir_capa_extra_gdb(self):
         """Añade capa extra desde una geodatabase."""
@@ -454,7 +510,15 @@ class PanelCapas:
         ax.set_facecolor("#0D1117")
 
         try:
-            gdf.plot(ax=ax, color=COLOR_ACENTO, linewidth=0.5, markersize=2, alpha=0.8)
+            # Simplificar geometrías para preview rápido
+            gdf_preview = gdf.copy()
+            gdf_preview["geometry"] = gdf_preview.geometry.simplify(
+                tolerance=50, preserve_topology=False)
+            # Limitar a máximo 2000 features para el mini-canvas
+            if len(gdf_preview) > 2000:
+                gdf_preview = gdf_preview.sample(2000, random_state=42)
+            gdf_preview.plot(ax=ax, color=COLOR_ACENTO, linewidth=0.5,
+                             markersize=2, alpha=0.8)
         except Exception:
             pass
 

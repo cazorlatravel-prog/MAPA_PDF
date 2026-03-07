@@ -13,6 +13,7 @@ Implementa fallback manual para teselas IGN si contextily falla.
 import io
 import math
 import warnings
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import numpy as np
 import requests
@@ -137,16 +138,28 @@ def _descargar_teselas_manual(ax, url_template, xmin, xmax, ymin, ymax, crs_epsg
 
     n = 2 ** zoom
     tiles = []
-    for tx in range(tx_min, tx_max + 1):
-        for ty in range(ty_min, ty_max + 1):
+
+    # Descargar teselas en paralelo (hasta 8 hilos)
+    tile_coords = [
+        (tx, ty)
+        for tx in range(tx_min, tx_max + 1)
+        for ty in range(ty_min, ty_max + 1)
+    ]
+
+    def _fetch_tile(coords):
+        tx, ty = coords
+        img = _descargar_tesela(url_template, zoom, tx, ty)
+        tile_lon_min = tx / n * 360.0 - 180.0
+        tile_lon_max = (tx + 1) / n * 360.0 - 180.0
+        tile_lat_max = math.degrees(math.atan(math.sinh(math.pi * (1 - 2 * ty / n))))
+        tile_lat_min = math.degrees(math.atan(math.sinh(math.pi * (1 - 2 * (ty + 1) / n))))
+        return (img, tile_lon_min, tile_lon_max, tile_lat_min, tile_lat_max)
+
+    with ThreadPoolExecutor(max_workers=min(8, len(tile_coords) or 1)) as pool:
+        futures = {pool.submit(_fetch_tile, tc): tc for tc in tile_coords}
+        for fut in as_completed(futures):
             try:
-                img = _descargar_tesela(url_template, zoom, tx, ty)
-                # Calcular bounds de esta tesela en lon/lat
-                tile_lon_min = tx / n * 360.0 - 180.0
-                tile_lon_max = (tx + 1) / n * 360.0 - 180.0
-                tile_lat_max = math.degrees(math.atan(math.sinh(math.pi * (1 - 2 * ty / n))))
-                tile_lat_min = math.degrees(math.atan(math.sinh(math.pi * (1 - 2 * (ty + 1) / n))))
-                tiles.append((img, tile_lon_min, tile_lon_max, tile_lat_min, tile_lat_max))
+                tiles.append(fut.result())
             except Exception:
                 continue
 
