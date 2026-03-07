@@ -531,7 +531,8 @@ class MaquetadorPlano:
 
     # ── Cajetín + Escala + Norte (panel inferior izquierdo) ───────────
 
-    def dibujar_barra_escala(self, proveedor: str, cx_utm=None, cy_utm=None, cajetin=None):
+    def dibujar_barra_escala(self, proveedor: str, cx_utm=None, cy_utm=None,
+                             cajetin=None, items_categoria=None):
         ax = self.ax_esc
         ax.set_xlim(0, 1)
         ax.set_ylim(0, 1)
@@ -590,9 +591,67 @@ class MaquetadorPlano:
                     color="white", zorder=2)
 
         # ═══════════════════════════════════════════════════════════════
+        # MINI-LEYENDA DE CATEGORÍAS (entre cabecera y tabla de datos)
+        # ═══════════════════════════════════════════════════════════════
+        cat_zone_h = 0.0  # espacio reservado para categorías
+        cat_top = header_y - 0.018
+
+        if items_categoria and len(items_categoria) > 0:
+            n_cat = len(items_categoria)
+            cat_row_h = min(0.032, 0.20 / max(n_cat, 1))
+            cat_zone_h = cat_row_h * n_cat + 0.03  # filas + título + padding
+
+            # Título
+            ax.text(0.5, cat_top - 0.005, "SIMBOLOGÍA",
+                    ha="center", va="top", fontsize=4.2, fontweight="bold",
+                    color=COL_DARK, zorder=3)
+
+            margin_x = 0.05
+            line_x0 = margin_x + 0.02
+            line_x1 = margin_x + 0.12
+            text_x = line_x1 + 0.03
+            y_start = cat_top - 0.022
+
+            for i, (label, color, geom_type, linestyle, marker,
+                    facecolor) in enumerate(items_categoria):
+                y = y_start - i * cat_row_h
+
+                # Dibujar muestra de trazo/símbolo
+                if "point" in geom_type:
+                    ax.plot((line_x0 + line_x1) / 2, y, marker=marker or "o",
+                            color=color, markersize=4, markeredgecolor="white",
+                            markeredgewidth=0.3, transform=ax.transAxes,
+                            zorder=3)
+                elif "line" in geom_type or "string" in geom_type:
+                    ax.plot([line_x0, line_x1], [y, y], color=color,
+                            linewidth=2.0, linestyle=linestyle or "-",
+                            transform=ax.transAxes, zorder=3, solid_capstyle="round")
+                else:
+                    # Polígono: rectángulo relleno
+                    rect_w = line_x1 - line_x0
+                    rect_h = cat_row_h * 0.55
+                    ax.add_patch(Rectangle(
+                        (line_x0, y - rect_h / 2), rect_w, rect_h,
+                        facecolor=facecolor or (color + "55"),
+                        edgecolor=color, linewidth=0.6,
+                        transform=ax.transAxes, zorder=3))
+
+                # Etiqueta
+                txt = str(label)[:22]
+                ax.text(text_x, y, txt, ha="left", va="center",
+                        fontsize=3.8, color=COL_TXT,
+                        transform=ax.transAxes, zorder=3)
+
+            # Línea separadora bajo las categorías
+            sep_y = y_start - n_cat * cat_row_h - 0.006
+            ax.plot([margin_x, 1 - margin_x], [sep_y, sep_y],
+                    color=COL_LINE, linewidth=0.5, transform=ax.transAxes,
+                    zorder=2)
+
+        # ═══════════════════════════════════════════════════════════════
         # ZONA DE DATOS: tabla de campos del proyecto
         # ═══════════════════════════════════════════════════════════════
-        data_top = header_y - 0.018  # justo bajo línea acento
+        data_top = header_y - 0.018 - cat_zone_h  # desplazar según categorías
         margin_x = 0.05
 
         fecha = date.today().strftime("%d/%m/%Y")

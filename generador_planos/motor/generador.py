@@ -309,6 +309,36 @@ class GeneradorPlanos:
 
         return items
 
+    def _construir_items_categoria(self, gdf_sel):
+        """Construye items de categoría (solo infra categorizadas) para mini-leyenda."""
+        campo_cat = self.config_infra.get("campo_categoria")
+        if not campo_cat or campo_cat not in gdf_sel.columns:
+            return None
+
+        items = []
+        geom_type = ""
+        for g in gdf_sel.geometry:
+            if g is not None:
+                geom_type = str(g.geom_type).lower()
+                break
+
+        campo_real = campo_cat
+        if self._campo_mapeo and campo_cat in self._campo_mapeo:
+            campo_real = self._campo_mapeo[campo_cat]
+
+        # Todos los valores conocidos en el gestor de simbología
+        if campo_cat in self.gestor_simbologia.categorias:
+            todos_valores = sorted(self.gestor_simbologia.categorias[campo_cat].keys())
+        else:
+            todos_valores = sorted(gdf_sel[campo_real].astype(str).unique())
+
+        for valor in todos_valores:
+            simb = self.gestor_simbologia.obtener_simbologia_infra(campo_cat, valor)
+            label = str(valor)[:25]
+            items.append((label, simb.color, geom_type, simb.linestyle,
+                          simb.marker, simb.facecolor))
+        return items if items else None
+
     # ── Generación de plano individual ───────────────────────────────────
 
     def generar_plano(self, idx_fila: int, formato_key: str,
@@ -365,8 +395,10 @@ class GeneradorPlanos:
 
         cx, cy = geom.centroid.x, geom.centroid.y
         maq.dibujar_mapa_posicion(cx, cy)
+        items_cat = self._construir_items_categoria(gdf_sel)
         maq.dibujar_barra_escala(proveedor, cx_utm=cx, cy_utm=cy,
-                                  cajetin=self._cajetin)
+                                  cajetin=self._cajetin,
+                                  items_categoria=items_cat)
         maq.dibujar_norte_en_mapa()
         maq.dibujar_cabecera(row, cajetin=self._cajetin, plantilla=self._plantilla)
         maq.dibujar_cajetin(self._cajetin)
@@ -442,8 +474,10 @@ class GeneradorPlanos:
 
         cx, cy = geom_union.centroid.x, geom_union.centroid.y
         maq.dibujar_mapa_posicion(cx, cy)
+        items_cat = self._construir_items_categoria(gdf_grupo)
         maq.dibujar_barra_escala(proveedor, cx_utm=cx, cy_utm=cy,
-                                  cajetin=self._cajetin)
+                                  cajetin=self._cajetin,
+                                  items_categoria=items_cat)
         maq.dibujar_norte_en_mapa()
 
         etiq_campo = ETIQUETAS_CAMPOS.get(campo_grupo, campo_grupo)
@@ -644,8 +678,10 @@ class GeneradorPlanos:
 
                     cx, cy = geom.centroid.x, geom.centroid.y
                     maq.dibujar_mapa_posicion(cx, cy)
+                    items_cat = self._construir_items_categoria(gdf_sel)
                     maq.dibujar_barra_escala(proveedor, cx_utm=cx, cy_utm=cy,
-                                              cajetin=self._cajetin)
+                                              cajetin=self._cajetin,
+                                              items_categoria=items_cat)
                     maq.dibujar_norte_en_mapa()
                     maq.dibujar_cabecera(row, cajetin=self._cajetin,
                                           plantilla=self._plantilla)
