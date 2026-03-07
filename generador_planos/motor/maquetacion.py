@@ -313,10 +313,10 @@ class MaquetadorPlano:
         field_area = card_h_total - header_h
         field_h = field_area / max(n_campos, 1)
 
-        # Tamaños de fuente adaptativos
-        fsz_header = max(2.8, min(4.5, 4.5 - (max_per_col - 2) * 0.25))
-        fsz_field = max(2.5, min(4.0, 4.0 - (max_per_col - 2) * 0.20))
-        # Truncado adaptativo
+        # Tamaños de fuente fijos
+        fsz_header = 3.5
+        fsz_field = 3.2
+        # Truncado adaptativo según espacio disponible
         max_label = max(8, min(18, 18 - (max_per_col - 2)))
         max_val = max(10, min(22, 22 - (max_per_col - 2)))
 
