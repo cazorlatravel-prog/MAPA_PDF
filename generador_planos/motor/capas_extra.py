@@ -31,20 +31,24 @@ class GestorCapasExtra:
         self.capas: list[CapaExtra] = []
 
     def cargar_capa(self, ruta: str, nombre: str = "",
-                    tipo: str = "Personalizada") -> tuple:
-        """Carga un shapefile como capa adicional.
+                    tipo: str = "Personalizada",
+                    layer: str = None) -> tuple:
+        """Carga un shapefile o capa de geodatabase como capa adicional.
 
         Devuelve (ok, mensaje, CapaExtra o None).
         """
         try:
-            gdf = gpd.read_file(ruta)
+            gdf = gpd.read_file(ruta, layer=layer)
             if gdf.crs is None:
                 gdf = gdf.set_crs("EPSG:4326")
             gdf = gdf.to_crs("EPSG:25830")
 
             if not nombre:
                 import os
-                nombre = os.path.splitext(os.path.basename(ruta))[0]
+                if layer:
+                    nombre = layer
+                else:
+                    nombre = os.path.splitext(os.path.basename(ruta))[0]
 
             capa = CapaExtra(nombre=nombre, ruta=ruta, gdf=gdf, tipo=tipo)
             self.capas.append(capa)

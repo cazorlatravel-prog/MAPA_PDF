@@ -84,10 +84,10 @@ class GeneradorPlanos:
 
     # ── Carga de capas ───────────────────────────────────────────────────
 
-    def cargar_infraestructuras(self, ruta: str) -> tuple:
-        """Carga shapefile de infraestructuras y reproyecta a EPSG:25830."""
+    def cargar_infraestructuras(self, ruta: str, layer: str = None) -> tuple:
+        """Carga shapefile/GDB de infraestructuras y reproyecta a EPSG:25830."""
         try:
-            gdf = gpd.read_file(ruta)
+            gdf = gpd.read_file(ruta, layer=layer)
             if gdf.crs is None:
                 gdf = gdf.set_crs("EPSG:4326")
             gdf = gdf.to_crs("EPSG:25830")
@@ -101,26 +101,28 @@ class GeneradorPlanos:
             faltantes = [c for c in CAMPOS_ATRIBUTOS if c not in cols]
             self._campo_mapeo = None
 
-            msg = f"\u2713 {len(gdf)} infraestructuras cargadas | CRS: {gdf.crs.name}"
+            origen = f"capa '{layer}'" if layer else os.path.basename(ruta)
+            msg = f"\u2713 {len(gdf)} infraestructuras cargadas ({origen}) | CRS: {gdf.crs.name}"
             if faltantes:
                 msg += f"\n  \u26a0 Campos no encontrados: {', '.join(faltantes)}"
                 msg += f"\n  Campos disponibles: {', '.join(sorted(cols - {'geometry'}))}"
 
             return True, msg, faltantes
         except Exception as e:
-            return False, f"Error al cargar shapefile: {e}", []
+            return False, f"Error al cargar capa: {e}", []
 
     def establecer_mapeo_campos(self, mapeo: dict):
         self._campo_mapeo = mapeo
 
-    def cargar_montes(self, ruta: str) -> tuple:
+    def cargar_montes(self, ruta: str, layer: str = None) -> tuple:
         try:
-            gdf = gpd.read_file(ruta)
+            gdf = gpd.read_file(ruta, layer=layer)
             if gdf.crs is None:
                 gdf = gdf.set_crs("EPSG:4326")
             gdf = gdf.to_crs("EPSG:25830")
             self.gdf_montes = gdf
-            return True, f"\u2713 Capa montes: {len(gdf)} elementos"
+            origen = f"capa '{layer}'" if layer else os.path.basename(ruta)
+            return True, f"\u2713 Capa montes ({origen}): {len(gdf)} elementos"
         except Exception as e:
             return False, f"Error al cargar montes: {e}"
 
