@@ -46,7 +46,7 @@ class PanelCapas:
         self._ruta_infra = tk.StringVar(value="Sin cargar")
         tk.Label(f, textvariable=self._ruta_infra, font=FONT_SMALL,
                  bg=COLOR_PANEL, fg=COLOR_TEXTO_GRIS,
-                 wraplength=240, justify="left").grid(row=1, column=0, sticky="w")
+                 wraplength=300, justify="left").grid(row=1, column=0, sticky="ew")
 
         btn_infra_f = tk.Frame(f, bg=COLOR_PANEL)
         btn_infra_f.grid(row=2, column=0, sticky="ew", pady=(4, 8))
@@ -65,7 +65,7 @@ class PanelCapas:
         self._ruta_montes = tk.StringVar(value="Sin cargar")
         tk.Label(f, textvariable=self._ruta_montes, font=FONT_SMALL,
                  bg=COLOR_PANEL, fg=COLOR_TEXTO_GRIS,
-                 wraplength=240, justify="left").grid(row=4, column=0, sticky="w")
+                 wraplength=300, justify="left").grid(row=4, column=0, sticky="ew")
 
         btn_montes_f = tk.Frame(f, bg=COLOR_PANEL)
         btn_montes_f.grid(row=5, column=0, sticky="ew", pady=(4, 2))
@@ -309,7 +309,7 @@ class PanelCapas:
 
         ok, msg, faltantes = self.motor.cargar_infraestructuras(ruta, layer=capa)
         if ok:
-            self._ruta_infra.set(f"{os.path.basename(ruta)} / {capa}")
+            self._ruta_infra.set(f"{os.path.basename(ruta)}\n{capa}")
             self.callback_log(msg, "ok")
             self.callback_tabla()
             self._previsualizar(self.motor.gdf_infra)
@@ -329,7 +329,7 @@ class PanelCapas:
 
         ok, msg = self.motor.cargar_montes(ruta, layer=capa)
         if ok:
-            self._ruta_montes.set(f"{os.path.basename(ruta)} / {capa}")
+            self._ruta_montes.set(f"{os.path.basename(ruta)}\n{capa}")
             self.callback_log(msg, "ok")
         else:
             self._ruta_montes.set("Error al cargar")
