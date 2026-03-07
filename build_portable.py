@@ -19,8 +19,43 @@ import subprocess
 
 
 APP_NAME = "GeneradorPlanos_Portable"
-MAIN_SCRIPT = os.path.join("generador_planos", "main.py")
 ICON_FILE = os.path.join("assets", "icon.ico")
+
+# Punto de entrada directo que evita la verificación de dependencias
+# (en el .exe ya vienen empaquetadas)
+LAUNCHER_SCRIPT = "_launcher_portable.py"
+
+LAUNCHER_CODE = '''\
+"""Launcher para el ejecutable portable."""
+import sys
+import os
+
+# Asegurar que el paquete se encuentra
+if getattr(sys, 'frozen', False):
+    base = sys._MEIPASS
+    sys.path.insert(0, base)
+
+from generador_planos.gui.app import App
+
+app = App()
+app.mainloop()
+'''
+
+# Paquetes que PyInstaller debe recoger completos
+COLLECT_ALL = [
+    "matplotlib",
+    "contextily",
+    "geopandas",
+    "pyproj",
+    "shapely",
+    "numpy",
+    "PIL",
+    "reportlab",
+    "requests",
+    "certifi",
+    "pyogrio",
+    "xyzservices",
+]
 
 HIDDEN_IMPORTS = [
     "geopandas",
@@ -29,26 +64,52 @@ HIDDEN_IMPORTS = [
     "pyproj._crs",
     "shapely",
     "shapely.geometry",
-    "fiona",
-    "fiona._shim",
-    "fiona.schema",
     "contextily",
+    "contextily.tile",
     "PIL",
     "PIL.Image",
     "numpy",
     "matplotlib",
+    "matplotlib.figure",
+    "matplotlib.pyplot",
+    "matplotlib.backends",
     "matplotlib.backends.backend_agg",
     "matplotlib.backends.backend_tkagg",
     "matplotlib.backends.backend_pdf",
+    "matplotlib.backends.backend_svg",
     "reportlab",
+    "reportlab.lib",
+    "reportlab.pdfgen",
     "requests",
     "certifi",
+    "xyzservices",
+    "pyogrio",
+    "generador_planos",
+    "generador_planos.motor",
+    "generador_planos.motor.generador",
+    "generador_planos.motor.escala",
+    "generador_planos.motor.cartografia",
+    "generador_planos.motor.maquetacion",
+    "generador_planos.motor.simbologia",
+    "generador_planos.motor.capas_extra",
+    "generador_planos.motor.perfil",
+    "generador_planos.motor.proyecto",
+    "generador_planos.gui",
+    "generador_planos.gui.app",
+    "generador_planos.gui.estilos",
+    "generador_planos.gui.panel_capas",
+    "generador_planos.gui.panel_config",
+    "generador_planos.gui.panel_campos",
+    "generador_planos.gui.panel_filtros",
+    "generador_planos.gui.panel_simbologia",
+    "generador_planos.gui.panel_cajetin",
+    "generador_planos.gui.panel_generacion",
 ]
 
 EXCLUDE = [
-    "pytest", "test", "unittest", "setuptools", "pip",
+    "pytest", "test", "unittest", "pip",
     "IPython", "jupyter", "notebook", "sphinx",
-    "tkinter.test", "matplotlib.tests",
+    "tkinter.test",
 ]
 
 
@@ -68,9 +129,10 @@ def main():
         print("  PyInstaller no encontrado. Instalando...")
         subprocess.check_call([sys.executable, "-m", "pip", "install", "pyinstaller"])
 
-    if not os.path.exists(MAIN_SCRIPT):
-        print(f"  ERROR: No se encuentra {MAIN_SCRIPT}")
-        sys.exit(1)
+    # Crear launcher temporal
+    with open(LAUNCHER_SCRIPT, "w", encoding="utf-8") as f:
+        f.write(LAUNCHER_CODE)
+    print(f"  Launcher creado: {LAUNCHER_SCRIPT}")
 
     cmd = [
         sys.executable, "-m", "PyInstaller",
@@ -86,6 +148,10 @@ def main():
         cmd.extend(["--icon", ICON_FILE])
         print(f"  Icono: {ICON_FILE}")
 
+    # Collect-all para paquetes complejos
+    for pkg in COLLECT_ALL:
+        cmd.extend(["--collect-all", pkg])
+
     # Hidden imports
     for mod in HIDDEN_IMPORTS:
         cmd.extend(["--hidden-import", mod])
@@ -95,13 +161,17 @@ def main():
         cmd.extend(["--exclude-module", excl])
 
     # Script principal
-    cmd.append(MAIN_SCRIPT)
+    cmd.append(LAUNCHER_SCRIPT)
 
     print()
-    print("  Construyendo... (puede tardar varios minutos)")
+    print("  Construyendo... (puede tardar 5-15 minutos)")
     print()
 
     result = subprocess.run(cmd)
+
+    # Limpiar launcher temporal
+    if os.path.exists(LAUNCHER_SCRIPT):
+        os.remove(LAUNCHER_SCRIPT)
 
     if result.returncode == 0:
         exe_path = os.path.join("dist", f"{APP_NAME}.exe")

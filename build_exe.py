@@ -14,42 +14,70 @@ Genera:
 import os
 import sys
 import subprocess
-import shutil
 
 # ── Configuración ────────────────────────────────────────────────────────
 
 APP_NAME = "GeneradorPlanos"
-MAIN_SCRIPT = os.path.join("generador_planos", "main.py")
 ICON_FILE = os.path.join("assets", "icon.ico")
 
-# Datos adicionales que PyInstaller debe incluir
-DATAS = [
-    # Si hubiera archivos de datos, se añadirían aquí:
-    # ("ruta_origen", "ruta_destino_en_exe"),
+# Punto de entrada directo (sin verificar dependencias, ya van empaquetadas)
+LAUNCHER_SCRIPT = "_launcher_exe.py"
+
+LAUNCHER_CODE = '''\
+"""Launcher para el ejecutable."""
+import sys
+import os
+
+if getattr(sys, 'frozen', False):
+    base = sys._MEIPASS
+    sys.path.insert(0, base)
+
+from generador_planos.gui.app import App
+
+app = App()
+app.mainloop()
+'''
+
+# Paquetes que PyInstaller debe recoger completos
+COLLECT_ALL = [
+    "matplotlib",
+    "contextily",
+    "geopandas",
+    "pyproj",
+    "shapely",
+    "numpy",
+    "PIL",
+    "reportlab",
+    "requests",
+    "certifi",
+    "pyogrio",
+    "xyzservices",
 ]
 
 # Módulos ocultos que PyInstaller puede no detectar automáticamente
 HIDDEN_IMPORTS = [
     "geopandas",
-    "pyproj",
-    "pyproj.database",
-    "pyproj._crs",
-    "shapely",
-    "shapely.geometry",
-    "fiona",
-    "fiona._shim",
-    "fiona.schema",
-    "contextily",
-    "PIL",
-    "PIL.Image",
+    "pyproj", "pyproj.database", "pyproj._crs",
+    "shapely", "shapely.geometry",
+    "contextily", "contextily.tile",
+    "PIL", "PIL.Image",
     "numpy",
-    "matplotlib",
-    "matplotlib.backends.backend_agg",
-    "matplotlib.backends.backend_tkagg",
-    "matplotlib.backends.backend_pdf",
-    "reportlab",
-    "requests",
-    "certifi",
+    "matplotlib", "matplotlib.figure", "matplotlib.pyplot",
+    "matplotlib.backends", "matplotlib.backends.backend_agg",
+    "matplotlib.backends.backend_tkagg", "matplotlib.backends.backend_pdf",
+    "reportlab", "reportlab.lib", "reportlab.pdfgen",
+    "requests", "certifi", "xyzservices", "pyogrio",
+    "generador_planos",
+    "generador_planos.motor", "generador_planos.motor.generador",
+    "generador_planos.motor.escala", "generador_planos.motor.cartografia",
+    "generador_planos.motor.maquetacion", "generador_planos.motor.simbologia",
+    "generador_planos.motor.capas_extra", "generador_planos.motor.perfil",
+    "generador_planos.motor.proyecto",
+    "generador_planos.gui", "generador_planos.gui.app",
+    "generador_planos.gui.estilos", "generador_planos.gui.panel_capas",
+    "generador_planos.gui.panel_config", "generador_planos.gui.panel_campos",
+    "generador_planos.gui.panel_filtros", "generador_planos.gui.panel_simbologia",
+    "generador_planos.gui.panel_cajetin", "generador_planos.gui.panel_generacion",
 ]
 
 
@@ -71,12 +99,16 @@ def construir_exe(modo_onefile=False):
     print(f"  Modo: {'Un solo archivo' if modo_onefile else 'Carpeta con dependencias'}")
     print(f"{'='*60}\n")
 
+    # Crear launcher temporal
+    with open(LAUNCHER_SCRIPT, "w", encoding="utf-8") as f:
+        f.write(LAUNCHER_CODE)
+
     cmd = [
         sys.executable, "-m", "PyInstaller",
         "--name", APP_NAME,
-        "--windowed",           # Sin consola (GUI)
-        "--noconfirm",          # Sobreescribir sin preguntar
-        "--clean",              # Limpiar caché
+        "--windowed",
+        "--noconfirm",
+        "--clean",
     ]
 
     # Icono
@@ -90,26 +122,30 @@ def construir_exe(modo_onefile=False):
     else:
         cmd.append("--onedir")
 
-    # Datos adicionales
-    sep = ";" if sys.platform == "win32" else ":"
-    for src, dst in DATAS:
-        cmd.extend(["--add-data", f"{src}{sep}{dst}"])
+    # Collect-all para paquetes complejos
+    for pkg in COLLECT_ALL:
+        cmd.extend(["--collect-all", pkg])
 
     # Hidden imports
     for mod in HIDDEN_IMPORTS:
         cmd.extend(["--hidden-import", mod])
 
     # Excluir módulos innecesarios para reducir tamaño
-    for excl in ["pytest", "test", "unittest", "setuptools", "pip"]:
+    for excl in ["pytest", "test", "unittest", "pip",
+                 "IPython", "jupyter", "notebook", "sphinx"]:
         cmd.extend(["--exclude-module", excl])
 
     # Script principal
-    cmd.append(MAIN_SCRIPT)
+    cmd.append(LAUNCHER_SCRIPT)
 
-    print(f"  Comando: {' '.join(cmd[:6])}...")
+    print(f"  Construyendo... (puede tardar 5-15 minutos)")
     print()
 
     result = subprocess.run(cmd)
+
+    # Limpiar launcher temporal
+    if os.path.exists(LAUNCHER_SCRIPT):
+        os.remove(LAUNCHER_SCRIPT)
 
     if result.returncode == 0:
         if modo_onefile:
@@ -135,10 +171,6 @@ def main():
     print("\n  GENERADOR DE PLANOS FORESTALES - Constructor de ejecutable\n")
 
     if not verificar_pyinstaller():
-        sys.exit(1)
-
-    if not os.path.exists(MAIN_SCRIPT):
-        print(f"  ERROR: No se encuentra {MAIN_SCRIPT}")
         sys.exit(1)
 
     # Crear carpeta assets si no existe
