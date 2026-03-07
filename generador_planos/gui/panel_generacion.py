@@ -117,8 +117,14 @@ class PanelGeneracion:
         tk.Button(btn_sel_f, text="Ninguno", command=self._deseleccionar_todos_valores,
                   font=FONT_SMALL, bg=COLOR_BORDE, fg=COLOR_TEXTO,
                   relief="flat", cursor="hand2", padx=4).pack(side="left")
+        tk.Button(btn_sel_f, text="Detalle\u2026",
+                  command=self._abrir_popup_detalle,
+                  font=FONT_SMALL, bg=COLOR_ACENTO, fg="#1A1A2E",
+                  relief="flat", cursor="hand2", padx=4).pack(side="left", padx=(4, 0))
 
         self._check_valores = {}
+        # {valor_grupo: [indices]} — si no existe la clave, se usan todos
+        self._indices_filtrados = {}
         self._frame_agrupacion.columnconfigure(1, weight=1)
         self._frame_agrupacion.grid_remove()
 
@@ -203,6 +209,7 @@ class PanelGeneracion:
         for widget in self._inner_valores.winfo_children():
             widget.destroy()
         self._check_valores.clear()
+        self._indices_filtrados.clear()
 
         campo = self._campo_agrupacion.get()
         valores = self.motor.obtener_valores_unicos(campo)
@@ -234,6 +241,110 @@ class PanelGeneracion:
     def _deseleccionar_todos_valores(self):
         for var in self._check_valores.values():
             var.set(False)
+
+    def _abrir_popup_detalle(self):
+        """Abre ventana emergente para seleccionar infraestructuras individuales."""
+        campo = self._campo_agrupacion.get()
+        valores_sel = [v for v, var in self._check_valores.items() if var.get()]
+        if not valores_sel:
+            messagebox.showinfo("Info",
+                                "Selecciona al menos un valor de agrupación.")
+            return
+
+        popup = tk.Toplevel(self._parent_window)
+        popup.title("Seleccionar infraestructuras por grupo")
+        popup.geometry("620x500")
+        popup.configure(bg=COLOR_PANEL)
+        popup.transient(self._parent_window)
+        popup.grab_set()
+
+        tk.Label(popup, text=f"Infraestructuras agrupadas por: {campo}",
+                 font=FONT_BOLD, bg=COLOR_PANEL, fg=COLOR_TEXTO).pack(
+                 anchor="w", padx=8, pady=(8, 4))
+
+        # Frame con scroll
+        container = tk.Frame(popup, bg=COLOR_PANEL)
+        container.pack(fill="both", expand=True, padx=8, pady=4)
+
+        canvas = tk.Canvas(container, bg=COLOR_PANEL, highlightthickness=0)
+        sb = ttk.Scrollbar(container, orient="vertical", command=canvas.yview)
+        inner = tk.Frame(canvas, bg=COLOR_PANEL)
+        inner.bind("<Configure>",
+                   lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.create_window((0, 0), window=inner, anchor="nw")
+        canvas.configure(yscrollcommand=sb.set)
+        canvas.pack(side="left", fill="both", expand=True)
+        sb.pack(side="right", fill="y")
+
+        # Construir checkboxes por grupo → infraestructuras
+        check_vars = {}  # {valor_grupo: [(idx, BooleanVar), ...]}
+        nombre_campo = "Nombre_Infra"
+        # Buscar el nombre real del campo en el mapeo
+        if self.motor._campo_mapeo and nombre_campo in self.motor._campo_mapeo:
+            nombre_campo = self.motor._campo_mapeo[nombre_campo]
+
+        for valor in valores_sel:
+            indices = self.motor.obtener_indices_por_valor(campo, valor)
+            # Cabecera del grupo
+            tk.Label(inner, text=f"\u25bc {valor}  ({len(indices)} infra.)",
+                     font=FONT_BOLD, bg=COLOR_PANEL, fg=COLOR_ACENTO).pack(
+                     anchor="w", padx=4, pady=(6, 2))
+
+            grupo_vars = []
+            prev_sel = self._indices_filtrados.get(valor)
+            for idx in indices:
+                row = self.motor.gdf_infra.iloc[idx]
+                nombre = str(row.get(nombre_campo,
+                             row.get("Nombre_Infra", f"#{idx}")))
+                if nombre == "nan":
+                    nombre = f"#{idx}"
+
+                default_on = prev_sel is None or idx in prev_sel
+                var = tk.BooleanVar(value=default_on)
+                cb = tk.Checkbutton(
+                    inner, text=f"  {nombre}", variable=var,
+                    font=FONT_SMALL, bg=COLOR_PANEL, fg=COLOR_TEXTO,
+                    selectcolor=COLOR_BORDE, activebackground=COLOR_PANEL,
+                    cursor="hand2",
+                )
+                cb.pack(anchor="w", padx=20, pady=1)
+                grupo_vars.append((idx, var))
+            check_vars[valor] = grupo_vars
+
+        # Botones inferiores
+        btn_f = tk.Frame(popup, bg=COLOR_PANEL)
+        btn_f.pack(fill="x", padx=8, pady=(4, 8))
+
+        def _sel_todos():
+            for gvars in check_vars.values():
+                for _, v in gvars:
+                    v.set(True)
+
+        def _sel_ninguno():
+            for gvars in check_vars.values():
+                for _, v in gvars:
+                    v.set(False)
+
+        def _aceptar():
+            self._indices_filtrados.clear()
+            for valor, gvars in check_vars.items():
+                sel = [idx for idx, v in gvars if v.get()]
+                # Solo guardar si se han excluido algunos
+                todos = [idx for idx, _ in gvars]
+                if len(sel) < len(todos):
+                    self._indices_filtrados[valor] = sel
+            popup.destroy()
+            self.callback_log("Selección de infraestructuras actualizada.", "info")
+
+        tk.Button(btn_f, text="Todos", command=_sel_todos,
+                  font=FONT_SMALL, bg=COLOR_BORDE, fg=COLOR_TEXTO,
+                  relief="flat", cursor="hand2", padx=6).pack(side="left", padx=(0, 4))
+        tk.Button(btn_f, text="Ninguno", command=_sel_ninguno,
+                  font=FONT_SMALL, bg=COLOR_BORDE, fg=COLOR_TEXTO,
+                  relief="flat", cursor="hand2", padx=6).pack(side="left", padx=(0, 4))
+        tk.Button(btn_f, text="Aceptar", command=_aceptar,
+                  font=FONT_SMALL, bg=COLOR_ACENTO, fg="#1A1A2E",
+                  relief="flat", cursor="hand2", padx=12).pack(side="right")
 
     def _seleccionar_csv(self):
         ruta = filedialog.askopenfilename(
@@ -316,6 +427,10 @@ class PanelGeneracion:
 
             campo_grupo = self._campo_agrupacion.get()
 
+            # Preparar filtro de índices por grupo si el usuario
+            # ha seleccionado infraestructuras individuales
+            indices_filtro = dict(self._indices_filtrados)
+
             def _worker_agrupado():
                 self.callback_log(
                     f"\n{'=' * 50}\nGenerando {len(valores_sel)} planos agrupados "
@@ -333,6 +448,7 @@ class PanelGeneracion:
                     escala_manual=escala_manual,
                     callback_log=self.callback_log,
                     callback_progreso=self._actualizar_progreso,
+                    indices_filtro=indices_filtro,
                 )
 
                 self._parent_window.after(0, self._fin_generacion)

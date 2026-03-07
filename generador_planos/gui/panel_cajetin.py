@@ -77,6 +77,17 @@ class PanelCajetin:
                                                                 padx=(4, 0))
         row_idx += 2
 
+        # ── Título del mapa ──
+        tk.Label(f, text="Título del mapa:", font=FONT_SMALL,
+                 bg=COLOR_PANEL, fg=COLOR_TEXTO).grid(
+                 row=row_idx, column=0, sticky="w")
+        self._titulo_mapa = tk.StringVar(value="")
+        tk.Entry(f, textvariable=self._titulo_mapa, font=FONT_SMALL,
+                 bg=COLOR_BORDE, fg=COLOR_TEXTO, insertbackground="white",
+                 relief="flat").grid(row=row_idx + 1, column=0,
+                                      sticky="ew", pady=(2, 4))
+        row_idx += 2
+
         # ── Subtítulo (estático o desde campo) ──
         tk.Label(f, text="Subtítulo cabecera:", font=FONT_SMALL,
                  bg=COLOR_PANEL, fg=COLOR_TEXTO).grid(
@@ -240,6 +251,7 @@ class PanelCajetin:
             "revision": self._vars["revision"].get(),
             "firma": self._vars["firma"].get(),
             "organizacion": org,
+            "titulo_mapa": self._titulo_mapa.get(),
             "subtitulo": self._subtitulo.get(),
             "campo_subtitulo": campo_sub,
             "logo_path": self._logo_path.get(),
@@ -259,6 +271,7 @@ class PanelCajetin:
                 var.set(cajetin.get(key, ""))
             org = cajetin.get("organizacion", "")
             self._org.set(org.replace("\n", " - "))
+            self._titulo_mapa.set(cajetin.get("titulo_mapa", ""))
             self._subtitulo.set(cajetin.get("subtitulo", ""))
             self._logo_path.set(cajetin.get("logo_path", ""))
             if self._logo_path.get():

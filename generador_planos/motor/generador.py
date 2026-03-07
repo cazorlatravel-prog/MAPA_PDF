@@ -431,13 +431,18 @@ class GeneradorPlanos:
                                 color_infra: str, salida_dir: str,
                                 escala_manual: int = None,
                                 callback_log=None,
-                                callback_progreso=None) -> list:
+                                callback_progreso=None,
+                                indices_filtro: dict = None) -> list:
         rutas = []
         total = len(valores)
         for i, valor in enumerate(valores):
             if callback_log:
                 callback_log(f"\n[{i + 1}/{total}] Grupo: {campo_grupo} = {valor}")
             indices = self.obtener_indices_por_valor(campo_grupo, valor)
+            # Aplicar filtro de infraestructuras individuales si existe
+            if indices_filtro and valor in indices_filtro:
+                filtro = set(indices_filtro[valor])
+                indices = [idx for idx in indices if idx in filtro]
             if not indices:
                 if callback_log:
                     callback_log(f"  \u26a0 Sin infraestructuras para {valor}")

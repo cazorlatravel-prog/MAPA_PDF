@@ -88,7 +88,7 @@ class MaquetadorPlano:
             top=gs_top, bottom=inf,
             width_ratios=[0.28, 0.42, 0.30],
             height_ratios=[RATIO_MAPA_ALTO, 1 - RATIO_MAPA_ALTO],
-            hspace=0.07, wspace=0.015,
+            hspace=0.04, wspace=0.01,
         )
 
         # Mapa principal: fila 0, ancho completo (3 columnas)
@@ -401,7 +401,7 @@ class MaquetadorPlano:
         ax.set_facecolor("#E8E8E0")
 
         for sp in ax.spines.values():
-            sp.set_linewidth(1.0)
+            sp.set_linewidth(1.2)
             sp.set_color("#2C3E50")
         ax.tick_params(labelbottom=False, labelleft=False,
                        bottom=False, left=False)
@@ -438,6 +438,27 @@ class MaquetadorPlano:
 
         ax.set_title("LOCALIZACIÓN", fontsize=5, fontweight="bold",
                       color="#2C3E50", pad=2)
+
+        # ── Barra de escala del mapa de localización ──
+        extent_m = xmax_m - xmin_m  # 30 000 m
+        barra_loc_m = 5000  # 5 km
+        barra_frac = barra_loc_m / extent_m  # fracción del ancho del axes
+
+        bar_x0 = 0.05
+        bar_y = 0.04
+        bar_h = 0.025
+        n_seg = 2
+        seg_frac = barra_frac / n_seg
+        for i in range(n_seg):
+            c = "#1A1A2E" if i % 2 == 0 else "white"
+            ax.add_patch(Rectangle(
+                (bar_x0 + i * seg_frac, bar_y), seg_frac, bar_h,
+                facecolor=c, edgecolor="#1A1A2E", linewidth=0.3,
+                transform=ax.transAxes, zorder=10))
+        ax.text(bar_x0 + barra_frac + 0.02, bar_y + bar_h / 2,
+                f"{barra_loc_m // 1000} km", ha="left", va="center",
+                fontsize=3.5, color="#1A1A2E", fontweight="bold",
+                transform=ax.transAxes, zorder=10)
 
     # ── Cajetín + Escala + Norte (panel inferior izquierdo) ───────────
 
@@ -541,6 +562,7 @@ class MaquetadorPlano:
         org = ""
         subtit = "PLANO DE INFRAESTRUCTURA FORESTAL"
         titulo_proy = ""
+        titulo_mapa = ""
         logo_path = ""
         num_inicio = 1
 
@@ -550,6 +572,7 @@ class MaquetadorPlano:
             if cajetin.get("subtitulo"):
                 subtit = cajetin["subtitulo"]
             titulo_proy = cajetin.get("proyecto", "")
+            titulo_mapa = cajetin.get("titulo_mapa", "")
             logo_path = cajetin.get("logo_path", "")
             num_inicio = cajetin.get("num_plano_inicio", 1)
             # Subtítulo dinámico desde un campo de la tabla de atributos
@@ -599,19 +622,20 @@ class MaquetadorPlano:
         ax_cab.text(x_org, 0.55, org, ha="left", va="center", fontsize=4.5,
                     fontweight="bold", color=c_acento, linespacing=1.1)
 
-        # ── Centro: título proyecto + subtítulo ──
+        # ── Centro: título mapa + subtítulo ──
+        titulo_final = ""
         if titulo_grupo:
-            ax_cab.text(0.5, 0.60, titulo_grupo.upper(), ha="center",
-                        va="center", fontsize=7, fontweight="bold",
-                        color=c_texto)
+            titulo_final = titulo_grupo
+        elif titulo_mapa:
+            titulo_final = titulo_mapa
         elif titulo_proy:
-            ax_cab.text(0.5, 0.60, titulo_proy.upper(), ha="center",
-                        va="center", fontsize=7, fontweight="bold",
-                        color=c_texto)
+            titulo_final = titulo_proy
         else:
-            nombre = str(row.get("Nombre_Infra", "INFRAESTRUCTURA FORESTAL"))
-            ax_cab.text(0.5, 0.60, nombre.upper(), ha="center", va="center",
-                        fontsize=7, fontweight="bold", color=c_texto)
+            titulo_final = str(row.get("Nombre_Infra", "INFRAESTRUCTURA FORESTAL"))
+
+        ax_cab.text(0.5, 0.60, titulo_final.upper(), ha="center",
+                    va="center", fontsize=7, fontweight="bold",
+                    color=c_texto)
 
         ax_cab.text(0.5, 0.20, subtit.upper(), ha="center", va="center",
                     fontsize=4.5, color="#95A5A6")
