@@ -77,10 +77,17 @@ class PanelCapas:
                     icono="\U0001f4c1").grid(row=0, column=1, sticky="ew", padx=(2, 0))
 
         # ── Transparencia ──
-        tk.Label(f, text="Transparencia capa montes:",
-                 font=FONT_SMALL, bg=COLOR_PANEL, fg=COLOR_TEXTO_GRIS).grid(
-                 row=6, column=0, sticky="w", pady=(6, 0))
+        transp_header = tk.Frame(f, bg=COLOR_PANEL)
+        transp_header.grid(row=6, column=0, sticky="ew", pady=(6, 0))
+        tk.Label(transp_header, text="Transparencia capa montes:",
+                 font=FONT_SMALL, bg=COLOR_PANEL, fg=COLOR_TEXTO_GRIS).pack(side="left")
+        self._lbl_transp = tk.Label(transp_header, text="0.50", font=FONT_SMALL,
+                                     bg=COLOR_PANEL, fg=COLOR_ACENTO)
+        self._lbl_transp.pack(side="right")
+
         self.transparencia = tk.DoubleVar(value=0.5)
+        self.transparencia.trace_add("write", lambda *_: self._lbl_transp.configure(
+            text=f"{self.transparencia.get():.2f}"))
         sl = ttk.Scale(f, from_=0.0, to=1.0, variable=self.transparencia,
                         orient="horizontal")
         sl.grid(row=7, column=0, sticky="ew", pady=(2, 4))

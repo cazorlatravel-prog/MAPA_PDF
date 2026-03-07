@@ -105,6 +105,7 @@ class App(tk.Tk):
             izq, self.motor,
             get_config=self._get_config,
             callback_log=self._escribir_log,
+            auto_aplicar=self._auto_aplicar_todo,
         )
 
         # ── Paneles derecha ──
@@ -241,6 +242,7 @@ class App(tk.Tk):
 
     def _on_tabla_cargada(self):
         self._poblar_tabla()
+        self.panel_generacion.actualizar_campos_agrupacion()
         self.panel_generacion.actualizar_valores_si_agrupado()
         self.panel_filtros.actualizar_campos()
         self.panel_simbologia.actualizar_capas_extra()
@@ -251,6 +253,15 @@ class App(tk.Tk):
 
     def _on_filtro_aplicado(self, indices: list):
         self._poblar_tabla(indices)
+
+    def _auto_aplicar_todo(self):
+        """Aplica cajetín, plantilla y simbología al motor antes de generar."""
+        cajetin = self.panel_cajetin.obtener_cajetin()
+        plantilla = self.panel_cajetin.obtener_plantilla()
+        self.motor.set_cajetin(cajetin)
+        self.motor.set_plantilla(plantilla)
+        self.motor.config_infra = self.panel_simbologia.obtener_config_infra()
+        self.panel_simbologia._aplicar()
 
     def _get_config(self) -> dict:
         return {

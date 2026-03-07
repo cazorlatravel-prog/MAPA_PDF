@@ -19,10 +19,12 @@ from ..motor.maquetacion import ETIQUETAS_CAMPOS
 class PanelGeneracion:
     """Panel de generación de planos con barra de progreso."""
 
-    def __init__(self, parent, motor, get_config, callback_log):
+    def __init__(self, parent, motor, get_config, callback_log,
+                 auto_aplicar=None):
         self.motor = motor
         self.get_config = get_config
         self.callback_log = callback_log
+        self._auto_aplicar = auto_aplicar
         self._parent_window = parent.winfo_toplevel()
 
         f = crear_frame_seccion(parent, "\U0001f5a8  GENERACI\u00d3N")
@@ -204,6 +206,15 @@ class PanelGeneracion:
 
     def _on_campo_agrup_changed(self, event=None):
         self._actualizar_valores_agrupacion()
+
+    def actualizar_campos_agrupacion(self):
+        """Actualiza el combobox de agrupación con las columnas reales del shapefile."""
+        campos = list(ETIQUETAS_CAMPOS.keys())
+        if self.motor.gdf_infra is not None:
+            cols_reales = [c for c in self.motor.gdf_infra.columns
+                           if c.lower() != "geometry" and c not in campos]
+            campos.extend(cols_reales)
+        self._cb_campo_agrup.configure(values=campos)
 
     def _actualizar_valores_agrupacion(self):
         for widget in self._inner_valores.winfo_children():
@@ -401,6 +412,10 @@ class PanelGeneracion:
         if self.motor.gdf_infra is None:
             messagebox.showwarning("Aviso", "Carga primero el shapefile de infraestructuras.")
             return
+
+        # Auto-aplicar cajetín, plantilla y simbología antes de generar
+        if self._auto_aplicar:
+            self._auto_aplicar()
 
         cfg = self.get_config()
         campos = cfg.get("campos", [])

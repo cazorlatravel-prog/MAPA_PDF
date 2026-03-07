@@ -25,17 +25,31 @@ class PanelSimbologia:
         f = crear_frame_seccion(parent, "\U0001f3a8  SIMBOLOG\u00cdA")
 
         # ── Simbología de infraestructuras ──
-        tk.Label(f, text="Grosor l\u00ednea infra:", font=FONT_SMALL,
-                 bg=COLOR_PANEL, fg=COLOR_TEXTO).grid(
-                 row=0, column=0, sticky="w")
+        grosor_header = tk.Frame(f, bg=COLOR_PANEL)
+        grosor_header.grid(row=0, column=0, sticky="ew")
+        tk.Label(grosor_header, text="Grosor l\u00ednea infra:", font=FONT_SMALL,
+                 bg=COLOR_PANEL, fg=COLOR_TEXTO).pack(side="left")
+        self._lbl_grosor = tk.Label(grosor_header, text="2.5", font=FONT_SMALL,
+                                     bg=COLOR_PANEL, fg=COLOR_ACENTO)
+        self._lbl_grosor.pack(side="right")
+
         self._grosor_infra = tk.DoubleVar(value=2.5)
+        self._grosor_infra.trace_add("write", lambda *_: self._lbl_grosor.configure(
+            text=f"{self._grosor_infra.get():.1f}"))
         ttk.Scale(f, from_=0.5, to=5.0, variable=self._grosor_infra,
                   orient="horizontal").grid(row=1, column=0, sticky="ew", pady=(2, 6))
 
-        tk.Label(f, text="Transparencia infra:", font=FONT_SMALL,
-                 bg=COLOR_PANEL, fg=COLOR_TEXTO).grid(
-                 row=2, column=0, sticky="w")
+        alpha_header = tk.Frame(f, bg=COLOR_PANEL)
+        alpha_header.grid(row=2, column=0, sticky="ew")
+        tk.Label(alpha_header, text="Transparencia infra:", font=FONT_SMALL,
+                 bg=COLOR_PANEL, fg=COLOR_TEXTO).pack(side="left")
+        self._lbl_alpha = tk.Label(alpha_header, text="1.0", font=FONT_SMALL,
+                                    bg=COLOR_PANEL, fg=COLOR_ACENTO)
+        self._lbl_alpha.pack(side="right")
+
         self._alpha_infra = tk.DoubleVar(value=1.0)
+        self._alpha_infra.trace_add("write", lambda *_: self._lbl_alpha.configure(
+            text=f"{self._alpha_infra.get():.2f}"))
         ttk.Scale(f, from_=0.1, to=1.0, variable=self._alpha_infra,
                   orient="horizontal").grid(row=3, column=0, sticky="ew", pady=(2, 6))
 

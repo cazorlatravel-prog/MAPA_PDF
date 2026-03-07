@@ -391,9 +391,22 @@ class MaquetadorPlano:
     def dibujar_mapa_posicion(self, cx, cy):
         ax = self.ax_mini
 
-        radio = 15_000
-        xmin_m, xmax_m = cx - radio, cx + radio
-        ymin_m, ymax_m = cy - radio, cy + radio
+        # ── Escala fija 1:25.000 ──
+        escala_loc = 25_000
+
+        # Tamaño físico aproximado del panel de localización (mm)
+        ancho_util = self.fmt_mm[0] - MARGENES_MM["izq"] - MARGENES_MM["der"]
+        alto_util = (self.fmt_mm[1] - MARGENES_MM["sup"] - MARGENES_MM["inf"]
+                     - _CABECERA_MM)
+        panel_w_mm = ancho_util * 0.30 * 0.95   # col 2 ratio, menos wspace
+        panel_h_mm = alto_util * (1 - RATIO_MAPA_ALTO) * 0.90  # menos hspace
+
+        # Extensión real a 1:25.000
+        semi_x = (panel_w_mm / 1000.0) * escala_loc / 2
+        semi_y = (panel_h_mm / 1000.0) * escala_loc / 2
+
+        xmin_m, xmax_m = cx - semi_x, cx + semi_x
+        ymin_m, ymax_m = cy - semi_y, cy + semi_y
 
         ax.set_xlim(xmin_m, xmax_m)
         ax.set_ylim(ymin_m, ymax_m)
@@ -439,10 +452,10 @@ class MaquetadorPlano:
         ax.set_title("LOCALIZACIÓN", fontsize=5, fontweight="bold",
                       color="#2C3E50", pad=2)
 
-        # ── Barra de escala del mapa de localización ──
-        extent_m = xmax_m - xmin_m  # 30 000 m
-        barra_loc_m = 5000  # 5 km
-        barra_frac = barra_loc_m / extent_m  # fracción del ancho del axes
+        # ── Escala del mapa de localización ──
+        extent_m = xmax_m - xmin_m
+        barra_loc_m = 1000  # 1 km
+        barra_frac = barra_loc_m / extent_m
 
         bar_x0 = 0.05
         bar_y = 0.04
@@ -459,6 +472,12 @@ class MaquetadorPlano:
                 f"{barra_loc_m // 1000} km", ha="left", va="center",
                 fontsize=3.5, color="#1A1A2E", fontweight="bold",
                 transform=ax.transAxes, zorder=10)
+        # Texto de escala
+        ax.text(0.95, 0.04, f"E 1:{escala_loc:,}".replace(",", "."),
+                ha="right", va="bottom", fontsize=3.5, fontweight="bold",
+                color="#2C3E50", transform=ax.transAxes, zorder=10,
+                bbox=dict(boxstyle="round,pad=0.1", facecolor="white",
+                          edgecolor="none", alpha=0.7))
 
     # ── Cajetín + Escala + Norte (panel inferior izquierdo) ───────────
 
