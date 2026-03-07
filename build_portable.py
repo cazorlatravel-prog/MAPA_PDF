@@ -25,7 +25,7 @@ import zipfile
 
 APP_NAME = "GeneradorPlanos_Portable"
 APP_VERSION = "2.0.0"
-APP_DESCRIPTION = "Generador de Planos Forestales - Jose Caballero"
+APP_DESCRIPTION = "Generador de Planos Forestales - \u00a9 Jose Caballero S\u00e1nchez (Cazorla 2026)"
 ICON_FILE = os.path.join("assets", "icon.ico")
 
 # Punto de entrada directo que evita la verificación de dependencias
@@ -156,7 +156,7 @@ VSVersionInfo(
         StringTable(
           u'040A04B0',
           [
-            StringStruct(u'CompanyName', u'Jose Caballero'),
+            StringStruct(u'CompanyName', u'Jose Caballero S\u00e1nchez (Cazorla)'),
             StringStruct(u'FileDescription',
                          u'Generador de Planos Forestales'),
             StringStruct(u'FileVersion', u'{APP_VERSION}'),
@@ -166,7 +166,7 @@ VSVersionInfo(
                          u'Generador de Planos Forestales'),
             StringStruct(u'ProductVersion', u'{APP_VERSION}'),
             StringStruct(u'LegalCopyright',
-                         u'(c) Jose Caballero'),
+                         u'\u00a9 Jose Caballero S\u00e1nchez (Cazorla 2026) Todos los derechos reservados'),
           ]
         )
       ]

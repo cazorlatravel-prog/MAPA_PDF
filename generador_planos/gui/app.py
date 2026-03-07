@@ -5,12 +5,12 @@ Layout: 1100x780 px mínimo, redimensionable.
 ┌─────────────────────────────────────────────────────────────┐
 │  GENERADOR DE PLANOS FORESTALES            ETRS89·UTM H30N  │
 ├──────────────────┬──────────────────────────────────────────┤
-│  CAPAS           │  TABLA DE INFRAESTRUCTURAS               │
-│  CONFIGURACIÓN   │                                          │
-│  CAMPOS PLANO    ├──────────────────────────────────────────┤
-│  FILTROS         │  LOG DE PROCESO                          │
-│  SIMBOLOGÍA      │                                          │
+│  CAPAS           │  [Infraestructuras] [Mapa General]       │
+│  FILTROS         │                                          │
+│  SIMBOLOGÍA      ├──────────────────────────────────────────┤
+│  CAMPOS PLANO    │  LOG DE PROCESO                          │
 │  CAJETÍN         │                                          │
+│  CONFIGURACIÓN   │                                          │
 │  GENERACIÓN      │                                          │
 └──────────────────┴──────────────────────────────────────────┘
 """
@@ -45,7 +45,7 @@ class App(tk.Tk):
 
     def __init__(self):
         super().__init__()
-        self.title("Generador de Planos Forestales - Jose Caballero Sánchez (Cazorla) - Open Source")
+        self.title("Generador de Planos Forestales - \u00a9 Jose Caballero S\u00e1nchez (Cazorla 2026)")
         self.geometry("1100x780")
         self.minsize(1100, 780)
         self.configure(bg=COLOR_FONDO_APP)
@@ -86,26 +86,40 @@ class App(tk.Tk):
         der = tk.Frame(main, bg=COLOR_FONDO_APP)
         der.pack(side="right", fill="both", expand=True, pady=4)
 
-        # ── Paneles izquierda ──
+        # ── Paneles izquierda (orden de flujo de trabajo) ──
+
+        # 1. Carga de datos
         self.panel_capas = PanelCapas(
             izq, self.motor,
             callback_log=self._escribir_log,
             callback_tabla=self._on_tabla_cargada,
         )
-        self.panel_config = PanelConfig(izq)
-        self.panel_campos = PanelCampos(izq)
+
+        # 2. Filtrado de datos
         self.panel_filtros = PanelFiltros(
             izq, self.motor,
             callback_filtro=self._on_filtro_aplicado,
         )
+
+        # 3. Estilo visual
         self.panel_simbologia = PanelSimbologia(
             izq, self.motor,
             callback_log=self._escribir_log,
         )
+
+        # 4. Campos a mostrar en el plano
+        self.panel_campos = PanelCampos(izq)
+
+        # 5. Cajetín y plantilla
         self.panel_cajetin = PanelCajetin(
             izq, self.motor,
             callback_log=self._escribir_log,
         )
+
+        # 6. Configuración de salida
+        self.panel_config = PanelConfig(izq)
+
+        # 7. Generación final
         self.panel_generacion = PanelGeneracion(
             izq, self.motor,
             get_config=self._get_config,
@@ -129,7 +143,7 @@ class App(tk.Tk):
 
         tk.Label(
             barra,
-            text="App creada por Jose Caballero Sánchez (Cazorla) · Open Source · Uso gratuito",
+            text="\u00a9 Jose Caballero S\u00e1nchez (Cazorla 2026) \u00b7 Todos los derechos reservados",
             font=("Helvetica", 8), bg="#141B2D", fg="#7F8C8D",
         ).pack(side="left", padx=(0, 8), pady=10)
 
