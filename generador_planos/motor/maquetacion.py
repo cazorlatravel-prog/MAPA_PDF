@@ -248,11 +248,14 @@ class MaquetadorPlano:
 
     # ── Panel de atributos (centro, 2 columnas, campos dinámicos) ─────
 
-    def dibujar_panel_atributos(self, row, campos_visibles, campo_mapeo=None):
-        self.dibujar_panel_atributos_multi([row], campos_visibles, campo_mapeo)
+    def dibujar_panel_atributos(self, row, campos_visibles, campo_mapeo=None,
+                                campo_encabezado=None):
+        self.dibujar_panel_atributos_multi([row], campos_visibles, campo_mapeo,
+                                            campo_encabezado=campo_encabezado)
 
     def dibujar_panel_atributos_multi(self, rows, campos_visibles,
-                                       campo_mapeo=None):
+                                       campo_mapeo=None,
+                                       campo_encabezado=None):
         ax = self.ax_info
         ax.set_xlim(0, 1)
         ax.set_ylim(0, 1)
@@ -333,19 +336,24 @@ class MaquetadorPlano:
                     (x0, card_top - header_h), col_w, header_h,
                     facecolor="#2C3E50", edgecolor="none", zorder=1))
 
-                # Obtener nombre de la infra: buscar NOMBRE_INF en los datos
-                # independientemente de si está en campos_mostrar
+                # Obtener nombre para el encabezado de la ficha
                 nombre = None
-                for candidato in ["NOMBRE_INF", "Nombre_Infra", "NOMBRE INF",
-                                  "nombre_inf", "Nombre_inf"]:
-                    clave = _resolver_campo(candidato)
+                if campo_encabezado:
+                    # El usuario eligió un campo concreto
+                    clave = _resolver_campo(campo_encabezado)
                     val = str(r.get(clave, ""))
                     if val and val != "nan":
                         nombre = val
-                        break
                 if not nombre:
-                    nombre = f"Infra. {row_idx + 1}"
-                if nombre == "nan":
+                    # Fallback automático: buscar NOMBRE_INF
+                    for candidato in ["NOMBRE_INF", "Nombre_Infra", "NOMBRE INF",
+                                      "nombre_inf", "Nombre_inf"]:
+                        clave = _resolver_campo(candidato)
+                        val = str(r.get(clave, ""))
+                        if val and val != "nan":
+                            nombre = val
+                            break
+                if not nombre:
                     nombre = f"Infra. {row_idx + 1}"
                 if len(nombre) > max_val + 8:
                     nombre = nombre[:max_val + 7] + "\u2026"

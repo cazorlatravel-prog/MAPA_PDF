@@ -269,6 +269,7 @@ class App(tk.Tk):
             "proveedor": self.panel_config.proveedor.get(),
             "transparencia": self.panel_capas.transparencia.get(),
             "campos": self.panel_campos.obtener_campos_activos(),
+            "campo_encabezado": self.panel_campos.obtener_campo_encabezado(),
             "color_infra": self.panel_config.color_infra,
             "salida": self.panel_config.salida.get(),
             "escala_manual": self.panel_config.escala_manual,

@@ -267,7 +267,7 @@ class GeneradorPlanos:
                       proveedor: str, transparencia_montes: float,
                       campos_visibles: list, color_infra: str,
                       salida_dir: str, escala_manual: int = None,
-                      callback_log=None) -> str:
+                      callback_log=None, campo_encabezado: str = None) -> str:
         self._ensure_agg()
 
         def log(msg):
@@ -312,7 +312,8 @@ class GeneradorPlanos:
 
         maq.dibujar_grid_utm(xmin, xmax, ymin, ymax)
         maq.dibujar_panel_atributos(row, campos_visibles,
-                                     campo_mapeo=self._campo_mapeo)
+                                     campo_mapeo=self._campo_mapeo,
+                                     campo_encabezado=campo_encabezado)
 
         cx, cy = geom.centroid.x, geom.centroid.y
         maq.dibujar_mapa_posicion(cx, cy)
@@ -340,7 +341,8 @@ class GeneradorPlanos:
                                 campos_visibles: list, color_infra: str,
                                 salida_dir: str, num_plano: int = 1,
                                 escala_manual: int = None,
-                                callback_log=None) -> str:
+                                callback_log=None,
+                                campo_encabezado: str = None) -> str:
         self._ensure_agg()
 
         def log(msg):
@@ -387,7 +389,8 @@ class GeneradorPlanos:
         maq.dibujar_grid_utm(xmin, xmax, ymin, ymax)
 
         maq.dibujar_panel_atributos_multi(rows, campos_visibles,
-                                           campo_mapeo=self._campo_mapeo)
+                                           campo_mapeo=self._campo_mapeo,
+                                           campo_encabezado=campo_encabezado)
 
         cx, cy = geom_union.centroid.x, geom_union.centroid.y
         maq.dibujar_mapa_posicion(cx, cy)
@@ -417,7 +420,8 @@ class GeneradorPlanos:
     def generar_serie(self, indices: list, formato_key: str, proveedor: str,
                       transparencia: float, campos: list, color_infra: str,
                       salida_dir: str, escala_manual: int = None,
-                      callback_log=None, callback_progreso=None) -> list:
+                      callback_log=None, callback_progreso=None,
+                      campo_encabezado: str = None) -> list:
         rutas = []
         total = len(indices)
         for i, idx in enumerate(indices):
@@ -432,6 +436,7 @@ class GeneradorPlanos:
                     campos_visibles=campos, color_infra=color_infra,
                     salida_dir=salida_dir, escala_manual=escala_manual,
                     callback_log=callback_log,
+                    campo_encabezado=campo_encabezado,
                 )
                 rutas.append(ruta)
             except GeneracionCancelada:
@@ -452,7 +457,8 @@ class GeneradorPlanos:
                                 escala_manual: int = None,
                                 callback_log=None,
                                 callback_progreso=None,
-                                indices_filtro: dict = None) -> list:
+                                indices_filtro: dict = None,
+                                campo_encabezado: str = None) -> list:
         rutas = []
         total = len(valores)
         for i, valor in enumerate(valores):
@@ -479,6 +485,7 @@ class GeneradorPlanos:
                     salida_dir=salida_dir, num_plano=i + 1,
                     escala_manual=escala_manual,
                     callback_log=callback_log,
+                    campo_encabezado=campo_encabezado,
                 )
                 rutas.append(ruta)
             except GeneracionCancelada:
@@ -498,7 +505,8 @@ class GeneradorPlanos:
                                  ruta_pdf: str, escala_manual: int = None,
                                  incluir_portada: bool = False,
                                  callback_log=None,
-                                 callback_progreso=None) -> str:
+                                 callback_progreso=None,
+                                 campo_encabezado: str = None) -> str:
         from matplotlib.backends.backend_pdf import PdfPages
 
         self._ensure_agg()
@@ -583,7 +591,8 @@ class GeneradorPlanos:
 
                     maq.dibujar_grid_utm(xmin, xmax, ymin, ymax)
                     maq.dibujar_panel_atributos(row, campos,
-                                                 campo_mapeo=self._campo_mapeo)
+                                                 campo_mapeo=self._campo_mapeo,
+                                                 campo_encabezado=campo_encabezado)
 
                     cx, cy = geom.centroid.x, geom.centroid.y
                     maq.dibujar_mapa_posicion(cx, cy)
@@ -617,7 +626,8 @@ class GeneradorPlanos:
                            transparencia: float, campos: list,
                            color_infra: str, escala_manual: int = None,
                            callback_log=None,
-                           callback_progreso=None) -> list:
+                           callback_progreso=None,
+                           campo_encabezado: str = None) -> list:
         """Genera planos por lotes a partir de un CSV de configuración."""
         lotes = cargar_lotes_csv(ruta_csv)
         if not lotes:
@@ -653,6 +663,7 @@ class GeneradorPlanos:
                     campos=campos, color_infra=color_infra,
                     salida_dir=carpeta, escala_manual=escala_manual,
                     callback_log=callback_log,
+                    campo_encabezado=campo_encabezado,
                 )
                 rutas.extend(resultados)
             except Exception as e:
