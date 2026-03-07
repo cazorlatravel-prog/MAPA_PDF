@@ -333,11 +333,18 @@ class MaquetadorPlano:
                     (x0, card_top - header_h), col_w, header_h,
                     facecolor="#2C3E50", edgecolor="none", zorder=1))
 
-                # Obtener nombre de la infra (primer campo o Nombre_Infra)
-                nombre_campo = _resolver_campo(
-                    "Nombre_Infra" if "Nombre_Infra" in campos_mostrar
-                    else campos_mostrar[0])
-                nombre = str(r.get(nombre_campo, f"Infra. {row_idx + 1}"))
+                # Obtener nombre de la infra: buscar NOMBRE_INF en los datos
+                # independientemente de si está en campos_mostrar
+                nombre = None
+                for candidato in ["NOMBRE_INF", "Nombre_Infra", "NOMBRE INF",
+                                  "nombre_inf", "Nombre_inf"]:
+                    clave = _resolver_campo(candidato)
+                    val = str(r.get(clave, ""))
+                    if val and val != "nan":
+                        nombre = val
+                        break
+                if not nombre:
+                    nombre = f"Infra. {row_idx + 1}"
                 if nombre == "nan":
                     nombre = f"Infra. {row_idx + 1}"
                 if len(nombre) > max_val + 8:
