@@ -20,8 +20,6 @@ import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 from matplotlib.patches import FancyBboxPatch, Rectangle
 from matplotlib.lines import Line2D
-from pyproj import Transformer
-
 from .escala import (
     MARGENES_MM, FORMATOS, INTERVALOS_GRID, BARRA_ESCALA_M,
     RATIO_MAPA_ANCHO, RATIO_MAPA_ALTO,
@@ -45,19 +43,6 @@ ETIQUETAS_CAMPOS = {
 
 DPI = 300  # calidad de impresión
 _CABECERA_MM = 8
-
-_DECL_MAG = {"oeste": 0.5, "centro": 1.0, "este": 1.8, "sur": 0.8}
-
-
-def _estimar_declinacion(lon_deg):
-    if lon_deg < -5:
-        return _DECL_MAG["oeste"]
-    if lon_deg < -1:
-        return _DECL_MAG["centro"]
-    if lon_deg < 2:
-        return _DECL_MAG["sur"]
-    return _DECL_MAG["este"]
-
 
 def _etiqueta_campo(campo):
     """Devuelve una etiqueta embellecida o el nombre del campo tal cual."""
@@ -476,8 +461,7 @@ class MaquetadorPlano:
 
     # ── Cajetín + Escala + Norte (panel inferior izquierdo) ───────────
 
-    def dibujar_barra_escala(self, proveedor: str, cx_utm=None, cy_utm=None,
-                              cajetin=None):
+    def dibujar_barra_escala(self, proveedor: str, cx_utm=None, cy_utm=None, cajetin=None):
         ax = self.ax_esc
         ax.set_xlim(0, 1)
         ax.set_ylim(0, 1)
@@ -541,20 +525,10 @@ class MaquetadorPlano:
                 f"Escala 1:{self.escala:,}", ha="center", va="bottom",
                 fontsize=5, fontweight="bold", color="#1A1A2E")
 
-        # ── Norte geográfico (mini) ──
+        # ── Norte geográfico ──
         norte_x = 0.82
         norte_y_base = esc_y - 0.005
         norte_h = 0.09
-
-        decl = 0.0
-        if cx_utm is not None and cy_utm is not None:
-            try:
-                tr = Transformer.from_crs("EPSG:25830", "EPSG:4326",
-                                          always_xy=True)
-                lon, _ = tr.transform(cx_utm, cy_utm)
-                decl = _estimar_declinacion(lon)
-            except Exception:
-                pass
 
         ax.annotate("", xy=(norte_x, norte_y_base + norte_h),
                     xytext=(norte_x, norte_y_base),
@@ -562,18 +536,6 @@ class MaquetadorPlano:
         ax.text(norte_x, norte_y_base + norte_h + 0.012, "N",
                 ha="center", va="bottom", fontsize=5.5, fontweight="bold",
                 color="#1A1A2E")
-
-        if abs(decl) > 0.1:
-            rad = math.radians(decl)
-            nm_x = norte_x + 0.06
-            dx = math.sin(rad) * 0.04
-            dy = math.cos(rad) * norte_h
-            ax.annotate("", xy=(nm_x + dx, norte_y_base + dy),
-                        xytext=(nm_x, norte_y_base),
-                        arrowprops=dict(arrowstyle="->", color="#E74C3C",
-                                        lw=0.5, linestyle="--"))
-            ax.text(nm_x + dx, norte_y_base + dy + 0.012, "NM",
-                    ha="center", va="bottom", fontsize=3, color="#E74C3C")
 
         # ── Créditos ──
         fecha = date.today().strftime("%d/%m/%Y")
@@ -687,16 +649,16 @@ class MaquetadorPlano:
 
     # ── Marcos ─────────────────────────────────────────────────────────
 
-    def dibujar_marcos(self, plantilla=None):
+    def dibujar_marcos(self, plantilla=None, cajetin=None):
         pl = plantilla or {}
         c_ext = pl.get("color_marco_exterior", "#1C2333")
         c_int = pl.get("color_marco_interior", "#2ECC71")
 
-        ax = self.fig.add_axes([0, 0, 1, 1])
+        ax = self.fig.add_axes([0, 0, 1, 1], zorder=20)
         ax.set_xlim(0, self.fmt_mm[0])
         ax.set_ylim(0, self.fmt_mm[1])
         ax.axis("off")
-        ax.set_zorder(-10)
+        ax.patch.set_visible(False)
         ax.add_patch(Rectangle(
             (3, 3), self.fmt_mm[0] - 6, self.fmt_mm[1] - 6,
             fill=False, edgecolor=c_ext, linewidth=2.0))
@@ -704,18 +666,22 @@ class MaquetadorPlano:
             (5, 5), self.fmt_mm[0] - 10, self.fmt_mm[1] - 10,
             fill=False, edgecolor=c_int, linewidth=0.5))
 
-        # Marca lateral discreta (borde izquierdo, vertical)
+        # Copyright lateral izquierdo (vertical)
+        copyright_text = cajetin.get("copyright", "") if cajetin else ""
+        if not copyright_text:
+            copyright_text = (
+                "Mapa creado con APP Generador Mapas Forestales / "
+                "Jose Caballero Sánchez / Aplicación Open Source de uso gratuito"
+            )
         ax.text(
-            1.5, self.fmt_mm[1] / 2,
-            "Mapa creado con APP Generador Mapas Forestales / "
-            "Jose Caballero Sánchez / Aplicación Open Source de uso gratuito",
+            1.8, self.fmt_mm[1] / 2, copyright_text,
             rotation=90, ha="center", va="center",
-            fontsize=3, color="#B0B0B0", alpha=0.45,
+            fontsize=3.5, color="#666666", alpha=0.7,
         )
 
     def guardar(self, ruta_out: str):
         self.fig.savefig(ruta_out, format="pdf", dpi=DPI,
-                          bbox_inches="tight", facecolor="white")
+                          facecolor="white")
         plt.close(self.fig)
 
 

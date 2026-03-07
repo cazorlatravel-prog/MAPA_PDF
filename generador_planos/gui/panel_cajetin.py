@@ -112,6 +112,21 @@ class PanelCajetin:
                                                sticky="w", pady=(2, 6))
         row_idx += 2
 
+        # ── Etiquetas en el mapa (campo para nombres) ──
+        tk.Label(f, text="Etiqueta en mapa (campo):", font=FONT_SMALL,
+                 bg=COLOR_PANEL, fg=COLOR_TEXTO).grid(
+                 row=row_idx, column=0, sticky="w")
+        self._campo_etiqueta = tk.StringVar(value="Nombre_Infra")
+        self._cb_campo_etiq = ttk.Combobox(
+            f, textvariable=self._campo_etiqueta,
+            values=["(sin etiqueta)", "Nombre_Infra"], state="readonly",
+            font=FONT_SMALL,
+        )
+        self._cb_campo_etiq.grid(row=row_idx + 1, column=0,
+                                  sticky="ew", pady=(2, 6))
+        self._cb_campo_etiq.current(1)
+        row_idx += 2
+
         # ── Colores de plantilla ──
         tk.Label(f, text="Colores plantilla:", font=FONT_BOLD,
                  bg=COLOR_PANEL, fg=COLOR_TEXTO_GRIS).grid(
@@ -186,11 +201,21 @@ class PanelCajetin:
         self._lbl_logo.configure(text="Sin logo", fg=COLOR_TEXTO_GRIS)
 
     def actualizar_campos_subtitulo(self, columnas: list):
-        """Actualiza el combobox de campo para subtítulo dinámico."""
-        valores = ["(ninguno)"] + [c for c in columnas if c.lower() != "geometry"]
-        self._cb_campo_sub.configure(values=valores)
-        if self._campo_subtitulo.get() not in valores:
+        """Actualiza los combobox de campo para subtítulo y etiquetas."""
+        cols = [c for c in columnas if c.lower() != "geometry"]
+        valores_sub = ["(ninguno)"] + cols
+        self._cb_campo_sub.configure(values=valores_sub)
+        if self._campo_subtitulo.get() not in valores_sub:
             self._cb_campo_sub.current(0)
+
+        valores_etiq = ["(sin etiqueta)"] + cols
+        self._cb_campo_etiq.configure(values=valores_etiq)
+        if self._campo_etiqueta.get() not in valores_etiq:
+            # Default to Nombre_Infra if available
+            if "Nombre_Infra" in cols:
+                self._campo_etiqueta.set("Nombre_Infra")
+            else:
+                self._cb_campo_etiq.current(0)
 
     def _aplicar(self):
         cajetin = self.obtener_cajetin()
@@ -219,6 +244,9 @@ class PanelCajetin:
             "campo_subtitulo": campo_sub,
             "logo_path": self._logo_path.get(),
             "num_plano_inicio": num_inicio,
+            "campo_etiqueta": (self._campo_etiqueta.get()
+                               if self._campo_etiqueta.get() != "(sin etiqueta)"
+                               else ""),
         }
 
     def obtener_plantilla(self) -> dict:

@@ -73,6 +73,30 @@ def aplicar_estilos(root: tk.Tk):
         background=COLOR_ACENTO,
     )
 
+    # Scrollbar marrón visible
+    style.configure(
+        "Vertical.TScrollbar",
+        background="#8B5E3C",
+        troughcolor=COLOR_BORDE,
+        arrowcolor=COLOR_TEXTO,
+        borderwidth=0,
+    )
+    style.map(
+        "Vertical.TScrollbar",
+        background=[("active", "#A0724B"), ("pressed", "#6B4226")],
+    )
+    style.configure(
+        "Horizontal.TScrollbar",
+        background="#8B5E3C",
+        troughcolor=COLOR_BORDE,
+        arrowcolor=COLOR_TEXTO,
+        borderwidth=0,
+    )
+    style.map(
+        "Horizontal.TScrollbar",
+        background=[("active", "#A0724B"), ("pressed", "#6B4226")],
+    )
+
 
 def crear_frame_seccion(parent, titulo: str) -> tk.Frame:
     """Crea un frame con título y separador verde."""

@@ -278,7 +278,10 @@ class GeneradorPlanos:
         ax_map.set_ylim(ymin, ymax)
 
         # Etiquetas
-        maq.dibujar_etiquetas_infra(gdf_sel, campo_mapeo=self._campo_mapeo)
+        campo_etiq = self._cajetin.get("campo_etiqueta", "Nombre_Infra")
+        if campo_etiq:
+            maq.dibujar_etiquetas_infra(gdf_sel, campo_etiqueta=campo_etiq,
+                                         campo_mapeo=self._campo_mapeo)
 
         # Leyenda
         items_ley = self._construir_items_leyenda(gdf_sel, color_infra)
@@ -294,7 +297,7 @@ class GeneradorPlanos:
                                   cajetin=self._cajetin)
         maq.dibujar_cabecera(row, cajetin=self._cajetin, plantilla=self._plantilla)
         maq.dibujar_cajetin(self._cajetin)
-        maq.dibujar_marcos(plantilla=self._plantilla)
+        maq.dibujar_marcos(plantilla=self._plantilla, cajetin=self._cajetin)
 
         nombre_infra = str(row.get("Nombre_Infra", f"infra_{idx_fila:04d}"))
         nombre_infra = "".join(c for c in nombre_infra if c.isalnum() or c in "_ -")[:40]
@@ -347,7 +350,10 @@ class GeneradorPlanos:
         ax_map.set_ylim(ymin, ymax)
 
         # Etiquetas
-        maq.dibujar_etiquetas_infra(gdf_grupo, campo_mapeo=self._campo_mapeo)
+        campo_etiq = self._cajetin.get("campo_etiqueta", "Nombre_Infra")
+        if campo_etiq:
+            maq.dibujar_etiquetas_infra(gdf_grupo, campo_etiqueta=campo_etiq,
+                                         campo_mapeo=self._campo_mapeo)
 
         # Leyenda con estadísticas
         items_ley = self._construir_items_leyenda(gdf_grupo, color_infra)
@@ -371,7 +377,7 @@ class GeneradorPlanos:
                               cajetin=self._cajetin, plantilla=self._plantilla)
 
         maq.dibujar_cajetin(self._cajetin)
-        maq.dibujar_marcos(plantilla=self._plantilla)
+        maq.dibujar_marcos(plantilla=self._plantilla, cajetin=self._cajetin)
 
         nombre_safe = "".join(c for c in valor_grupo if c.isalnum() or c in "_ -")[:40]
         nombre_arch = f"plano_grupo_{num_plano:04d}_{nombre_safe}.pdf"
@@ -527,9 +533,12 @@ class GeneradorPlanos:
                     ax_map.set_xlim(xmin, xmax)
                     ax_map.set_ylim(ymin, ymax)
 
-                    # Etiquetas y vértices
-                    maq.dibujar_etiquetas_infra(gdf_sel,
-                                                 campo_mapeo=self._campo_mapeo)
+                    # Etiquetas
+                    campo_etiq = self._cajetin.get("campo_etiqueta", "Nombre_Infra")
+                    if campo_etiq:
+                        maq.dibujar_etiquetas_infra(
+                            gdf_sel, campo_etiqueta=campo_etiq,
+                            campo_mapeo=self._campo_mapeo)
 
                     # Leyenda
                     items_ley = self._construir_items_leyenda(gdf_sel, color_infra)
@@ -546,7 +555,7 @@ class GeneradorPlanos:
                     maq.dibujar_cabecera(row, cajetin=self._cajetin,
                                           plantilla=self._plantilla)
                     maq.dibujar_cajetin(self._cajetin)
-                    maq.dibujar_marcos(plantilla=self._plantilla)
+                    maq.dibujar_marcos(plantilla=self._plantilla, cajetin=self._cajetin)
 
                     pdf.savefig(fig, dpi=300, facecolor="white")
                     plt.close(fig)
