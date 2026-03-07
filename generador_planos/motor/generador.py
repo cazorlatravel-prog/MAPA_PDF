@@ -221,36 +221,84 @@ class GeneradorPlanos:
         ci = self.config_infra
         lw = ci.get("linewidth", 2.5)
         alpha_infra = ci.get("alpha", 1.0)
+        campo_cat = ci.get("campo_categoria")
 
         geom_type = ""
         for geom_single in gdf_sel.geometry:
             geom_type = str(geom_single.geom_type).lower()
             break
 
-        if "point" in geom_type:
-            gdf_sel.plot(ax=ax_map, color=color_infra, markersize=12,
-                         marker="o", zorder=5, edgecolor="white",
-                         linewidth=0.8, alpha=alpha_infra)
-        elif "line" in geom_type or "string" in geom_type:
-            gdf_sel.plot(ax=ax_map, color=color_infra, linewidth=lw,
-                         zorder=5, alpha=alpha_infra)
+        # ── Categorización por campo ──
+        if campo_cat and campo_cat in gdf_sel.columns:
+            # Resolver campo real por mapeo si existe
+            campo_real = campo_cat
+            if self._campo_mapeo and campo_cat in self._campo_mapeo:
+                campo_real = self._campo_mapeo[campo_cat]
+
+            valores_unicos = gdf_sel[campo_real].astype(str).unique()
+            for valor in valores_unicos:
+                simb = self.gestor_simbologia.obtener_simbologia_infra(
+                    campo_cat, valor)
+                mask = gdf_sel[campo_real].astype(str) == valor
+                gdf_cat = gdf_sel[mask]
+                if gdf_cat.empty:
+                    continue
+                c = simb.color
+                ls = simb.linestyle
+                if "point" in geom_type:
+                    gdf_cat.plot(ax=ax_map, color=c, markersize=12,
+                                 marker=simb.marker, zorder=5,
+                                 edgecolor="white", linewidth=0.8,
+                                 alpha=alpha_infra)
+                elif "line" in geom_type or "string" in geom_type:
+                    gdf_cat.plot(ax=ax_map, color=c, linewidth=lw,
+                                 linestyle=ls, zorder=5,
+                                 alpha=alpha_infra)
+                else:
+                    gdf_cat.plot(ax=ax_map, facecolor=simb.facecolor,
+                                 edgecolor=c, linewidth=lw,
+                                 linestyle=ls, zorder=5,
+                                 alpha=alpha_infra)
         else:
-            gdf_sel.plot(ax=ax_map, facecolor=color_infra + "55",
-                         edgecolor=color_infra, linewidth=lw,
-                         zorder=5, alpha=alpha_infra)
+            # Sin categoría: color único
+            if "point" in geom_type:
+                gdf_sel.plot(ax=ax_map, color=color_infra, markersize=12,
+                             marker="o", zorder=5, edgecolor="white",
+                             linewidth=0.8, alpha=alpha_infra)
+            elif "line" in geom_type or "string" in geom_type:
+                gdf_sel.plot(ax=ax_map, color=color_infra, linewidth=lw,
+                             zorder=5, alpha=alpha_infra)
+            else:
+                gdf_sel.plot(ax=ax_map, facecolor=color_infra + "55",
+                             edgecolor=color_infra, linewidth=lw,
+                             zorder=5, alpha=alpha_infra)
 
     def _construir_items_leyenda(self, gdf_sel, color_infra):
         """Construye items de leyenda para infra + capas extra."""
         items = []
 
-        # Infraestructuras
         geom_type = ""
         for g in gdf_sel.geometry:
             if g is not None:
                 geom_type = str(g.geom_type).lower()
                 break
-        items.append(("Infraestructuras", color_infra, geom_type, "-", "o",
-                       color_infra + "55"))
+
+        # Infraestructuras: por categoría o color único
+        campo_cat = self.config_infra.get("campo_categoria")
+        if campo_cat and campo_cat in gdf_sel.columns:
+            campo_real = campo_cat
+            if self._campo_mapeo and campo_cat in self._campo_mapeo:
+                campo_real = self._campo_mapeo[campo_cat]
+            valores_unicos = sorted(gdf_sel[campo_real].astype(str).unique())
+            for valor in valores_unicos:
+                simb = self.gestor_simbologia.obtener_simbologia_infra(
+                    campo_cat, valor)
+                label = str(valor)[:25]
+                items.append((label, simb.color, geom_type, simb.linestyle,
+                              simb.marker, simb.facecolor))
+        else:
+            items.append(("Infraestructuras", color_infra, geom_type, "-", "o",
+                           color_infra + "55"))
 
         # Montes
         if self.gdf_montes is not None:
