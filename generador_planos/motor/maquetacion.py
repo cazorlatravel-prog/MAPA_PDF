@@ -391,8 +391,8 @@ class MaquetadorPlano:
     def dibujar_mapa_posicion(self, cx, cy):
         ax = self.ax_mini
 
-        # ── Escala fija 1:25.000 ──
-        escala_loc = 25_000
+        # ── Escala fija 1:250.000 ──
+        escala_loc = 250_000
 
         # Tamaño físico aproximado del panel de localización (mm)
         ancho_util = self.fmt_mm[0] - MARGENES_MM["izq"] - MARGENES_MM["der"]
@@ -454,7 +454,7 @@ class MaquetadorPlano:
 
         # ── Escala del mapa de localización ──
         extent_m = xmax_m - xmin_m
-        barra_loc_m = 1000  # 1 km
+        barra_loc_m = 5000  # 5 km
         barra_frac = barra_loc_m / extent_m
 
         bar_x0 = 0.05
