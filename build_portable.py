@@ -107,7 +107,7 @@ HIDDEN_IMPORTS = [
 ]
 
 EXCLUDE = [
-    "pytest", "test", "unittest", "pip",
+    "pytest", "pip",
     "IPython", "jupyter", "notebook", "sphinx",
     "tkinter.test",
 ]

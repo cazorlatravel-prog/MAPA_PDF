@@ -131,7 +131,7 @@ def construir_exe(modo_onefile=False):
         cmd.extend(["--hidden-import", mod])
 
     # Excluir módulos innecesarios para reducir tamaño
-    for excl in ["pytest", "test", "unittest", "pip",
+    for excl in ["pytest", "pip",
                  "IPython", "jupyter", "notebook", "sphinx"]:
         cmd.extend(["--exclude-module", excl])
 
