@@ -154,10 +154,12 @@ class MaquetadorPlano:
                            color="#2C3E50", rotation=30, ha="left")
         ax.set_yticklabels([f"{int(y)}" for y in ys_filt], fontsize=4.5,
                            color="#2C3E50")
-        # Mover etiquetas X arriba para evitar solapamiento con cajetines inferiores
+        # Etiquetas en los cuatro lados del mapa
         ax.tick_params(which="major", length=4, width=0.6, color="#2C3E50",
-                       direction="out", labelbottom=False, labeltop=True,
-                       labelleft=True, pad=1)
+                       direction="out", labelbottom=True, labeltop=True,
+                       labelleft=True, labelright=True, pad=1)
+        # Etiquetas inferiores sin rotación y tamaño reducido para no solapar cajetines
+        ax.tick_params(axis="x", which="major", labelsize=3.5)
 
         # Líneas de cuadrícula completas (estilo cartográfico profesional)
         for x in xs:
