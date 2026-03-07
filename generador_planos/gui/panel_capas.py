@@ -17,7 +17,7 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 from .estilos import (
-    COLOR_PANEL, COLOR_TEXTO, COLOR_TEXTO_GRIS, COLOR_BORDE,
+    COLOR_PANEL, COLOR_TEXTO, COLOR_TEXTO_GRIS, COLOR_BORDE, COLOR_ENTRY,
     COLOR_ACENTO, COLOR_ERROR,
     FONT_BOLD, FONT_SMALL,
     crear_frame_seccion, crear_boton,
@@ -46,7 +46,7 @@ class PanelCapas:
         self._ruta_infra = tk.StringVar(value="Sin cargar")
         tk.Label(f, textvariable=self._ruta_infra, font=FONT_SMALL,
                  bg=COLOR_PANEL, fg=COLOR_TEXTO_GRIS,
-                 wraplength=240, justify="left").grid(row=1, column=0, sticky="w")
+                 wraplength=300, justify="left").grid(row=1, column=0, sticky="ew")
 
         btn_infra_f = tk.Frame(f, bg=COLOR_PANEL)
         btn_infra_f.grid(row=2, column=0, sticky="ew", pady=(4, 8))
@@ -65,7 +65,7 @@ class PanelCapas:
         self._ruta_montes = tk.StringVar(value="Sin cargar")
         tk.Label(f, textvariable=self._ruta_montes, font=FONT_SMALL,
                  bg=COLOR_PANEL, fg=COLOR_TEXTO_GRIS,
-                 wraplength=240, justify="left").grid(row=4, column=0, sticky="w")
+                 wraplength=300, justify="left").grid(row=4, column=0, sticky="ew")
 
         btn_montes_f = tk.Frame(f, bg=COLOR_PANEL)
         btn_montes_f.grid(row=5, column=0, sticky="ew", pady=(4, 2))
@@ -309,7 +309,7 @@ class PanelCapas:
 
         ok, msg, faltantes = self.motor.cargar_infraestructuras(ruta, layer=capa)
         if ok:
-            self._ruta_infra.set(f"{os.path.basename(ruta)} / {capa}")
+            self._ruta_infra.set(f"{os.path.basename(ruta)}\n{capa}")
             self.callback_log(msg, "ok")
             self.callback_tabla()
             self._previsualizar(self.motor.gdf_infra)
@@ -329,7 +329,7 @@ class PanelCapas:
 
         ok, msg = self.motor.cargar_montes(ruta, layer=capa)
         if ok:
-            self._ruta_montes.set(f"{os.path.basename(ruta)} / {capa}")
+            self._ruta_montes.set(f"{os.path.basename(ruta)}\n{capa}")
             self.callback_log(msg, "ok")
         else:
             self._ruta_montes.set("Error al cargar")
@@ -354,7 +354,7 @@ class PanelCapas:
                  bg=COLOR_PANEL, fg=COLOR_TEXTO).pack(padx=10, pady=(10, 2))
         nombre_var = tk.StringVar(value=capa)
         tk.Entry(dialog, textvariable=nombre_var, font=FONT_SMALL,
-                 bg=COLOR_BORDE, fg=COLOR_TEXTO, insertbackground="white",
+                 bg=COLOR_ENTRY, fg=COLOR_TEXTO, insertbackground="white",
                  relief="flat").pack(padx=10, fill="x")
 
         tk.Label(dialog, text="Tipo de capa:", font=FONT_BOLD,
@@ -402,7 +402,7 @@ class PanelCapas:
         nombre_var = tk.StringVar(
             value=os.path.splitext(os.path.basename(ruta))[0])
         tk.Entry(dialog, textvariable=nombre_var, font=FONT_SMALL,
-                 bg=COLOR_BORDE, fg=COLOR_TEXTO, insertbackground="white",
+                 bg=COLOR_ENTRY, fg=COLOR_TEXTO, insertbackground="white",
                  relief="flat").pack(padx=10, fill="x")
 
         tk.Label(dialog, text="Tipo de capa:", font=FONT_BOLD,

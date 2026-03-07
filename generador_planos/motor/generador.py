@@ -318,6 +318,7 @@ class GeneradorPlanos:
         maq.dibujar_mapa_posicion(cx, cy)
         maq.dibujar_barra_escala(proveedor, cx_utm=cx, cy_utm=cy,
                                   cajetin=self._cajetin)
+        maq.dibujar_norte_en_mapa()
         maq.dibujar_cabecera(row, cajetin=self._cajetin, plantilla=self._plantilla)
         maq.dibujar_cajetin(self._cajetin)
         maq.dibujar_marcos(plantilla=self._plantilla, cajetin=self._cajetin)
@@ -392,6 +393,7 @@ class GeneradorPlanos:
         maq.dibujar_mapa_posicion(cx, cy)
         maq.dibujar_barra_escala(proveedor, cx_utm=cx, cy_utm=cy,
                                   cajetin=self._cajetin)
+        maq.dibujar_norte_en_mapa()
 
         etiq_campo = ETIQUETAS_CAMPOS.get(campo_grupo, campo_grupo)
         titulo_grupo = f"{etiq_campo}: {valor_grupo}"
@@ -587,6 +589,7 @@ class GeneradorPlanos:
                     maq.dibujar_mapa_posicion(cx, cy)
                     maq.dibujar_barra_escala(proveedor, cx_utm=cx, cy_utm=cy,
                                               cajetin=self._cajetin)
+                    maq.dibujar_norte_en_mapa()
                     maq.dibujar_cabecera(row, cajetin=self._cajetin,
                                           plantilla=self._plantilla)
                     maq.dibujar_cajetin(self._cajetin)

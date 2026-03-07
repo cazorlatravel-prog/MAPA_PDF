@@ -10,8 +10,8 @@ import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 
 from .estilos import (
-    COLOR_PANEL, COLOR_TEXTO, COLOR_TEXTO_GRIS, COLOR_BORDE, COLOR_ACENTO,
-    FONT_BOLD, FONT_SMALL, FONT_LABEL,
+    COLOR_PANEL, COLOR_TEXTO, COLOR_TEXTO_GRIS, COLOR_BORDE, COLOR_ENTRY,
+    COLOR_ACENTO, FONT_BOLD, FONT_SMALL, FONT_LABEL,
     crear_frame_seccion, crear_boton,
 )
 from ..motor.maquetacion import ETIQUETAS_CAMPOS
@@ -58,7 +58,7 @@ class PanelGeneracion:
         rango_f.grid(row=3, column=1, sticky="w", padx=(4, 0))
 
         self._rango_desde = tk.Entry(rango_f, width=5, font=FONT_SMALL,
-                                      bg=COLOR_BORDE, fg=COLOR_TEXTO,
+                                      bg=COLOR_ENTRY, fg=COLOR_TEXTO,
                                       insertbackground="white", relief="flat")
         self._rango_desde.insert(0, "1")
         self._rango_desde.pack(side="left")
@@ -67,7 +67,7 @@ class PanelGeneracion:
                  font=FONT_SMALL).pack(side="left", padx=2)
 
         self._rango_hasta = tk.Entry(rango_f, width=5, font=FONT_SMALL,
-                                      bg=COLOR_BORDE, fg=COLOR_TEXTO,
+                                      bg=COLOR_ENTRY, fg=COLOR_TEXTO,
                                       insertbackground="white", relief="flat")
         self._rango_hasta.insert(0, "10")
         self._rango_hasta.pack(side="left")
@@ -90,41 +90,28 @@ class PanelGeneracion:
         self._cb_campo_agrup.grid(row=0, column=1, sticky="ew", padx=(4, 0))
         self._cb_campo_agrup.bind("<<ComboboxSelected>>", self._on_campo_agrup_changed)
 
-        tk.Label(self._frame_agrupacion, text="Valores a generar:",
-                 font=FONT_SMALL, bg=COLOR_PANEL, fg=COLOR_TEXTO_GRIS).grid(
-                 row=1, column=0, columnspan=2, sticky="w", pady=(4, 0))
-
-        self._frame_valores = tk.Frame(self._frame_agrupacion, bg=COLOR_PANEL)
-        self._frame_valores.grid(row=2, column=0, columnspan=2, sticky="ew")
-
-        self._canvas_valores = tk.Canvas(self._frame_valores, bg=COLOR_PANEL,
-                                          highlightthickness=0, height=100)
-        self._sb_valores = ttk.Scrollbar(self._frame_valores, orient="vertical",
-                                          command=self._canvas_valores.yview)
-        self._inner_valores = tk.Frame(self._canvas_valores, bg=COLOR_PANEL)
-        self._inner_valores.bind(
-            "<Configure>",
-            lambda e: self._canvas_valores.configure(
-                scrollregion=self._canvas_valores.bbox("all")),
+        # Resumen de valores + botón para abrir popup de selección
+        self._lbl_valores_resumen = tk.Label(
+            self._frame_agrupacion,
+            text="Valores a generar: (sin datos)",
+            font=FONT_SMALL, bg=COLOR_BORDE, fg=COLOR_TEXTO,
+            anchor="w", padx=6, pady=4, cursor="hand2", relief="flat",
+            wraplength=300, justify="left",
         )
-        self._canvas_valores.create_window((0, 0), window=self._inner_valores,
-                                            anchor="nw")
-        self._canvas_valores.configure(yscrollcommand=self._sb_valores.set)
-        self._canvas_valores.pack(side="left", fill="both", expand=True)
-        self._sb_valores.pack(side="right", fill="y")
+        self._lbl_valores_resumen.grid(row=1, column=0, columnspan=2,
+                                        sticky="ew", pady=(4, 0))
+        self._lbl_valores_resumen.bind("<Button-1>", lambda e: self._abrir_popup_valores())
 
         btn_sel_f = tk.Frame(self._frame_agrupacion, bg=COLOR_PANEL)
-        btn_sel_f.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(2, 0))
-        tk.Button(btn_sel_f, text="Todos", command=self._seleccionar_todos_valores,
-                  font=FONT_SMALL, bg=COLOR_BORDE, fg=COLOR_TEXTO,
-                  relief="flat", cursor="hand2", padx=4).pack(side="left", padx=(0, 4))
-        tk.Button(btn_sel_f, text="Ninguno", command=self._deseleccionar_todos_valores,
-                  font=FONT_SMALL, bg=COLOR_BORDE, fg=COLOR_TEXTO,
-                  relief="flat", cursor="hand2", padx=4).pack(side="left")
+        btn_sel_f.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(2, 0))
+        tk.Button(btn_sel_f, text="Seleccionar valores\u2026",
+                  command=self._abrir_popup_valores,
+                  font=FONT_SMALL, bg=COLOR_ACENTO, fg="#1A1A2E",
+                  relief="flat", cursor="hand2", padx=6).pack(side="left", padx=(0, 4))
         tk.Button(btn_sel_f, text="Detalle\u2026",
                   command=self._abrir_popup_detalle,
-                  font=FONT_SMALL, bg=COLOR_ACENTO, fg="#1A1A2E",
-                  relief="flat", cursor="hand2", padx=4).pack(side="left", padx=(4, 0))
+                  font=FONT_SMALL, bg=COLOR_BORDE, fg=COLOR_TEXTO,
+                  relief="flat", cursor="hand2", padx=4).pack(side="left", padx=(0, 4))
 
         self._check_valores = {}
         # {valor_grupo: [indices]} — si no existe la clave, se usan todos
@@ -233,41 +220,144 @@ class PanelGeneracion:
         self._cb_campo_agrup.configure(values=campos)
 
     def _actualizar_valores_agrupacion(self):
-        for widget in self._inner_valores.winfo_children():
-            widget.destroy()
         self._check_valores.clear()
-        self._indices_filtrados.clear()
+        # Solo limpiar filtro detallado si cambió el campo de agrupación
+        campo_actual = self._campo_agrupacion.get()
+        if not hasattr(self, "_ultimo_campo_agrup") or self._ultimo_campo_agrup != campo_actual:
+            self._indices_filtrados.clear()
+            self._ultimo_campo_agrup = campo_actual
 
         campo = self._campo_agrupacion.get()
         valores = self.motor.obtener_valores_unicos(campo)
 
         if not valores:
-            tk.Label(self._inner_valores,
-                     text="(sin datos - carga primero el shapefile)",
-                     font=FONT_SMALL, bg=COLOR_PANEL, fg=COLOR_TEXTO_GRIS).pack(
-                     anchor="w", padx=4)
+            self._lbl_valores_resumen.configure(
+                text="Valores a generar: (sin datos - carga primero el shapefile)")
             return
 
         for valor in valores:
-            var = tk.BooleanVar(value=True)
+            self._check_valores[valor] = tk.BooleanVar(value=True)
+
+        self._actualizar_resumen_valores()
+
+    def _actualizar_resumen_valores(self):
+        """Actualiza la etiqueta resumen con los valores seleccionados."""
+        total = len(self._check_valores)
+        sel = sum(1 for v in self._check_valores.values() if v.get())
+        if total == 0:
+            self._lbl_valores_resumen.configure(
+                text="Valores a generar: (sin datos)")
+            return
+        nombres_sel = [n for n, v in self._check_valores.items() if v.get()]
+        preview = ", ".join(nombres_sel[:4])
+        if len(nombres_sel) > 4:
+            preview += f"... (+{len(nombres_sel) - 4} más)"
+        self._lbl_valores_resumen.configure(
+            text=f"Valores a generar ({sel}/{total}):  {preview}\n"
+                 f"Pulsa aquí para ver/seleccionar todos")
+
+    def _abrir_popup_valores(self):
+        """Abre ventana emergente para seleccionar valores de agrupación."""
+        if not self._check_valores:
+            messagebox.showinfo("Info",
+                                "No hay valores. Carga primero el shapefile.")
+            return
+
+        campo = self._campo_agrupacion.get()
+
+        popup = tk.Toplevel(self._parent_window)
+        popup.title(f"Seleccionar valores de: {campo}")
+        popup.geometry("500x450")
+        popup.configure(bg=COLOR_PANEL)
+        popup.transient(self._parent_window)
+        popup.grab_set()
+
+        tk.Label(popup, text=f"Valores a generar (campo: {campo})",
+                 font=FONT_BOLD, bg=COLOR_PANEL, fg=COLOR_TEXTO).pack(
+                 anchor="w", padx=8, pady=(8, 4))
+
+        # Frame con scroll
+        container = tk.Frame(popup, bg=COLOR_PANEL)
+        container.pack(fill="both", expand=True, padx=8, pady=4)
+
+        canvas = tk.Canvas(container, bg=COLOR_PANEL, highlightthickness=0)
+        sb = ttk.Scrollbar(container, orient="vertical", command=canvas.yview)
+        inner = tk.Frame(canvas, bg=COLOR_PANEL)
+        inner.bind("<Configure>",
+                   lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.create_window((0, 0), window=inner, anchor="nw")
+        canvas.configure(yscrollcommand=sb.set)
+        canvas.pack(side="left", fill="both", expand=True)
+        sb.pack(side="right", fill="y")
+
+        # Scroll con rueda del ratón
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+        def _on_mousewheel_linux(event):
+            if event.num == 4:
+                canvas.yview_scroll(-1, "units")
+            elif event.num == 5:
+                canvas.yview_scroll(1, "units")
+
+        canvas.bind("<MouseWheel>", _on_mousewheel)
+        canvas.bind("<Button-4>", _on_mousewheel_linux)
+        canvas.bind("<Button-5>", _on_mousewheel_linux)
+
+        # Checkboxes para cada valor
+        popup_vars = {}
+        for valor, main_var in self._check_valores.items():
             n = len(self.motor.obtener_indices_por_valor(campo, valor))
             texto = f"{valor}  ({n} infra.)"
+            var = tk.BooleanVar(value=main_var.get())
             cb = tk.Checkbutton(
-                self._inner_valores, text=texto, variable=var,
+                inner, text=texto, variable=var,
                 font=FONT_SMALL, bg=COLOR_PANEL, fg=COLOR_TEXTO,
                 selectcolor=COLOR_BORDE, activebackground=COLOR_PANEL,
                 cursor="hand2",
             )
-            cb.pack(anchor="w", padx=4, pady=1)
-            self._check_valores[valor] = var
+            cb.pack(anchor="w", padx=8, pady=2)
+            popup_vars[valor] = var
+
+        # Botones inferiores
+        btn_f = tk.Frame(popup, bg=COLOR_PANEL)
+        btn_f.pack(fill="x", padx=8, pady=(4, 8))
+
+        def _sel_todos():
+            for v in popup_vars.values():
+                v.set(True)
+
+        def _sel_ninguno():
+            for v in popup_vars.values():
+                v.set(False)
+
+        def _aplicar():
+            for valor, var in popup_vars.items():
+                self._check_valores[valor].set(var.get())
+            self._actualizar_resumen_valores()
+            popup.destroy()
+
+        popup.protocol("WM_DELETE_WINDOW", _aplicar)
+
+        tk.Button(btn_f, text="Todos", command=_sel_todos,
+                  font=FONT_SMALL, bg=COLOR_BORDE, fg=COLOR_TEXTO,
+                  relief="flat", cursor="hand2", padx=6).pack(side="left", padx=(0, 4))
+        tk.Button(btn_f, text="Ninguno", command=_sel_ninguno,
+                  font=FONT_SMALL, bg=COLOR_BORDE, fg=COLOR_TEXTO,
+                  relief="flat", cursor="hand2", padx=6).pack(side="left", padx=(0, 4))
+        tk.Button(btn_f, text="Aceptar", command=_aplicar,
+                  font=FONT_SMALL, bg=COLOR_ACENTO, fg="#1A1A2E",
+                  relief="flat", cursor="hand2", padx=12).pack(side="right")
 
     def _seleccionar_todos_valores(self):
         for var in self._check_valores.values():
             var.set(True)
+        self._actualizar_resumen_valores()
 
     def _deseleccionar_todos_valores(self):
         for var in self._check_valores.values():
             var.set(False)
+        self._actualizar_resumen_valores()
 
     def _abrir_popup_detalle(self):
         """Abre ventana emergente para seleccionar infraestructuras individuales."""
@@ -280,7 +370,7 @@ class PanelGeneracion:
 
         popup = tk.Toplevel(self._parent_window)
         popup.title("Seleccionar infraestructuras por grupo")
-        popup.geometry("620x500")
+        popup.geometry("800x550")
         popup.configure(bg=COLOR_PANEL)
         popup.transient(self._parent_window)
         popup.grab_set()
@@ -305,10 +395,11 @@ class PanelGeneracion:
 
         # Construir checkboxes por grupo → infraestructuras
         check_vars = {}  # {valor_grupo: [(idx, BooleanVar), ...]}
-        nombre_campo = "Nombre_Infra"
-        # Buscar el nombre real del campo en el mapeo
-        if self.motor._campo_mapeo and nombre_campo in self.motor._campo_mapeo:
-            nombre_campo = self.motor._campo_mapeo[nombre_campo]
+
+        # Determinar columnas útiles para la etiqueta de cada infra
+        gdf = self.motor.gdf_infra
+        cols_etiqueta = [c for c in gdf.columns
+                         if c.lower() != "geometry"][:5]  # máx 5 campos
 
         for valor in valores_sel:
             indices = self.motor.obtener_indices_por_valor(campo, valor)
@@ -320,11 +411,17 @@ class PanelGeneracion:
             grupo_vars = []
             prev_sel = self._indices_filtrados.get(valor)
             for idx in indices:
-                row = self.motor.gdf_infra.iloc[idx]
-                nombre = str(row.get(nombre_campo,
-                             row.get("Nombre_Infra", f"#{idx}")))
-                if nombre == "nan":
-                    nombre = f"#{idx}"
+                row = gdf.iloc[idx]
+                # Construir etiqueta con los campos reales disponibles
+                partes = []
+                for col in cols_etiqueta:
+                    val = str(row.get(col, ""))
+                    if val and val != "nan":
+                        # Truncar valores largos
+                        if len(val) > 25:
+                            val = val[:24] + "\u2026"
+                        partes.append(val)
+                nombre = " | ".join(partes) if partes else f"#{idx}"
 
                 default_on = prev_sel is None or idx in prev_sel
                 var = tk.BooleanVar(value=default_on)
@@ -352,16 +449,21 @@ class PanelGeneracion:
                 for _, v in gvars:
                     v.set(False)
 
-        def _aceptar():
+        def _guardar_seleccion():
             self._indices_filtrados.clear()
             for valor, gvars in check_vars.items():
                 sel = [idx for idx, v in gvars if v.get()]
-                # Solo guardar si se han excluido algunos
                 todos = [idx for idx, _ in gvars]
                 if len(sel) < len(todos):
                     self._indices_filtrados[valor] = sel
+
+        def _aceptar():
+            _guardar_seleccion()
             popup.destroy()
             self.callback_log("Selección de infraestructuras actualizada.", "info")
+
+        # Guardar también al cerrar con la X
+        popup.protocol("WM_DELETE_WINDOW", lambda: (_guardar_seleccion(), popup.destroy()))
 
         tk.Button(btn_f, text="Todos", command=_sel_todos,
                   font=FONT_SMALL, bg=COLOR_BORDE, fg=COLOR_TEXTO,

@@ -10,7 +10,7 @@ import tkinter as tk
 from tkinter import ttk, colorchooser, filedialog
 
 from .estilos import (
-    COLOR_PANEL, COLOR_TEXTO, COLOR_TEXTO_GRIS, COLOR_BORDE,
+    COLOR_PANEL, COLOR_TEXTO, COLOR_TEXTO_GRIS, COLOR_BORDE, COLOR_ENTRY,
     COLOR_ACENTO, FONT_BOLD, FONT_SMALL,
     crear_frame_seccion,
 )
@@ -39,7 +39,7 @@ class PanelCajetin:
             tk.Label(f, text=label, font=FONT_SMALL, bg=COLOR_PANEL,
                      fg=COLOR_TEXTO).grid(row=row_idx, column=0, sticky="w")
             var = tk.StringVar()
-            tk.Entry(f, textvariable=var, font=FONT_SMALL, bg=COLOR_BORDE,
+            tk.Entry(f, textvariable=var, font=FONT_SMALL, bg=COLOR_ENTRY,
                      fg=COLOR_TEXTO, insertbackground="white",
                      relief="flat").grid(row=row_idx + 1, column=0,
                                           sticky="ew", pady=(2, 4))
@@ -53,7 +53,7 @@ class PanelCajetin:
                  fg=COLOR_TEXTO).grid(row=row_idx, column=0, sticky="w")
         self._org = tk.StringVar(
             value="")
-        tk.Entry(f, textvariable=self._org, font=FONT_SMALL, bg=COLOR_BORDE,
+        tk.Entry(f, textvariable=self._org, font=FONT_SMALL, bg=COLOR_ENTRY,
                  fg=COLOR_TEXTO, insertbackground="white",
                  relief="flat").grid(row=row_idx + 1, column=0,
                                       sticky="ew", pady=(2, 4))
@@ -83,7 +83,7 @@ class PanelCajetin:
                  row=row_idx, column=0, sticky="w")
         self._titulo_mapa = tk.StringVar(value="")
         tk.Entry(f, textvariable=self._titulo_mapa, font=FONT_SMALL,
-                 bg=COLOR_BORDE, fg=COLOR_TEXTO, insertbackground="white",
+                 bg=COLOR_ENTRY, fg=COLOR_TEXTO, insertbackground="white",
                  relief="flat").grid(row=row_idx + 1, column=0,
                                       sticky="ew", pady=(2, 4))
         row_idx += 2
@@ -94,7 +94,7 @@ class PanelCajetin:
                  row=row_idx, column=0, sticky="w")
         self._subtitulo = tk.StringVar(value="PLANO DE INFRAESTRUCTURA FORESTAL")
         tk.Entry(f, textvariable=self._subtitulo, font=FONT_SMALL,
-                 bg=COLOR_BORDE, fg=COLOR_TEXTO, insertbackground="white",
+                 bg=COLOR_ENTRY, fg=COLOR_TEXTO, insertbackground="white",
                  relief="flat").grid(row=row_idx + 1, column=0,
                                       sticky="ew", pady=(2, 4))
         row_idx += 2
@@ -118,7 +118,7 @@ class PanelCajetin:
                  row=row_idx, column=0, sticky="w")
         self._num_plano_inicio = tk.StringVar(value="1")
         tk.Entry(f, textvariable=self._num_plano_inicio, font=FONT_SMALL,
-                 bg=COLOR_BORDE, fg=COLOR_TEXTO, insertbackground="white",
+                 bg=COLOR_ENTRY, fg=COLOR_TEXTO, insertbackground="white",
                  relief="flat", width=8).grid(row=row_idx + 1, column=0,
                                                sticky="w", pady=(2, 6))
         row_idx += 2

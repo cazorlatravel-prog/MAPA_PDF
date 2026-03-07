@@ -88,7 +88,7 @@ class MaquetadorPlano:
             top=gs_top, bottom=inf,
             width_ratios=[0.28, 0.42, 0.30],
             height_ratios=[RATIO_MAPA_ALTO, 1 - RATIO_MAPA_ALTO],
-            hspace=0.012, wspace=0.008,
+            hspace=0.04, wspace=0.005,
         )
 
         # Mapa principal: fila 0, ancho completo (3 columnas)
@@ -264,17 +264,13 @@ class MaquetadorPlano:
             facecolor="#F8F9FA", edgecolor="#2C3E50", linewidth=1.0, zorder=0))
 
         n_rows = len(rows)
-        es_multi = n_rows > 1
-        titulo = ("DATOS DE LAS INFRAESTRUCTURAS" if es_multi
+        titulo = ("DATOS DE LAS INFRAESTRUCTURAS" if n_rows > 1
                   else "DATOS DE LA INFRAESTRUCTURA")
-        ax.text(0.5, 0.97, titulo, ha="center", va="top", fontsize=5.5,
+        ax.text(0.5, 0.97, titulo, ha="center", va="top", fontsize=5,
                 fontweight="bold", color="white", transform=ax.transAxes,
-                bbox=dict(boxstyle="round,pad=0.15", facecolor="#2C3E50",
+                bbox=dict(boxstyle="round,pad=0.12", facecolor="#2C3E50",
                           edgecolor="none"))
 
-        # Los campos visibles son los nombres reales de las columnas
-        # del shapefile. Se muestran todos, con etiqueta embellecida
-        # si está disponible en ETIQUETAS_CAMPOS.
         campos_mostrar = list(campos_visibles) if campos_visibles else []
         n_campos = len(campos_mostrar)
         if n_campos == 0:
@@ -284,107 +280,120 @@ class MaquetadorPlano:
             return
 
         def _resolver_campo(campo):
-            """Obtiene el nombre real de la columna en el row."""
             if campo_mapeo and campo in campo_mapeo:
                 return campo_mapeo[campo]
             return campo
 
-        if not es_multi:
-            # ── 2 columnas, un solo registro ──
-            row = rows[0]
-            y_top = 0.88
-            y_bot = 0.03
-            mitad = math.ceil(n_campos / 2)
-            col_izq = campos_mostrar[:mitad]
-            col_der = campos_mostrar[mitad:]
+        # ────────────────────────────────────────────────────────────────
+        # Diseño unificado: 2 columnas de fichas (tarjetas) de infra.
+        # Funciona igual para 1 que para 20 registros.
+        # ────────────────────────────────────────────────────────────────
 
-            for col_idx, col_campos in enumerate([col_izq, col_der]):
-                x_base = 0.02 + col_idx * 0.50
-                x_end = x_base + 0.47
-                n = len(col_campos)
-                if n == 0:
-                    continue
-                row_h = min((y_top - y_bot) / max(n, 1), 0.14)
-                for i, campo in enumerate(col_campos):
-                    y = y_top - i * row_h
-                    campo_real = _resolver_campo(campo)
-                    valor = str(row.get(campo_real, "\u2014"))
-                    if valor == "nan":
-                        valor = "\u2014"
-                    etiq = _etiqueta_campo(campo)
-                    if len(etiq) > 18:
-                        etiq = etiq[:17] + "."
-                    if i % 2 == 0:
-                        ax.add_patch(Rectangle(
-                            (x_base, y - row_h + 0.002), x_end - x_base,
-                            row_h - 0.002,
-                            facecolor="#E8F4F8", edgecolor="none", zorder=1))
-                    ax.text(x_base + 0.02, y - row_h / 2, etiq + ":",
-                            ha="left", va="center", fontsize=4.5,
-                            fontweight="bold", color="#2C3E50",
-                            transform=ax.transAxes, zorder=2)
-                    ax.text(x_end - 0.01, y - row_h / 2, valor,
-                            ha="right", va="center", fontsize=4.5,
-                            color="#1A1A2E", transform=ax.transAxes, zorder=2)
+        y_top = 0.90
+        y_bot = 0.02
+        area_h = y_top - y_bot
 
-            # Separador vertical
-            ax.plot([0.50, 0.50], [y_top, y_bot], color="#CCC",
-                    linewidth=0.4, transform=ax.transAxes, zorder=2)
-        else:
-            # ── Tabla multi-registro ──
-            max_cols = min(n_campos, 6)
-            campos_tabla = campos_mostrar[:max_cols]
-            y_start = 0.88
-            total_filas = 1 + n_rows
-            row_h = (y_start - 0.03) / max(total_filas, 1)
-            fsz = max(3.5, min(4.5, 4.5 - (n_rows - 3) * 0.2))
-            xl, xr = 0.02, 0.98
-            col_w = (xr - xl) / max(len(campos_tabla), 1)
+        # Distribución en 2 columnas
+        col_margin = 0.02
+        col_gap = 0.02
+        col_w = (1.0 - 2 * col_margin - col_gap) / 2
+        col_x = [col_margin, col_margin + col_w + col_gap]
 
-            # Cabecera tabla
-            ax.add_patch(Rectangle(
-                (xl, y_start - row_h), xr - xl, row_h,
-                facecolor="#2C3E50", edgecolor="none", zorder=1))
-            for j, campo in enumerate(campos_tabla):
-                etiq = _etiqueta_campo(campo)
-                if len(etiq) > 12:
-                    etiq = etiq[:11] + "."
-                ax.text(xl + j * col_w + col_w / 2, y_start - row_h / 2,
-                        etiq, ha="center", va="center", fontsize=fsz,
+        mitad = math.ceil(n_rows / 2)
+        col_izq = list(range(mitad))
+        col_der = list(range(mitad, n_rows))
+
+        # Calcular tamaños adaptativos
+        max_per_col = max(len(col_izq), len(col_der), 1)
+        # Espacio por ficha: cabecera + campos
+        card_gap = 0.008
+        card_h_total = (area_h - (max_per_col - 1) * card_gap) / max_per_col
+        # Dentro de cada ficha: cabecera (20%) + campos
+        header_h = min(card_h_total * 0.18, 0.025)
+        field_area = card_h_total - header_h
+        field_h = field_area / max(n_campos, 1)
+
+        # Tamaños de fuente fijos
+        fsz_header = 3.5
+        fsz_field = 3.2
+        # Truncado adaptativo según espacio disponible
+        max_label = max(8, min(18, 18 - (max_per_col - 2)))
+        max_val = max(10, min(22, 22 - (max_per_col - 2)))
+
+        for col_idx, indices_col in enumerate([col_izq, col_der]):
+            x0 = col_x[col_idx]
+            x1 = x0 + col_w
+
+            for card_i, row_idx in enumerate(indices_col):
+                r = rows[row_idx]
+                card_top = y_top - card_i * (card_h_total + card_gap)
+
+                # ── Cabecera de la ficha ──
+                ax.add_patch(Rectangle(
+                    (x0, card_top - header_h), col_w, header_h,
+                    facecolor="#2C3E50", edgecolor="none", zorder=1))
+
+                # Obtener nombre de la infra (primer campo o Nombre_Infra)
+                nombre_campo = _resolver_campo(
+                    "Nombre_Infra" if "Nombre_Infra" in campos_mostrar
+                    else campos_mostrar[0])
+                nombre = str(r.get(nombre_campo, f"Infra. {row_idx + 1}"))
+                if nombre == "nan":
+                    nombre = f"Infra. {row_idx + 1}"
+                if len(nombre) > max_val + 8:
+                    nombre = nombre[:max_val + 7] + "\u2026"
+                ax.text(x0 + 0.01, card_top - header_h / 2,
+                        f"{row_idx + 1}. {nombre}",
+                        ha="left", va="center", fontsize=fsz_header,
                         fontweight="bold", color="white",
                         transform=ax.transAxes, zorder=2)
 
-            for r_idx, r in enumerate(rows):
-                y = y_start - (1 + r_idx) * row_h
-                if r_idx % 2 == 0:
-                    ax.add_patch(Rectangle(
-                        (xl, y - row_h + 0.002), xr - xl, row_h - 0.002,
-                        facecolor="#E8F4F8", edgecolor="none", zorder=1))
-                for j, campo in enumerate(campos_tabla):
+                # ── Campos ──
+                fields_top = card_top - header_h
+                for fi, campo in enumerate(campos_mostrar):
+                    fy = fields_top - fi * field_h
                     campo_real = _resolver_campo(campo)
-                    val = str(r.get(campo_real, "\u2014"))
-                    if val == "nan":
-                        val = "\u2014"
-                    if len(val) > 18:
-                        val = val[:17] + "\u2026"
-                    ax.text(xl + j * col_w + col_w / 2, y - row_h / 2,
-                            val, ha="center", va="center", fontsize=fsz,
+                    valor = str(r.get(campo_real, "\u2014"))
+                    if valor == "nan":
+                        valor = "\u2014"
+                    etiq = _etiqueta_campo(campo)
+                    if len(etiq) > max_label:
+                        etiq = etiq[:max_label - 1] + "."
+                    if len(valor) > max_val:
+                        valor = valor[:max_val - 1] + "\u2026"
+
+                    # Fondo alternado
+                    if fi % 2 == 0:
+                        ax.add_patch(Rectangle(
+                            (x0, fy - field_h + 0.001), col_w,
+                            field_h - 0.001,
+                            facecolor="#E8F4F8", edgecolor="none", zorder=1))
+
+                    ax.text(x0 + 0.01, fy - field_h / 2, etiq + ":",
+                            ha="left", va="center", fontsize=fsz_field,
+                            fontweight="bold", color="#2C3E50",
+                            transform=ax.transAxes, zorder=2)
+                    ax.text(x1 - 0.01, fy - field_h / 2, valor,
+                            ha="right", va="center", fontsize=fsz_field,
                             color="#1A1A2E", transform=ax.transAxes, zorder=2)
 
-            for ri in range(total_filas + 1):
-                yl = y_start - ri * row_h
-                ax.plot([xl, xr], [yl, yl], color="#AAA", linewidth=0.3,
-                        transform=ax.transAxes, zorder=2)
-            for j in range(len(campos_tabla) + 1):
-                xli = xl + j * col_w
-                ax.plot([xli, xli],
-                        [y_start, y_start - total_filas * row_h],
-                        color="#AAA", linewidth=0.3,
-                        transform=ax.transAxes, zorder=2)
-            ax.text(0.5, y_start - total_filas * row_h - 0.012,
-                    f"{n_rows} infraestructuras", ha="center", va="top",
-                    fontsize=4, color="#555", style="italic",
-                    transform=ax.transAxes)
+                # Borde de la ficha
+                card_bottom = fields_top - n_campos * field_h
+                ax.add_patch(FancyBboxPatch(
+                    (x0, card_bottom), col_w, card_top - card_bottom,
+                    boxstyle="round,pad=0.003",
+                    facecolor="none", edgecolor="#B0BEC5",
+                    linewidth=0.4, zorder=3))
+
+        # Separador vertical central
+        ax.plot([0.50, 0.50], [y_top, y_bot], color="#CCC",
+                linewidth=0.3, transform=ax.transAxes, zorder=2)
+
+        # Pie: contador de infraestructuras
+        if n_rows > 1:
+            ax.text(0.5, 0.005, f"{n_rows} infraestructuras",
+                    ha="center", va="bottom", fontsize=3.5, color="#555",
+                    style="italic", transform=ax.transAxes)
 
     # ── Mapa de localización (panel inferior derecho) ──────────────────
 
@@ -410,7 +419,7 @@ class MaquetadorPlano:
 
         ax.set_xlim(xmin_m, xmax_m)
         ax.set_ylim(ymin_m, ymax_m)
-        ax.set_aspect("equal")
+        ax.set_aspect("auto")
         ax.set_facecolor("#E8E8E0")
 
         for sp in ax.spines.values():
@@ -497,13 +506,13 @@ class MaquetadorPlano:
 
         # ── Título ──
         ax.text(0.5, 0.97, "CAJETÍN DE PROYECTO", ha="center", va="top",
-                fontsize=5, fontweight="bold", color="white",
-                bbox=dict(boxstyle="round,pad=0.15", facecolor="#2C3E50",
+                fontsize=4.5, fontweight="bold", color="white",
+                bbox=dict(boxstyle="round,pad=0.12", facecolor="#2C3E50",
                           edgecolor="none"))
 
         # ── Datos del cajetín ──
-        y_pos = 0.87
-        line_h = 0.072
+        y_pos = 0.86
+        line_h = 0.058
         campos_caj = [
             ("Proyecto", cajetin.get("proyecto", "") if cajetin else ""),
             ("Nº Proyecto", cajetin.get("num_proyecto", "") if cajetin else ""),
@@ -515,12 +524,12 @@ class MaquetadorPlano:
             y = y_pos - i * line_h
             if i % 2 == 0:
                 ax.add_patch(Rectangle(
-                    (0.04, y - line_h + 0.003), 0.92, line_h - 0.003,
+                    (0.04, y - line_h + 0.002), 0.92, line_h - 0.002,
                     facecolor="#E8EEF2", edgecolor="none", zorder=1))
             ax.text(0.07, y - line_h / 2, etiq + ":", ha="left", va="center",
-                    fontsize=4.2, fontweight="bold", color="#2C3E50", zorder=2)
+                    fontsize=3.8, fontweight="bold", color="#2C3E50", zorder=2)
             ax.text(0.93, y - line_h / 2, str(valor), ha="right", va="center",
-                    fontsize=4.2, color="#1A1A2E", zorder=2)
+                    fontsize=3.8, color="#1A1A2E", zorder=2)
 
         # ── Separador ──
         sep_y = y_pos - len(campos_caj) * line_h - 0.005
@@ -549,24 +558,36 @@ class MaquetadorPlano:
                 f"Escala 1:{self.escala:,}", ha="center", va="bottom",
                 fontsize=5, fontweight="bold", color="#1A1A2E")
 
-        # ── Norte geográfico ──
-        norte_x = 0.82
-        norte_y_base = esc_y - 0.005
-        norte_h = 0.09
-
-        ax.annotate("", xy=(norte_x, norte_y_base + norte_h),
-                    xytext=(norte_x, norte_y_base),
-                    arrowprops=dict(arrowstyle="->", color="#1A1A2E", lw=1.0))
-        ax.text(norte_x, norte_y_base + norte_h + 0.012, "N",
-                ha="center", va="bottom", fontsize=5.5, fontweight="bold",
-                color="#1A1A2E")
-
         # ── Créditos ──
         fecha = date.today().strftime("%d/%m/%Y")
         ax.text(0.5, 0.02,
                 f"{proveedor} | ETRS89 UTM H30N | {fecha}",
                 ha="center", va="bottom", fontsize=3.2, color="#666",
                 style="italic")
+
+    # ── Rosa de los vientos (dentro del mapa principal, arriba-izquierda) ──
+
+    def dibujar_norte_en_mapa(self):
+        """Dibuja la flecha de norte dentro del mapa principal (esquina sup-izq)."""
+        ax = self.ax_map
+        nx, ny_base = 0.04, 0.88
+        nh = 0.04
+
+        # Fondo semitransparente
+        ax.add_patch(FancyBboxPatch(
+            (nx - 0.012, ny_base - 0.008), 0.024, nh + 0.025,
+            boxstyle="round,pad=0.004", facecolor="white", edgecolor="#2C3E50",
+            linewidth=0.3, alpha=0.85, transform=ax.transAxes, zorder=14))
+
+        ax.annotate("", xy=(nx, ny_base + nh),
+                    xytext=(nx, ny_base),
+                    xycoords="axes fraction", textcoords="axes fraction",
+                    arrowprops=dict(arrowstyle="->,head_width=0.2,head_length=0.15",
+                                    color="#1A1A2E", lw=0.6),
+                    zorder=15)
+        ax.text(nx, ny_base + nh + 0.006, "N",
+                ha="center", va="bottom", fontsize=3, fontweight="bold",
+                color="#1A1A2E", transform=ax.transAxes, zorder=15)
 
     # ── Cajetín (integrado) ────────────────────────────────────────────
 
