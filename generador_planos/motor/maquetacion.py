@@ -33,6 +33,7 @@ ETIQUETAS_CAMPOS = {
     "Monte": "Monte",
     "Cod_Monte": "Código Monte",
     "CEDEFO": "CEDEFO",
+    "Cod_Infoca": "Cód. INFOCA",
     "Nombre_Infra": "Nombre Infraestructura",
     "Superficie": "Superficie (ha)",
     "Longitud": "Longitud (m)",
