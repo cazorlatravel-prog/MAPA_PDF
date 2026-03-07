@@ -38,30 +38,52 @@ CAPAS_BASE = {
         "&FORMAT=image/jpeg&TILEMATRIXSET=GoogleMapsCompatible"
         "&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}"
     ),
+    "IGN Base": (
+        "https://www.ign.es/wmts/ign-base?SERVICE=WMTS&REQUEST=GetTile"
+        "&VERSION=1.0.0&LAYER=IGNBaseTodo&STYLE=default"
+        "&FORMAT=image/jpeg&TILEMATRIXSET=GoogleMapsCompatible"
+        "&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}"
+    ),
+    "PNOA Máxima Actualidad": (
+        "https://www.ign.es/wmts/pnoa-ma?SERVICE=WMTS&REQUEST=GetTile"
+        "&VERSION=1.0.0&LAYER=OI.MostRecent&STYLE=default"
+        "&FORMAT=image/jpeg&TILEMATRIXSET=GoogleMapsCompatible"
+        "&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}"
+    ),
     "Stamen Terrain": "https://stamen-tiles.a.ssl.fastly.net/terrain/{z}/{x}/{y}.png",
+}
+
+# PROVIDERS_CTX se construye siempre para que el desplegable de la GUI
+# muestre todos los proveedores disponibles, con o sin contextily.
+_PROV_META = {
+    "OpenStreetMap": {"max_zoom": 19, "attribution": "© OpenStreetMap"},
+    "PNOA Ortofoto (IGN)": {"max_zoom": 20, "attribution": "© IGN España"},
+    "IGN Topográfico": {"max_zoom": 18, "attribution": "© IGN España"},
+    "IGN Base": {"max_zoom": 18, "attribution": "© IGN España"},
+    "PNOA Máxima Actualidad": {"max_zoom": 20, "attribution": "© IGN España"},
+    "Stamen Terrain": {"max_zoom": 18, "attribution": "Stamen Design"},
 }
 
 if ctx is not None:
     PROVIDERS_CTX = {
         "OpenStreetMap": ctx.providers.OpenStreetMap.Mapnik,
-        "PNOA Ortofoto (IGN)": {
-            "url": CAPAS_BASE["PNOA Ortofoto (IGN)"],
-            "max_zoom": 20,
-            "attribution": "\u00a9 IGN Espa\u00f1a",
-        },
-        "IGN Topogr\u00e1fico": {
-            "url": CAPAS_BASE["IGN Topogr\u00e1fico"],
-            "max_zoom": 18,
-            "attribution": "\u00a9 IGN Espa\u00f1a",
-        },
-        "Stamen Terrain": {
-            "url": CAPAS_BASE["Stamen Terrain"],
-            "max_zoom": 18,
-            "attribution": "Stamen Design",
-        },
     }
+    for name in list(CAPAS_BASE.keys()):
+        if name == "OpenStreetMap":
+            continue
+        meta = _PROV_META.get(name, {})
+        PROVIDERS_CTX[name] = {
+            "url": CAPAS_BASE[name],
+            "max_zoom": meta.get("max_zoom", 18),
+            "attribution": meta.get("attribution", ""),
+        }
 else:
-    PROVIDERS_CTX = {}
+    # Sin contextily: el desplegable sigue mostrando opciones y se usa
+    # la descarga manual de teselas como fallback.
+    PROVIDERS_CTX = {
+        name: {"url": url, **_PROV_META.get(name, {})}
+        for name, url in CAPAS_BASE.items()
+    }
 
 
 # ---------------------------------------------------------------------------
