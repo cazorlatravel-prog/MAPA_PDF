@@ -247,6 +247,7 @@ class App(tk.Tk):
         # Actualizar checkboxes de campos con las columnas reales del shapefile
         columnas = self.motor.obtener_columnas_shapefile()
         self.panel_campos.actualizar_campos(columnas)
+        self.panel_cajetin.actualizar_campos_subtitulo(columnas)
 
     def _on_filtro_aplicado(self, indices: list):
         self._poblar_tabla(indices)

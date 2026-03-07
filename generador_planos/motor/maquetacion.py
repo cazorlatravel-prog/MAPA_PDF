@@ -598,11 +598,24 @@ class MaquetadorPlano:
 
         org = "CONSEJERÍA DE SOSTENIBILIDAD\nJUNTA DE ANDALUCÍA"
         subtit = "PLANO DE INFRAESTRUCTURA FORESTAL"
+        titulo_proy = ""
+        logo_path = ""
+        num_inicio = 1
+
         if cajetin:
             if cajetin.get("organizacion"):
                 org = cajetin["organizacion"]
             if cajetin.get("subtitulo"):
                 subtit = cajetin["subtitulo"]
+            titulo_proy = cajetin.get("proyecto", "")
+            logo_path = cajetin.get("logo_path", "")
+            num_inicio = cajetin.get("num_plano_inicio", 1)
+            # Subtítulo dinámico desde un campo de la tabla de atributos
+            campo_sub = cajetin.get("campo_subtitulo", "")
+            if campo_sub and row is not None:
+                val = str(row.get(campo_sub, ""))
+                if val and val != "nan":
+                    subtit = val
 
         izq_f = MARGENES_MM["izq"] / self.fmt_mm[0]
         der_f = MARGENES_MM["der"] / self.fmt_mm[0]
@@ -622,27 +635,52 @@ class MaquetadorPlano:
         ax_cab.add_patch(Rectangle((0, 0), 1, 0.04, facecolor=c_acento,
                                     edgecolor="none"))
 
-        ax_cab.text(0.015, 0.55, org, ha="left", va="center", fontsize=4.5,
+        # ── Izquierda: logo + organización ──
+        x_org = 0.015
+        if logo_path:
+            try:
+                from PIL import Image as PILImage
+                img = PILImage.open(logo_path)
+                # Encajar logo en el 12% izquierdo de la cabecera
+                logo_ax = self.fig.add_axes([
+                    izq_f + 0.003,
+                    1 - sup_f - h_cab + h_cab * 0.10,
+                    0.04,
+                    h_cab * 0.80,
+                ], zorder=30)
+                logo_ax.imshow(img, aspect="equal")
+                logo_ax.axis("off")
+                x_org = 0.065
+            except Exception:
+                pass
+
+        ax_cab.text(x_org, 0.55, org, ha="left", va="center", fontsize=4.5,
                     fontweight="bold", color=c_acento, linespacing=1.1)
 
+        # ── Centro: título proyecto + subtítulo ──
         if titulo_grupo:
             ax_cab.text(0.5, 0.60, titulo_grupo.upper(), ha="center",
                         va="center", fontsize=7, fontweight="bold",
                         color=c_texto)
-            subtit = "PLANO DE INFRAESTRUCTURAS FORESTALES"
+        elif titulo_proy:
+            ax_cab.text(0.5, 0.60, titulo_proy.upper(), ha="center",
+                        va="center", fontsize=7, fontweight="bold",
+                        color=c_texto)
         else:
             nombre = str(row.get("Nombre_Infra", "INFRAESTRUCTURA FORESTAL"))
             ax_cab.text(0.5, 0.60, nombre.upper(), ha="center", va="center",
                         fontsize=7, fontweight="bold", color=c_texto)
 
-        ax_cab.text(0.5, 0.20, subtit, ha="center", va="center",
+        ax_cab.text(0.5, 0.20, subtit.upper(), ha="center", va="center",
                     fontsize=4.5, color="#95A5A6")
 
+        # ── Derecha: número de plano ──
         if num_plano_override is not None:
             num = num_plano_override
         else:
-            num = (row.name + 1 if hasattr(row, "name")
-                   and isinstance(row.name, int) else 1)
+            idx = (row.name if hasattr(row, "name")
+                   and isinstance(row.name, int) else 0)
+            num = idx + num_inicio
         ax_cab.text(0.985, 0.55, f"Plano n\u00ba {num:04d}",
                     ha="right", va="center", fontsize=5.5, fontweight="bold",
                     color=c_acento)
@@ -666,13 +704,13 @@ class MaquetadorPlano:
             (5, 5), self.fmt_mm[0] - 10, self.fmt_mm[1] - 10,
             fill=False, edgecolor=c_int, linewidth=0.5))
 
-        # Marca lateral discreta (borde derecho, vertical)
+        # Marca lateral discreta (borde izquierdo, vertical)
         ax.text(
-            self.fmt_mm[0] - 1.5, self.fmt_mm[1] / 2,
+            1.5, self.fmt_mm[1] / 2,
             "Mapa creado con APP Generador Mapas Forestales / "
             "Jose Caballero Sánchez / Aplicación Open Source de uso gratuito",
             rotation=90, ha="center", va="center",
-            fontsize=3, color="#B0B0B0", alpha=0.5,
+            fontsize=3, color="#B0B0B0", alpha=0.45,
         )
 
     def guardar(self, ruta_out: str):
