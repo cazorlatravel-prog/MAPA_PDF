@@ -14,6 +14,11 @@ import matplotlib
 import matplotlib.pyplot as plt
 from shapely.ops import unary_union
 
+
+class GeneracionCancelada(Exception):
+    """Excepción lanzada cuando el usuario cancela la generación."""
+    pass
+
 from .escala import seleccionar_escala, FORMATOS, MARGENES_MM
 from .cartografia import añadir_fondo_cartografico
 from .maquetacion import MaquetadorPlano, ETIQUETAS_CAMPOS, crear_portada, crear_indice
@@ -61,6 +66,20 @@ def _calcular_stats_grupo(gdf_grupo):
     return stats
 
 
+def _leer_geodatos(ruta: str, layer: str = None) -> gpd.GeoDataFrame:
+    """Lee un shapefile o geodatabase con fallback al driver OpenFileGDB."""
+    kwargs = {}
+    if layer:
+        kwargs["layer"] = layer
+    if ruta.lower().rstrip("/\\").endswith(".gdb"):
+        # Intentar primero con OpenFileGDB (más compatible con ArcGIS)
+        try:
+            return gpd.read_file(ruta, driver="OpenFileGDB", **kwargs)
+        except Exception:
+            pass
+    return gpd.read_file(ruta, **kwargs)
+
+
 class GeneradorPlanos:
     """Motor principal de generación de planos cartográficos profesionales."""
 
@@ -73,6 +92,17 @@ class GeneradorPlanos:
         self.gestor_simbologia = GestorSimbologia()
         self._cajetin = {}
         self._plantilla = {}
+        self.config_infra = {}  # linewidth, alpha, linestyle, marker
+        self._cancelar = threading.Event()
+
+    def cancelar_generacion(self):
+        """Señala que la generación en curso debe detenerse."""
+        self._cancelar.set()
+
+    def _check_cancelado(self):
+        """Lanza excepción si se ha solicitado cancelar."""
+        if self._cancelar.is_set():
+            raise GeneracionCancelada("Generación cancelada por el usuario.")
 
     # ── Configuración ────────────────────────────────────────────────────
 
@@ -87,7 +117,7 @@ class GeneradorPlanos:
     def cargar_infraestructuras(self, ruta: str, layer: str = None) -> tuple:
         """Carga shapefile/GDB de infraestructuras y reproyecta a EPSG:25830."""
         try:
-            gdf = gpd.read_file(ruta, layer=layer)
+            gdf = _leer_geodatos(ruta, layer=layer)
             if gdf.crs is None:
                 gdf = gdf.set_crs("EPSG:4326")
             gdf = gdf.to_crs("EPSG:25830")
@@ -116,7 +146,7 @@ class GeneradorPlanos:
 
     def cargar_montes(self, ruta: str, layer: str = None) -> tuple:
         try:
-            gdf = gpd.read_file(ruta, layer=layer)
+            gdf = _leer_geodatos(ruta, layer=layer)
             if gdf.crs is None:
                 gdf = gdf.set_crs("EPSG:4326")
             gdf = gdf.to_crs("EPSG:25830")
@@ -188,6 +218,10 @@ class GeneradorPlanos:
             )
 
         # Infraestructuras seleccionadas (resaltadas)
+        ci = self.config_infra
+        lw = ci.get("linewidth", 2.5)
+        alpha_infra = ci.get("alpha", 1.0)
+
         geom_type = ""
         for geom_single in gdf_sel.geometry:
             geom_type = str(geom_single.geom_type).lower()
@@ -195,12 +229,15 @@ class GeneradorPlanos:
 
         if "point" in geom_type:
             gdf_sel.plot(ax=ax_map, color=color_infra, markersize=12,
-                         marker="o", zorder=5, edgecolor="white", linewidth=0.8)
+                         marker="o", zorder=5, edgecolor="white",
+                         linewidth=0.8, alpha=alpha_infra)
         elif "line" in geom_type or "string" in geom_type:
-            gdf_sel.plot(ax=ax_map, color=color_infra, linewidth=2.5, zorder=5)
+            gdf_sel.plot(ax=ax_map, color=color_infra, linewidth=lw,
+                         zorder=5, alpha=alpha_infra)
         else:
             gdf_sel.plot(ax=ax_map, facecolor=color_infra + "55",
-                         edgecolor=color_infra, linewidth=1.8, zorder=5)
+                         edgecolor=color_infra, linewidth=lw,
+                         zorder=5, alpha=alpha_infra)
 
     def _construir_items_leyenda(self, gdf_sel, color_infra):
         """Construye items de leyenda para infra + capas extra."""
@@ -264,7 +301,10 @@ class GeneradorPlanos:
         ax_map.set_ylim(ymin, ymax)
 
         # Etiquetas
-        maq.dibujar_etiquetas_infra(gdf_sel, campo_mapeo=self._campo_mapeo)
+        campo_etiq = self._cajetin.get("campo_etiqueta", "Nombre_Infra")
+        if campo_etiq:
+            maq.dibujar_etiquetas_infra(gdf_sel, campo_etiqueta=campo_etiq,
+                                         campo_mapeo=self._campo_mapeo)
 
         # Leyenda
         items_ley = self._construir_items_leyenda(gdf_sel, color_infra)
@@ -280,7 +320,7 @@ class GeneradorPlanos:
                                   cajetin=self._cajetin)
         maq.dibujar_cabecera(row, cajetin=self._cajetin, plantilla=self._plantilla)
         maq.dibujar_cajetin(self._cajetin)
-        maq.dibujar_marcos(plantilla=self._plantilla)
+        maq.dibujar_marcos(plantilla=self._plantilla, cajetin=self._cajetin)
 
         nombre_infra = str(row.get("Nombre_Infra", f"infra_{idx_fila:04d}"))
         nombre_infra = "".join(c for c in nombre_infra if c.isalnum() or c in "_ -")[:40]
@@ -333,7 +373,10 @@ class GeneradorPlanos:
         ax_map.set_ylim(ymin, ymax)
 
         # Etiquetas
-        maq.dibujar_etiquetas_infra(gdf_grupo, campo_mapeo=self._campo_mapeo)
+        campo_etiq = self._cajetin.get("campo_etiqueta", "Nombre_Infra")
+        if campo_etiq:
+            maq.dibujar_etiquetas_infra(gdf_grupo, campo_etiqueta=campo_etiq,
+                                         campo_mapeo=self._campo_mapeo)
 
         # Leyenda con estadísticas
         items_ley = self._construir_items_leyenda(gdf_grupo, color_infra)
@@ -357,7 +400,7 @@ class GeneradorPlanos:
                               cajetin=self._cajetin, plantilla=self._plantilla)
 
         maq.dibujar_cajetin(self._cajetin)
-        maq.dibujar_marcos(plantilla=self._plantilla)
+        maq.dibujar_marcos(plantilla=self._plantilla, cajetin=self._cajetin)
 
         nombre_safe = "".join(c for c in valor_grupo if c.isalnum() or c in "_ -")[:40]
         nombre_arch = f"plano_grupo_{num_plano:04d}_{nombre_safe}.pdf"
@@ -376,6 +419,7 @@ class GeneradorPlanos:
         rutas = []
         total = len(indices)
         for i, idx in enumerate(indices):
+            self._check_cancelado()
             nombre = self.gdf_infra.iloc[idx].get("Nombre_Infra", f"#{idx}")
             if callback_log:
                 callback_log(f"\n[{i + 1}/{total}] Generando: {nombre}")
@@ -388,6 +432,8 @@ class GeneradorPlanos:
                     callback_log=callback_log,
                 )
                 rutas.append(ruta)
+            except GeneracionCancelada:
+                raise
             except Exception as e:
                 if callback_log:
                     callback_log(f"  \u2717 Error: {e}")
@@ -403,13 +449,19 @@ class GeneradorPlanos:
                                 color_infra: str, salida_dir: str,
                                 escala_manual: int = None,
                                 callback_log=None,
-                                callback_progreso=None) -> list:
+                                callback_progreso=None,
+                                indices_filtro: dict = None) -> list:
         rutas = []
         total = len(valores)
         for i, valor in enumerate(valores):
+            self._check_cancelado()
             if callback_log:
                 callback_log(f"\n[{i + 1}/{total}] Grupo: {campo_grupo} = {valor}")
             indices = self.obtener_indices_por_valor(campo_grupo, valor)
+            # Aplicar filtro de infraestructuras individuales si existe
+            if indices_filtro and valor in indices_filtro:
+                filtro = set(indices_filtro[valor])
+                indices = [idx for idx in indices if idx in filtro]
             if not indices:
                 if callback_log:
                     callback_log(f"  \u26a0 Sin infraestructuras para {valor}")
@@ -427,6 +479,8 @@ class GeneradorPlanos:
                     callback_log=callback_log,
                 )
                 rutas.append(ruta)
+            except GeneracionCancelada:
+                raise
             except Exception as e:
                 if callback_log:
                     callback_log(f"  \u2717 Error: {e}")
@@ -484,6 +538,7 @@ class GeneradorPlanos:
 
             # Planos
             for i, idx in enumerate(indices):
+                self._check_cancelado()
                 nombre = self.gdf_infra.iloc[idx].get("Nombre_Infra", f"#{idx}")
                 if callback_log:
                     callback_log(f"\n[{i + 1}/{total}] Generando: {nombre}")
@@ -513,9 +568,12 @@ class GeneradorPlanos:
                     ax_map.set_xlim(xmin, xmax)
                     ax_map.set_ylim(ymin, ymax)
 
-                    # Etiquetas y vértices
-                    maq.dibujar_etiquetas_infra(gdf_sel,
-                                                 campo_mapeo=self._campo_mapeo)
+                    # Etiquetas
+                    campo_etiq = self._cajetin.get("campo_etiqueta", "Nombre_Infra")
+                    if campo_etiq:
+                        maq.dibujar_etiquetas_infra(
+                            gdf_sel, campo_etiqueta=campo_etiq,
+                            campo_mapeo=self._campo_mapeo)
 
                     # Leyenda
                     items_ley = self._construir_items_leyenda(gdf_sel, color_infra)
@@ -532,7 +590,7 @@ class GeneradorPlanos:
                     maq.dibujar_cabecera(row, cajetin=self._cajetin,
                                           plantilla=self._plantilla)
                     maq.dibujar_cajetin(self._cajetin)
-                    maq.dibujar_marcos(plantilla=self._plantilla)
+                    maq.dibujar_marcos(plantilla=self._plantilla, cajetin=self._cajetin)
 
                     pdf.savefig(fig, dpi=300, facecolor="white")
                     plt.close(fig)
@@ -567,6 +625,7 @@ class GeneradorPlanos:
         rutas = []
         total = len(lotes)
         for i, lote in enumerate(lotes):
+            self._check_cancelado()
             if callback_log:
                 callback_log(
                     f"\n[{i + 1}/{total}] Lote: {lote.get('nombre', lote['ruta_shp'])}")

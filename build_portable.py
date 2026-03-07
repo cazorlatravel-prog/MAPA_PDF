@@ -11,14 +11,21 @@ Uso:
 
 Genera:
     dist/GeneradorPlanos_Portable.exe  (~150-300 MB, un solo archivo)
+    GeneradorPlanos_Portable.exe       (copia en la raíz del proyecto)
+    GeneradorPlanos_Portable_v2.0.zip  (ZIP listo para compartir)
 """
 
 import os
 import sys
+import shutil
 import subprocess
+import tempfile
+import zipfile
 
 
 APP_NAME = "GeneradorPlanos_Portable"
+APP_VERSION = "2.0.0"
+APP_DESCRIPTION = "Generador de Planos Forestales - Jose Caballero"
 ICON_FILE = os.path.join("assets", "icon.ico")
 
 # Punto de entrada directo que evita la verificación de dependencias
@@ -113,6 +120,72 @@ EXCLUDE = [
 ]
 
 
+def crear_version_info():
+    """Crea archivo de metadatos Windows (visible en Propiedades del .exe)."""
+    parts = APP_VERSION.split(".")
+    major = int(parts[0]) if len(parts) > 0 else 2
+    minor = int(parts[1]) if len(parts) > 1 else 0
+    patch = int(parts[2]) if len(parts) > 2 else 0
+
+    version_info = f"""\
+# UTF-8
+VSVersionInfo(
+  ffi=FixedFileInfo(
+    filevers=({major}, {minor}, {patch}, 0),
+    prodvers=({major}, {minor}, {patch}, 0),
+    mask=0x3f,
+    flags=0x0,
+    OS=0x40004,
+    fileType=0x1,
+    subtype=0x0,
+    date=(0, 0)
+  ),
+  kids=[
+    StringFileInfo(
+      [
+        StringTable(
+          u'040A04B0',
+          [
+            StringStruct(u'CompanyName', u'Jose Caballero'),
+            StringStruct(u'FileDescription',
+                         u'Generador de Planos Forestales'),
+            StringStruct(u'FileVersion', u'{APP_VERSION}'),
+            StringStruct(u'InternalName', u'{APP_NAME}'),
+            StringStruct(u'OriginalFilename', u'{APP_NAME}.exe'),
+            StringStruct(u'ProductName',
+                         u'Generador de Planos Forestales'),
+            StringStruct(u'ProductVersion', u'{APP_VERSION}'),
+            StringStruct(u'LegalCopyright',
+                         u'(c) Jose Caballero'),
+          ]
+        )
+      ]
+    ),
+    VarFileInfo([VarStruct(u'Translation', [1034, 1200])])
+  ]
+)
+"""
+    path = os.path.join(tempfile.gettempdir(), "version_info.txt")
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(version_info)
+    return path
+
+
+def crear_zip(exe_path):
+    """Crea un ZIP listo para compartir con el .exe dentro."""
+    version_short = APP_VERSION.replace(".", "_")
+    zip_name = f"GeneradorPlanos_Portable_v{version_short}.zip"
+    zip_path = os.path.join(os.path.dirname(exe_path), zip_name)
+
+    print(f"  Creando ZIP: {zip_path}")
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.write(exe_path, os.path.basename(exe_path))
+
+    size_mb = os.path.getsize(zip_path) / (1024 * 1024)
+    print(f"  ZIP creado: {size_mb:.1f} MB")
+    return zip_path
+
+
 def main():
     print()
     print("=" * 60)
@@ -127,12 +200,18 @@ def main():
         print(f"  PyInstaller {PyInstaller.__version__}")
     except ImportError:
         print("  PyInstaller no encontrado. Instalando...")
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "pyinstaller"])
+        subprocess.check_call(
+            [sys.executable, "-m", "pip", "install", "pyinstaller"]
+        )
 
     # Crear launcher temporal
     with open(LAUNCHER_SCRIPT, "w", encoding="utf-8") as f:
         f.write(LAUNCHER_CODE)
     print(f"  Launcher creado: {LAUNCHER_SCRIPT}")
+
+    # Crear archivo de metadatos Windows
+    version_file = crear_version_info()
+    print(f"  Metadatos Windows: v{APP_VERSION} - Jose Caballero")
 
     cmd = [
         sys.executable, "-m", "PyInstaller",
@@ -141,6 +220,7 @@ def main():
         "--windowed",           # Sin ventana de consola
         "--noconfirm",
         "--clean",
+        "--version-file", version_file,
     ]
 
     # Icono
@@ -173,21 +253,41 @@ def main():
     if os.path.exists(LAUNCHER_SCRIPT):
         os.remove(LAUNCHER_SCRIPT)
 
+    # Limpiar archivo de metadatos temporal
+    if os.path.exists(version_file):
+        os.remove(version_file)
+
     if result.returncode == 0:
         exe_path = os.path.join("dist", f"{APP_NAME}.exe")
         print()
         print("=" * 60)
         print("  COMPLETADO")
         print(f"  Archivo: {exe_path}")
+
         if os.path.exists(exe_path):
             size_mb = os.path.getsize(exe_path) / (1024 * 1024)
             print(f"  Tamano: {size_mb:.1f} MB")
+
+            # Copiar el .exe a la raíz del proyecto para fácil acceso
+            root_exe = f"{APP_NAME}.exe"
+            shutil.copy2(exe_path, root_exe)
+            print()
+            print(f"  Copiado a raiz: {root_exe}")
+
+            # Crear ZIP listo para compartir
+            crear_zip(exe_path)
+
         print()
         print("  Este .exe es 100% portable:")
         print("    - No necesita Python instalado")
         print("    - No necesita instalar nada")
         print("    - Se puede copiar a USB o compartir")
         print("    - Doble clic para ejecutar")
+        print()
+        print("  Propiedades visibles en Windows Explorer:")
+        print("    - Nombre: Generador de Planos Forestales")
+        print(f"    - Version: {APP_VERSION}")
+        print("    - Autor: Jose Caballero")
         print("=" * 60)
     else:
         print(f"\n  ERROR: Fallo la construccion (codigo {result.returncode})")

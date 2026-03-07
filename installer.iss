@@ -11,7 +11,7 @@
 
 #define MyAppName "Generador de Planos Forestales"
 #define MyAppVersion "2.0.0"
-#define MyAppPublisher "Cazorla Travel"
+#define MyAppPublisher "Jose Caballero"
 #define MyAppExeName "GeneradorPlanos.exe"
 #define MyAppURL "https://github.com/cazorlatravel-prog/MAPA_PDF"
 

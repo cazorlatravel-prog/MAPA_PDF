@@ -10,7 +10,7 @@ readme = "PLANOS_FORESTALES.md"
 requires-python = ">=3.9"
 license = {text = "MIT"}
 authors = [
-    {name = "Cazorla Travel"},
+    {name = "Jose Caballero"},
 ]
 keywords = ["cartografía", "forestal", "planos", "SHP", "PDF", "INFOCA"]
 

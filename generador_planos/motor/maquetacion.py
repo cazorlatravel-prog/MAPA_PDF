@@ -20,8 +20,6 @@ import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 from matplotlib.patches import FancyBboxPatch, Rectangle
 from matplotlib.lines import Line2D
-from pyproj import Transformer
-
 from .escala import (
     MARGENES_MM, FORMATOS, INTERVALOS_GRID, BARRA_ESCALA_M,
     RATIO_MAPA_ANCHO, RATIO_MAPA_ALTO,
@@ -45,19 +43,6 @@ ETIQUETAS_CAMPOS = {
 
 DPI = 300  # calidad de impresión
 _CABECERA_MM = 8
-
-_DECL_MAG = {"oeste": 0.5, "centro": 1.0, "este": 1.8, "sur": 0.8}
-
-
-def _estimar_declinacion(lon_deg):
-    if lon_deg < -5:
-        return _DECL_MAG["oeste"]
-    if lon_deg < -1:
-        return _DECL_MAG["centro"]
-    if lon_deg < 2:
-        return _DECL_MAG["sur"]
-    return _DECL_MAG["este"]
-
 
 def _etiqueta_campo(campo):
     """Devuelve una etiqueta embellecida o el nombre del campo tal cual."""
@@ -103,7 +88,7 @@ class MaquetadorPlano:
             top=gs_top, bottom=inf,
             width_ratios=[0.28, 0.42, 0.30],
             height_ratios=[RATIO_MAPA_ALTO, 1 - RATIO_MAPA_ALTO],
-            hspace=0.07, wspace=0.015,
+            hspace=0.012, wspace=0.008,
         )
 
         # Mapa principal: fila 0, ancho completo (3 columnas)
@@ -236,7 +221,7 @@ class MaquetadorPlano:
 
     # ── Leyenda ────────────────────────────────────────────────────────
 
-    def dibujar_leyenda(self, items_leyenda, stats_resumen=None):
+    def dibujar_leyenda(self, items_leyenda, stats_resumen=None):  # noqa: ARG002
         handles = []
         for label, color, geom_type, linestyle, marker, facecolor in items_leyenda:
             if "point" in geom_type:
@@ -260,26 +245,6 @@ class MaquetadorPlano:
             )
             leg.set_zorder(15)
 
-        if stats_resumen:
-            lines = []
-            if "total_longitud_km" in stats_resumen:
-                lines.append(
-                    f"Long. total: {stats_resumen['total_longitud_km']:.2f} km")
-            if "total_superficie_ha" in stats_resumen:
-                lines.append(
-                    f"Sup. total: {stats_resumen['total_superficie_ha']:.2f} ha")
-            if "num_infraestructuras" in stats_resumen:
-                lines.append(
-                    f"N\u00ba infra.: {stats_resumen['num_infraestructuras']}")
-            if lines:
-                self.ax_map.text(
-                    0.01, 0.01, "\n".join(lines),
-                    transform=self.ax_map.transAxes,
-                    fontsize=4.5, va="bottom", ha="left", color="#333",
-                    bbox=dict(boxstyle="round,pad=0.3", facecolor="white",
-                              edgecolor="#CCC", alpha=0.9),
-                    zorder=15,
-                )
 
     # ── Panel de atributos (centro, 2 columnas, campos dinámicos) ─────
 
@@ -426,9 +391,22 @@ class MaquetadorPlano:
     def dibujar_mapa_posicion(self, cx, cy):
         ax = self.ax_mini
 
-        radio = 15_000
-        xmin_m, xmax_m = cx - radio, cx + radio
-        ymin_m, ymax_m = cy - radio, cy + radio
+        # ── Escala fija 1:250.000 ──
+        escala_loc = 250_000
+
+        # Tamaño físico aproximado del panel de localización (mm)
+        ancho_util = self.fmt_mm[0] - MARGENES_MM["izq"] - MARGENES_MM["der"]
+        alto_util = (self.fmt_mm[1] - MARGENES_MM["sup"] - MARGENES_MM["inf"]
+                     - _CABECERA_MM)
+        panel_w_mm = ancho_util * 0.30 * 0.95   # col 2 ratio, menos wspace
+        panel_h_mm = alto_util * (1 - RATIO_MAPA_ALTO) * 0.90  # menos hspace
+
+        # Extensión real a 1:25.000
+        semi_x = (panel_w_mm / 1000.0) * escala_loc / 2
+        semi_y = (panel_h_mm / 1000.0) * escala_loc / 2
+
+        xmin_m, xmax_m = cx - semi_x, cx + semi_x
+        ymin_m, ymax_m = cy - semi_y, cy + semi_y
 
         ax.set_xlim(xmin_m, xmax_m)
         ax.set_ylim(ymin_m, ymax_m)
@@ -471,13 +449,43 @@ class MaquetadorPlano:
         except Exception:
             pass
 
-        ax.set_title("LOCALIZACIÓN", fontsize=5, fontweight="bold",
-                      color="#2C3E50", pad=2)
+        # Título dentro del panel (consistente con cajetín y datos)
+        ax.text(0.5, 0.97, "LOCALIZACIÓN", ha="center", va="top",
+                fontsize=5, fontweight="bold", color="white",
+                transform=ax.transAxes, zorder=12,
+                bbox=dict(boxstyle="round,pad=0.15", facecolor="#2C3E50",
+                          edgecolor="none"))
+
+        # ── Escala del mapa de localización ──
+        extent_m = xmax_m - xmin_m
+        barra_loc_m = 5000  # 5 km
+        barra_frac = barra_loc_m / extent_m
+
+        bar_x0 = 0.05
+        bar_y = 0.04
+        bar_h = 0.025
+        n_seg = 2
+        seg_frac = barra_frac / n_seg
+        for i in range(n_seg):
+            c = "#1A1A2E" if i % 2 == 0 else "white"
+            ax.add_patch(Rectangle(
+                (bar_x0 + i * seg_frac, bar_y), seg_frac, bar_h,
+                facecolor=c, edgecolor="#1A1A2E", linewidth=0.3,
+                transform=ax.transAxes, zorder=10))
+        ax.text(bar_x0 + barra_frac + 0.02, bar_y + bar_h / 2,
+                f"{barra_loc_m // 1000} km", ha="left", va="center",
+                fontsize=3.5, color="#1A1A2E", fontweight="bold",
+                transform=ax.transAxes, zorder=10)
+        # Texto de escala
+        ax.text(0.95, 0.04, f"E 1:{escala_loc:,}".replace(",", "."),
+                ha="right", va="bottom", fontsize=3.5, fontweight="bold",
+                color="#2C3E50", transform=ax.transAxes, zorder=10,
+                bbox=dict(boxstyle="round,pad=0.1", facecolor="white",
+                          edgecolor="none", alpha=0.7))
 
     # ── Cajetín + Escala + Norte (panel inferior izquierdo) ───────────
 
-    def dibujar_barra_escala(self, proveedor: str, cx_utm=None, cy_utm=None,
-                              cajetin=None):
+    def dibujar_barra_escala(self, proveedor: str, cx_utm=None, cy_utm=None, cajetin=None):
         ax = self.ax_esc
         ax.set_xlim(0, 1)
         ax.set_ylim(0, 1)
@@ -541,20 +549,10 @@ class MaquetadorPlano:
                 f"Escala 1:{self.escala:,}", ha="center", va="bottom",
                 fontsize=5, fontweight="bold", color="#1A1A2E")
 
-        # ── Norte geográfico (mini) ──
+        # ── Norte geográfico ──
         norte_x = 0.82
         norte_y_base = esc_y - 0.005
         norte_h = 0.09
-
-        decl = 0.0
-        if cx_utm is not None and cy_utm is not None:
-            try:
-                tr = Transformer.from_crs("EPSG:25830", "EPSG:4326",
-                                          always_xy=True)
-                lon, _ = tr.transform(cx_utm, cy_utm)
-                decl = _estimar_declinacion(lon)
-            except Exception:
-                pass
 
         ax.annotate("", xy=(norte_x, norte_y_base + norte_h),
                     xytext=(norte_x, norte_y_base),
@@ -562,18 +560,6 @@ class MaquetadorPlano:
         ax.text(norte_x, norte_y_base + norte_h + 0.012, "N",
                 ha="center", va="bottom", fontsize=5.5, fontweight="bold",
                 color="#1A1A2E")
-
-        if abs(decl) > 0.1:
-            rad = math.radians(decl)
-            nm_x = norte_x + 0.06
-            dx = math.sin(rad) * 0.04
-            dy = math.cos(rad) * norte_h
-            ax.annotate("", xy=(nm_x + dx, norte_y_base + dy),
-                        xytext=(nm_x, norte_y_base),
-                        arrowprops=dict(arrowstyle="->", color="#E74C3C",
-                                        lw=0.5, linestyle="--"))
-            ax.text(nm_x + dx, norte_y_base + dy + 0.012, "NM",
-                    ha="center", va="bottom", fontsize=3, color="#E74C3C")
 
         # ── Créditos ──
         fecha = date.today().strftime("%d/%m/%Y")
@@ -596,9 +582,10 @@ class MaquetadorPlano:
         c_texto = pl.get("color_cabecera_texto", "#FFFFFF")
         c_acento = pl.get("color_cabecera_acento", "#2ECC71")
 
-        org = "CONSEJERÍA DE SOSTENIBILIDAD\nJUNTA DE ANDALUCÍA"
+        org = ""
         subtit = "PLANO DE INFRAESTRUCTURA FORESTAL"
         titulo_proy = ""
+        titulo_mapa = ""
         logo_path = ""
         num_inicio = 1
 
@@ -608,6 +595,7 @@ class MaquetadorPlano:
             if cajetin.get("subtitulo"):
                 subtit = cajetin["subtitulo"]
             titulo_proy = cajetin.get("proyecto", "")
+            titulo_mapa = cajetin.get("titulo_mapa", "")
             logo_path = cajetin.get("logo_path", "")
             num_inicio = cajetin.get("num_plano_inicio", 1)
             # Subtítulo dinámico desde un campo de la tabla de atributos
@@ -657,19 +645,20 @@ class MaquetadorPlano:
         ax_cab.text(x_org, 0.55, org, ha="left", va="center", fontsize=4.5,
                     fontweight="bold", color=c_acento, linespacing=1.1)
 
-        # ── Centro: título proyecto + subtítulo ──
+        # ── Centro: título mapa + subtítulo ──
+        titulo_final = ""
         if titulo_grupo:
-            ax_cab.text(0.5, 0.60, titulo_grupo.upper(), ha="center",
-                        va="center", fontsize=7, fontweight="bold",
-                        color=c_texto)
+            titulo_final = titulo_grupo
+        elif titulo_mapa:
+            titulo_final = titulo_mapa
         elif titulo_proy:
-            ax_cab.text(0.5, 0.60, titulo_proy.upper(), ha="center",
-                        va="center", fontsize=7, fontweight="bold",
-                        color=c_texto)
+            titulo_final = titulo_proy
         else:
-            nombre = str(row.get("Nombre_Infra", "INFRAESTRUCTURA FORESTAL"))
-            ax_cab.text(0.5, 0.60, nombre.upper(), ha="center", va="center",
-                        fontsize=7, fontweight="bold", color=c_texto)
+            titulo_final = str(row.get("Nombre_Infra", "INFRAESTRUCTURA FORESTAL"))
+
+        ax_cab.text(0.5, 0.60, titulo_final.upper(), ha="center",
+                    va="center", fontsize=7, fontweight="bold",
+                    color=c_texto)
 
         ax_cab.text(0.5, 0.20, subtit.upper(), ha="center", va="center",
                     fontsize=4.5, color="#95A5A6")
@@ -687,16 +676,16 @@ class MaquetadorPlano:
 
     # ── Marcos ─────────────────────────────────────────────────────────
 
-    def dibujar_marcos(self, plantilla=None):
+    def dibujar_marcos(self, plantilla=None, cajetin=None):
         pl = plantilla or {}
         c_ext = pl.get("color_marco_exterior", "#1C2333")
         c_int = pl.get("color_marco_interior", "#2ECC71")
 
-        ax = self.fig.add_axes([0, 0, 1, 1])
+        ax = self.fig.add_axes([0, 0, 1, 1], zorder=20)
         ax.set_xlim(0, self.fmt_mm[0])
         ax.set_ylim(0, self.fmt_mm[1])
         ax.axis("off")
-        ax.set_zorder(-10)
+        ax.patch.set_visible(False)
         ax.add_patch(Rectangle(
             (3, 3), self.fmt_mm[0] - 6, self.fmt_mm[1] - 6,
             fill=False, edgecolor=c_ext, linewidth=2.0))
@@ -704,18 +693,22 @@ class MaquetadorPlano:
             (5, 5), self.fmt_mm[0] - 10, self.fmt_mm[1] - 10,
             fill=False, edgecolor=c_int, linewidth=0.5))
 
-        # Marca lateral discreta (borde izquierdo, vertical)
+        # Copyright lateral izquierdo (vertical)
+        copyright_text = cajetin.get("copyright", "") if cajetin else ""
+        if not copyright_text:
+            copyright_text = (
+                "Mapa creado con APP Generador Mapas Forestales / "
+                "Jose Caballero Sánchez / Aplicación Open Source de uso gratuito"
+            )
         ax.text(
-            1.5, self.fmt_mm[1] / 2,
-            "Mapa creado con APP Generador Mapas Forestales / "
-            "Jose Caballero Sánchez / Aplicación Open Source de uso gratuito",
+            1.8, self.fmt_mm[1] / 2, copyright_text,
             rotation=90, ha="center", va="center",
-            fontsize=3, color="#B0B0B0", alpha=0.45,
+            fontsize=3.5, color="#666666", alpha=0.7,
         )
 
     def guardar(self, ruta_out: str):
         self.fig.savefig(ruta_out, format="pdf", dpi=DPI,
-                          bbox_inches="tight", facecolor="white")
+                          facecolor="white")
         plt.close(self.fig)
 
 
@@ -750,7 +743,7 @@ def crear_portada(formato_key: str, titulo_proyecto: str,
         ax.text(0.5, 0.72, subtitulo.upper(), ha="center", va="center",
                 fontsize=12, color="white")
 
-    org = "CONSEJERÍA DE SOSTENIBILIDAD - JUNTA DE ANDALUCÍA"
+    org = ""
     if cajetin and cajetin.get("organizacion"):
         org = cajetin["organizacion"].replace("\n", " - ")
     ax.text(0.5, 0.62, org, ha="center", va="center", fontsize=8,

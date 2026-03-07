@@ -1,5 +1,5 @@
 """
-Gestión de capas SHP adicionales (hidrografía, vías, parcelas, zonas protegidas, etc.).
+Gestión de capas SHP/GDB adicionales (hidrografía, vías, parcelas, zonas protegidas, etc.).
 
 Cada capa se carga, reproyecta y almacena con un nombre y simbología asociada.
 """
@@ -7,6 +7,19 @@ Cada capa se carga, reproyecta y almacena con un nombre y simbología asociada.
 import geopandas as gpd
 
 from .simbologia import GestorSimbologia, ConfigSimbologia, SIMBOLOGIA_CAPAS_EXTRA
+
+
+def _leer_geodatos(ruta: str, layer: str = None) -> gpd.GeoDataFrame:
+    """Lee un shapefile o geodatabase con fallback al driver OpenFileGDB."""
+    kwargs = {}
+    if layer:
+        kwargs["layer"] = layer
+    if ruta.lower().rstrip("/\\").endswith(".gdb"):
+        try:
+            return gpd.read_file(ruta, driver="OpenFileGDB", **kwargs)
+        except Exception:
+            pass
+    return gpd.read_file(ruta, **kwargs)
 
 # Tipos de capa reconocidos para asignar simbología por defecto
 TIPOS_CAPA = list(SIMBOLOGIA_CAPAS_EXTRA.keys()) + ["Personalizada"]
@@ -38,7 +51,7 @@ class GestorCapasExtra:
         Devuelve (ok, mensaje, CapaExtra o None).
         """
         try:
-            gdf = gpd.read_file(ruta, layer=layer)
+            gdf = _leer_geodatos(ruta, layer=layer)
             if gdf.crs is None:
                 gdf = gdf.set_crs("EPSG:4326")
             gdf = gdf.to_crs("EPSG:25830")

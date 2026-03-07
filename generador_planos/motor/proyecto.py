@@ -45,7 +45,7 @@ class Proyecto:
             "num_proyecto": "",
             "revision": "0",
             "firma": "",
-            "organizacion": "CONSEJER\u00cdA DE SOSTENIBILIDAD\nJUNTA DE ANDALUC\u00cdA",
+            "organizacion": "",
             "subtitulo": "PLANO DE INFRAESTRUCTURA FORESTAL",
         }
 
