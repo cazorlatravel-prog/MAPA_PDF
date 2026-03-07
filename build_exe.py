@@ -111,6 +111,26 @@ def construir_exe(modo_onefile=False):
     with open(LAUNCHER_SCRIPT, "w", encoding="utf-8") as f:
         f.write(LAUNCHER_CODE)
 
+    # Detectar rutas de site-packages para que PyInstaller encuentre todo
+    import site
+    import matplotlib
+    site_dirs = []
+    try:
+        site_dirs += site.getsitepackages()
+    except AttributeError:
+        pass
+    try:
+        usp = site.getusersitepackages()
+        if isinstance(usp, str):
+            site_dirs.append(usp)
+    except AttributeError:
+        pass
+    mpl_parent = os.path.dirname(os.path.dirname(matplotlib.__file__))
+    if mpl_parent not in site_dirs:
+        site_dirs.append(mpl_parent)
+    site_dirs = [d for d in site_dirs if os.path.isdir(d)]
+    print(f"  Site-packages: {len(site_dirs)} rutas detectadas")
+
     cmd = [
         sys.executable, "-m", "PyInstaller",
         "--name", APP_NAME,
@@ -118,6 +138,10 @@ def construir_exe(modo_onefile=False):
         "--noconfirm",
         "--clean",
     ]
+
+    # Añadir rutas de site-packages explícitamente
+    for sp in site_dirs:
+        cmd.extend(["--paths", sp])
 
     # Icono
     if os.path.exists(ICON_FILE):
