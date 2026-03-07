@@ -23,7 +23,6 @@ import matplotlib
 matplotlib.use("TkAgg")
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
-from matplotlib.patches import Rectangle as MplRectangle
 
 from .estilos import (
     COLOR_FONDO_APP, COLOR_ACENTO, COLOR_TEXTO_GRIS, COLOR_PANEL, COLOR_TEXTO,
@@ -195,31 +194,151 @@ class App(tk.Tk):
 
     def _crear_panel_mapa_general(self, parent):
         """Vista previa del mapa general con todas las capas cargadas."""
-        # Barra superior con botones
+        from ..motor.cartografia import CAPAS_BASE
+
+        # ── Barra superior: actualizar + proveedor + buscar ──
         toolbar = tk.Frame(parent, bg=COLOR_PANEL, height=32)
         toolbar.pack(fill="x", padx=2, pady=(2, 0))
         toolbar.pack_propagate(False)
 
-        tk.Button(toolbar, text="🔄 Actualizar mapa", command=self._actualizar_mapa_general,
-                  font=FONT_SMALL, bg="#2C3E50", fg=COLOR_TEXTO, relief="flat",
-                  cursor="hand2", padx=6).pack(side="left", padx=4, pady=2)
+        tk.Button(toolbar, text="🔄", command=self._actualizar_mapa_general,
+                  font=("Helvetica", 10), bg="#2C3E50", fg=COLOR_TEXTO,
+                  relief="flat", cursor="hand2", padx=4).pack(side="left", padx=2, pady=2)
 
+        # Selector de proveedor de fondo
+        tk.Label(toolbar, text="Fondo:", font=FONT_SMALL,
+                 bg=COLOR_PANEL, fg=COLOR_TEXTO_GRIS).pack(side="left", padx=(4, 2))
+        self._mapa_proveedor = ttk.Combobox(
+            toolbar, values=list(CAPAS_BASE.keys()), width=18,
+            state="readonly", font=("Helvetica", 8))
+        self._mapa_proveedor.set(self.panel_config.proveedor.get())
+        self._mapa_proveedor.pack(side="left", padx=2, pady=2)
+        self._mapa_proveedor.bind("<<ComboboxSelected>>",
+                                   lambda _: self._actualizar_mapa_general())
+
+        # Buscador de infraestructura
+        tk.Label(toolbar, text="Buscar:", font=FONT_SMALL,
+                 bg=COLOR_PANEL, fg=COLOR_TEXTO_GRIS).pack(side="left", padx=(8, 2))
+        self._mapa_buscar = tk.Entry(toolbar, width=18, font=("Helvetica", 8),
+                                      bg="#1A2636", fg=COLOR_TEXTO,
+                                      insertbackground=COLOR_TEXTO, relief="flat")
+        self._mapa_buscar.pack(side="left", padx=2, pady=2)
+        self._mapa_buscar.bind("<Return>", lambda _: self._buscar_infraestructura())
+        tk.Button(toolbar, text="Ir", command=self._buscar_infraestructura,
+                  font=("Helvetica", 8), bg="#2C3E50", fg=COLOR_TEXTO,
+                  relief="flat", cursor="hand2", padx=4).pack(side="left", padx=1, pady=2)
+
+        # Info
         self._lbl_mapa_info = tk.Label(toolbar, text="Carga capas para ver el mapa",
-                                        font=FONT_SMALL, bg=COLOR_PANEL, fg=COLOR_TEXTO_GRIS)
-        self._lbl_mapa_info.pack(side="left", padx=8)
+                                        font=("Helvetica", 7), bg=COLOR_PANEL,
+                                        fg=COLOR_TEXTO_GRIS)
+        self._lbl_mapa_info.pack(side="right", padx=4)
+
+        # ── Panel lateral: filtro por categoría ──
+        self._mapa_body = tk.Frame(parent, bg="#0D1117")
+        self._mapa_body.pack(fill="both", expand=True, padx=2, pady=2)
+
+        self._filtro_frame = tk.Frame(self._mapa_body, bg=COLOR_PANEL, width=140)
+        self._filtro_frame.pack(side="right", fill="y", padx=(2, 0))
+        self._filtro_frame.pack_propagate(False)
+        tk.Label(self._filtro_frame, text="Filtro categorías",
+                 font=("Helvetica", 8, "bold"), bg=COLOR_PANEL,
+                 fg=COLOR_ACENTO).pack(anchor="w", padx=4, pady=(4, 2))
+        self._filtro_scroll = tk.Frame(self._filtro_frame, bg=COLOR_PANEL)
+        self._filtro_scroll.pack(fill="both", expand=True, padx=2)
+        self._filtro_vars = {}  # {valor: BooleanVar}
 
         # Canvas matplotlib
-        self._mapa_frame = tk.Frame(parent, bg="#0D1117")
-        self._mapa_frame.pack(fill="both", expand=True, padx=2, pady=2)
+        self._mapa_frame = tk.Frame(self._mapa_body, bg="#0D1117")
+        self._mapa_frame.pack(side="left", fill="both", expand=True)
         self._mapa_canvas = None
         self._mapa_fig = None
         self._mapa_toolbar = None
         self._mapa_click_cid = None
+        self._mapa_move_cid = None
+        self._marcador_sel = None
+        self._mapa_tooltip = None
+        self._mapa_artists_cat = {}  # {valor: [artists]}
 
-        # Panel inferior para info al hacer clic
-        self._info_frame = tk.Frame(parent, bg="#0D1117")
-        self._info_frame.pack(fill="x", padx=2, pady=(0, 2))
+        # Panel inferior: coordenadas + info de infraestructura clicada
+        bottom = tk.Frame(parent, bg="#0D1117")
+        bottom.pack(fill="x", padx=2, pady=(0, 2))
+        self._lbl_coords = tk.Label(bottom, text="X: — Y: —",
+                                     font=FONT_MONO, bg="#0D1117",
+                                     fg=COLOR_TEXTO_GRIS, anchor="w")
+        self._lbl_coords.pack(side="left", padx=4)
+        self._info_frame = tk.Frame(bottom, bg="#0D1117")
+        self._info_frame.pack(fill="x", expand=True)
         self._info_tabla = None
+
+    def _actualizar_filtros_categoria(self):
+        """Reconstruye los checkboxes de filtro por categoría."""
+        for w in self._filtro_scroll.winfo_children():
+            w.destroy()
+        self._filtro_vars.clear()
+
+        gdf = self.motor.gdf_infra
+        if gdf is None:
+            return
+
+        ci = self.motor.config_infra
+        campo_cat = ci.get("campo_categoria")
+        if not campo_cat or campo_cat not in gdf.columns:
+            tk.Label(self._filtro_scroll, text="Sin categoría",
+                     font=("Helvetica", 7), bg=COLOR_PANEL,
+                     fg=COLOR_TEXTO_GRIS).pack(anchor="w", padx=2)
+            return
+
+        campo_real = campo_cat
+        mapeo = self.motor._campo_mapeo
+        if mapeo and campo_cat in mapeo:
+            campo_real = mapeo[campo_cat]
+
+        valores = sorted(gdf[campo_real].astype(str).unique())
+        for valor in valores:
+            simb = self.motor.gestor_simbologia.obtener_simbologia_infra(
+                campo_cat, valor)
+            var = tk.BooleanVar(value=True)
+            self._filtro_vars[valor] = var
+            f = tk.Frame(self._filtro_scroll, bg=COLOR_PANEL)
+            f.pack(fill="x", pady=1)
+            # Color indicator
+            ind = tk.Canvas(f, width=12, height=12, bg=COLOR_PANEL,
+                            highlightthickness=0)
+            ind.pack(side="left", padx=(2, 4))
+            ind.create_rectangle(1, 1, 11, 11, fill=simb.color, outline="white",
+                                  width=0.5)
+            cb = tk.Checkbutton(
+                f, text=str(valor)[:18], variable=var,
+                font=("Helvetica", 7), bg=COLOR_PANEL, fg=COLOR_TEXTO,
+                selectcolor="#1A2636", activebackground=COLOR_PANEL,
+                activeforeground=COLOR_TEXTO, anchor="w",
+                command=self._aplicar_filtro_categoria)
+            cb.pack(side="left", fill="x")
+
+        # Botones todo/nada
+        bf = tk.Frame(self._filtro_scroll, bg=COLOR_PANEL)
+        bf.pack(fill="x", pady=(4, 0))
+        tk.Button(bf, text="Todo", font=("Helvetica", 7),
+                  bg="#2C3E50", fg=COLOR_TEXTO, relief="flat",
+                  command=lambda: self._set_all_filtros(True)).pack(side="left", padx=2)
+        tk.Button(bf, text="Nada", font=("Helvetica", 7),
+                  bg="#2C3E50", fg=COLOR_TEXTO, relief="flat",
+                  command=lambda: self._set_all_filtros(False)).pack(side="left", padx=2)
+
+    def _set_all_filtros(self, estado: bool):
+        for var in self._filtro_vars.values():
+            var.set(estado)
+        self._aplicar_filtro_categoria()
+
+    def _aplicar_filtro_categoria(self):
+        """Muestra/oculta artistas del mapa según checkboxes."""
+        for valor, artists in self._mapa_artists_cat.items():
+            visible = self._filtro_vars.get(valor, tk.BooleanVar(value=True)).get()
+            for a in artists:
+                a.set_visible(visible)
+        if self._mapa_canvas:
+            self._mapa_canvas.draw_idle()
 
     def _actualizar_mapa_general(self):
         """Redibuja el mapa general con capas base + vectoriales + interactividad."""
@@ -239,6 +358,8 @@ class App(tk.Tk):
         if self._info_tabla is not None:
             self._info_tabla.destroy()
             self._info_tabla = None
+        self._mapa_artists_cat.clear()
+        self._marcador_sel = None
 
         fig, ax = plt.subplots(1, 1, figsize=(8, 5), dpi=96)
         fig.patch.set_facecolor("#0D1117")
@@ -255,8 +376,8 @@ class App(tk.Tk):
         ax.set_xlim(xmin, xmax)
         ax.set_ylim(ymin, ymax)
 
-        # ── Fondo cartográfico (mismas teselas que el PDF) ──
-        proveedor = self.panel_config.proveedor.get()
+        # ── Fondo cartográfico (proveedor del selector del mapa) ──
+        proveedor = self._mapa_proveedor.get()
         try:
             from ..motor.cartografia import añadir_fondo_cartografico
             añadir_fondo_cartografico(ax, gdf, proveedor,
@@ -280,7 +401,7 @@ class App(tk.Tk):
         self.motor.gestor_capas.dibujar_en_mapa(
             ax, xmin, xmax, ymin, ymax, self.motor.gestor_simbologia)
 
-        # ── Infraestructuras ──
+        # ── Infraestructuras (guardando artistas por categoría para filtro) ──
         ci = self.motor.config_infra
         campo_cat = ci.get("campo_categoria")
         lw = ci.get("linewidth", 2.5)
@@ -299,10 +420,14 @@ class App(tk.Tk):
                 mask = gdf[campo_real].astype(str) == valor
                 gdf_cat = gdf[mask]
                 if not gdf_cat.empty:
+                    n_before = len(ax.collections) + len(ax.lines) + len(ax.patches)
                     gdf_cat.plot(ax=ax, color=simb.color, linewidth=lw,
                                  linestyle=simb.linestyle,
                                  label=str(valor)[:20], alpha=alpha_infra,
                                  zorder=5)
+                    # Capturar artistas nuevos
+                    all_artists = list(ax.collections) + list(ax.lines) + list(ax.patches)
+                    self._mapa_artists_cat[valor] = all_artists[n_before:]
         else:
             gdf.plot(ax=ax, color=color_infra, linewidth=lw,
                      label="Infraestructuras", alpha=alpha_infra, zorder=5)
@@ -321,7 +446,6 @@ class App(tk.Tk):
         self._mapa_canvas = FigureCanvasTkAgg(fig, master=self._mapa_frame)
         self._mapa_canvas.draw()
 
-        # Toolbar de matplotlib: zoom, pan, home, guardar
         self._mapa_toolbar = NavigationToolbar2Tk(
             self._mapa_canvas, self._mapa_frame)
         self._mapa_toolbar.configure(bg=COLOR_PANEL)
@@ -329,22 +453,97 @@ class App(tk.Tk):
         self._mapa_toolbar.pack(side="bottom", fill="x")
         self._mapa_canvas.get_tk_widget().pack(fill="both", expand=True)
 
-        # ── Clic para inspeccionar infraestructura ──
+        # ── Tooltip para hover ──
+        self._mapa_tooltip = ax.annotate(
+            "", xy=(0, 0), xytext=(12, 12),
+            textcoords="offset points", fontsize=7,
+            bbox=dict(boxstyle="round,pad=0.3", fc="#1C2333", ec=COLOR_ACENTO,
+                      alpha=0.92, linewidth=0.6),
+            color=COLOR_TEXTO, zorder=20, visible=False)
+
+        # ── Eventos: clic + movimiento ──
         self._mapa_click_cid = fig.canvas.mpl_connect(
             "button_press_event", self._on_mapa_click)
+        self._mapa_move_cid = fig.canvas.mpl_connect(
+            "motion_notify_event", self._on_mapa_move)
+
+        # ── Filtros categoría ──
+        self._actualizar_filtros_categoria()
 
         n_infra = len(gdf)
         n_capas = len(self.motor.gestor_capas.capas)
         montes = "Sí" if self.motor.gdf_montes is not None else "No"
         self._lbl_mapa_info.configure(
-            text=f"{n_infra} infra · {n_capas} capas · Montes: {montes} · "
-                 f"Clic en infraestructura para ver info")
+            text=f"{n_infra} infra · {n_capas} capas · Montes: {montes}")
+
+    def _on_mapa_move(self, event):
+        """Actualiza coordenadas y tooltip al mover el ratón."""
+        if event.inaxes is None or event.xdata is None:
+            self._lbl_coords.configure(text="X: — Y: —")
+            if self._mapa_tooltip:
+                self._mapa_tooltip.set_visible(False)
+                self._mapa_canvas.draw_idle()
+            return
+
+        # Coordenadas en tiempo real
+        self._lbl_coords.configure(
+            text=f"X: {event.xdata:.1f}  Y: {event.ydata:.1f}")
+
+        # Tooltip: solo si no estamos en modo zoom/pan
+        if self._mapa_toolbar and self._mapa_toolbar.mode:
+            return
+
+        gdf = self.motor.gdf_infra
+        if gdf is None:
+            return
+
+        from shapely.geometry import Point
+        pt = Point(event.xdata, event.ydata)
+        distancias = gdf.geometry.distance(pt)
+        idx = distancias.idxmin()
+        dist = distancias[idx]
+
+        ax = self._mapa_ax
+        xlim = ax.get_xlim()
+        ylim = ax.get_ylim()
+        umbral = max(xlim[1] - xlim[0], ylim[1] - ylim[0]) * 0.03
+
+        if dist <= umbral:
+            row = gdf.loc[idx]
+            # Buscar un campo útil para mostrar
+            columnas = [c for c in gdf.columns if c != "geometry"]
+            nombre = ""
+            for campo_nombre in ["Nombre_Infra", "NOMBRE_INF", "COD_INF_1",
+                                  "OBJECTID", "nombre", "cod", "Name"]:
+                if campo_nombre in columnas:
+                    nombre = str(row.get(campo_nombre, ""))
+                    if nombre and nombre != "nan":
+                        break
+            if not nombre or nombre == "nan":
+                nombre = str(row.get(columnas[0], "")) if columnas else ""
+            # Segundo campo de contexto
+            cod = ""
+            for campo_cod in ["COD_INF_1", "OBJECTID", "COD_INF"]:
+                if campo_cod in columnas and campo_cod not in (nombre,):
+                    cod = str(row.get(campo_cod, ""))
+                    if cod and cod != "nan":
+                        break
+            texto = nombre[:30]
+            if cod and cod != "nan" and cod != nombre:
+                texto += f"\n{cod}"
+
+            self._mapa_tooltip.xy = (event.xdata, event.ydata)
+            self._mapa_tooltip.set_text(texto)
+            self._mapa_tooltip.set_visible(True)
+        else:
+            self._mapa_tooltip.set_visible(False)
+
+        self._mapa_canvas.draw_idle()
 
     def _on_mapa_click(self, event):
         """Al hacer clic en el mapa, busca la infraestructura más cercana y muestra sus datos."""
         if event.inaxes is None or event.xdata is None:
             return
-        # Solo actuar en modo normal (no zoom/pan activo)
         if self._mapa_toolbar and self._mapa_toolbar.mode:
             return
 
@@ -354,13 +553,10 @@ class App(tk.Tk):
 
         from shapely.geometry import Point
         click_pt = Point(event.xdata, event.ydata)
-
-        # Calcular distancia de cada infraestructura al punto clicado
         distancias = gdf.geometry.distance(click_pt)
         idx_min = distancias.idxmin()
         dist_min = distancias[idx_min]
 
-        # Umbral: solo si el clic está lo bastante cerca (5% del viewport)
         ax = self._mapa_ax
         xlim = ax.get_xlim()
         ylim = ax.get_ylim()
@@ -385,7 +581,7 @@ class App(tk.Tk):
         self._info_tabla = info_lf
 
         tree = ttk.Treeview(info_lf, columns=columnas, show="headings",
-                             height=3, selectmode="browse")
+                             height=2, selectmode="browse")
         for col in columnas:
             tree.heading(col, text=col)
             tree.column(col, width=100, minwidth=40)
@@ -404,12 +600,11 @@ class App(tk.Tk):
         sb_h.pack(side="bottom", fill="x")
         tree.pack(fill="x", expand=True)
 
-        # Resaltar la infraestructura seleccionada en el mapa
+        # Resaltar la infraestructura seleccionada
         geom = row.geometry
         if geom is not None:
             cx, cy = geom.centroid.x, geom.centroid.y
-            # Limpiar marcador anterior si existe
-            if hasattr(self, '_marcador_sel') and self._marcador_sel:
+            if self._marcador_sel:
                 for m in self._marcador_sel:
                     m.remove()
             self._marcador_sel = ax.plot(
@@ -417,6 +612,65 @@ class App(tk.Tk):
                 markeredgecolor="#E74C3C", markeredgewidth=2,
                 zorder=10, alpha=0.9)
             self._mapa_canvas.draw_idle()
+
+    def _buscar_infraestructura(self):
+        """Busca infraestructura por texto y hace zoom a ella."""
+        texto = self._mapa_buscar.get().strip()
+        if not texto:
+            return
+        gdf = self.motor.gdf_infra
+        if gdf is None:
+            return
+
+        columnas = [c for c in gdf.columns if c != "geometry"]
+        texto_lower = texto.lower()
+
+        # Buscar en todas las columnas de texto
+        encontrado = None
+        for _, row in gdf.iterrows():
+            for col in columnas:
+                val = str(row.get(col, "")).lower()
+                if texto_lower in val:
+                    encontrado = row
+                    break
+            if encontrado is not None:
+                break
+
+        if encontrado is None:
+            self._lbl_mapa_info.configure(text=f"No encontrado: '{texto}'")
+            return
+
+        geom = encontrado.geometry
+        if geom is None:
+            return
+
+        # Hacer zoom a la infraestructura
+        ax = self._mapa_ax
+        cx, cy = geom.centroid.x, geom.centroid.y
+        # Ventana de 2km alrededor
+        semi = 1000
+        ax.set_xlim(cx - semi, cx + semi)
+        ax.set_ylim(cy - semi, cy + semi)
+
+        # Marcar
+        if self._marcador_sel:
+            for m in self._marcador_sel:
+                m.remove()
+        self._marcador_sel = ax.plot(
+            cx, cy, "o", color="#FFFF00", markersize=14,
+            markeredgecolor="#E74C3C", markeredgewidth=2.5,
+            zorder=10, alpha=0.9)
+
+        self._mapa_canvas.draw_idle()
+
+        # Mostrar nombre encontrado
+        nombre = ""
+        for col in columnas:
+            val = str(encontrado.get(col, ""))
+            if texto_lower in val.lower():
+                nombre = val
+                break
+        self._lbl_mapa_info.configure(text=f"Encontrado: {nombre[:50]}")
 
     def _crear_panel_log(self, parent):
         lf = tk.LabelFrame(
