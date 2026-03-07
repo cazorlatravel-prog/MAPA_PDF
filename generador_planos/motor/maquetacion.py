@@ -142,9 +142,9 @@ class MaquetadorPlano:
 
         ax.set_xticks(xs)
         ax.set_yticks(ys)
-        ax.set_xticklabels([f"{int(x):,}" for x in xs], fontsize=4,
+        ax.set_xticklabels([f"{int(x)}" for x in xs], fontsize=4,
                            color="#2C3E50", rotation=30, ha="right")
-        ax.set_yticklabels([f"{int(y):,}" for y in ys], fontsize=4.5,
+        ax.set_yticklabels([f"{int(y)}" for y in ys], fontsize=4.5,
                            color="#2C3E50")
         ax.tick_params(which="major", length=4, width=0.6, color="#2C3E50",
                        direction="out", labelbottom=True, labelleft=True,
