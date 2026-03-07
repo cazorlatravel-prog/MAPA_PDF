@@ -275,7 +275,7 @@ class GeneradorPlanos:
 
     def _construir_items_leyenda(self, gdf_sel, color_infra,
                                   xmin=None, xmax=None, ymin=None, ymax=None):
-        """Construye items de leyenda sólo con infraestructuras visibles en el extent."""
+        """Construye items de leyenda sólo con las infraestructuras seleccionadas."""
         items = []
 
         geom_type = ""
@@ -284,19 +284,13 @@ class GeneradorPlanos:
                 geom_type = str(g.geom_type).lower()
                 break
 
-        # Usar infraestructuras visibles en el extent (no todas las de la capa)
-        if xmin is not None and self.gdf_infra is not None:
-            gdf_visibles = self.gdf_infra.cx[xmin:xmax, ymin:ymax]
-        else:
-            gdf_visibles = gdf_sel
-
-        # Infraestructuras: por categoría o color único
+        # Solo categorías presentes en las infraestructuras seleccionadas
         campo_cat = self.config_infra.get("campo_categoria")
-        if campo_cat and campo_cat in gdf_visibles.columns:
+        if campo_cat and campo_cat in gdf_sel.columns:
             campo_real = campo_cat
             if self._campo_mapeo and campo_cat in self._campo_mapeo:
                 campo_real = self._campo_mapeo[campo_cat]
-            valores_unicos = sorted(gdf_visibles[campo_real].astype(str).unique())
+            valores_unicos = sorted(gdf_sel[campo_real].astype(str).unique())
             for valor in valores_unicos:
                 simb = self.gestor_simbologia.obtener_simbologia_infra(
                     campo_cat, valor)
@@ -323,7 +317,7 @@ class GeneradorPlanos:
 
     def _construir_items_categoria(self, gdf_sel,
                                      xmin=None, xmax=None, ymin=None, ymax=None):
-        """Construye items de categoría sólo con infra visibles en el extent."""
+        """Construye items de categoría sólo con las infra seleccionadas."""
         campo_cat = self.config_infra.get("campo_categoria")
         if not campo_cat or campo_cat not in gdf_sel.columns:
             return None
@@ -339,14 +333,8 @@ class GeneradorPlanos:
         if self._campo_mapeo and campo_cat in self._campo_mapeo:
             campo_real = self._campo_mapeo[campo_cat]
 
-        # Solo valores visibles en el extent del plano
-        if xmin is not None and self.gdf_infra is not None:
-            gdf_visibles = self.gdf_infra.cx[xmin:xmax, ymin:ymax]
-            valores_visibles = sorted(gdf_visibles[campo_real].astype(str).unique()
-                                       if campo_real in gdf_visibles.columns
-                                       else [])
-        else:
-            valores_visibles = sorted(gdf_sel[campo_real].astype(str).unique())
+        # Solo categorías de las infraestructuras seleccionadas para el plano
+        valores_visibles = sorted(gdf_sel[campo_real].astype(str).unique())
 
         for valor in valores_visibles:
             simb = self.gestor_simbologia.obtener_simbologia_infra(campo_cat, valor)
