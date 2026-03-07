@@ -85,6 +85,25 @@ def aplicar_estilos(root: tk.Tk):
         background=COLOR_ACENTO,
     )
 
+    # Notebook (pestañas centrales)
+    style.configure(
+        "TNotebook",
+        background=COLOR_FONDO_APP,
+        borderwidth=0,
+    )
+    style.configure(
+        "TNotebook.Tab",
+        background=COLOR_BORDE,
+        foreground=COLOR_TEXTO,
+        font=("Helvetica", 9, "bold"),
+        padding=[12, 4],
+    )
+    style.map(
+        "TNotebook.Tab",
+        background=[("selected", "#1A2636"), ("active", "#34495E")],
+        foreground=[("selected", COLOR_ACENTO), ("active", COLOR_TEXTO)],
+    )
+
     # Scrollbar marrón visible
     style.configure(
         "Vertical.TScrollbar",
