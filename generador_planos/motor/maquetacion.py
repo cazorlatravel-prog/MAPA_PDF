@@ -33,7 +33,6 @@ ETIQUETAS_CAMPOS = {
     "Monte": "Monte",
     "Cod_Monte": "Código Monte",
     "CEDEFO": "CEDEFO",
-    "Cod_Infoca": "Cód. INFOCA",
     "Nombre_Infra": "Nombre Infraestructura",
     "Superficie": "Superficie (ha)",
     "Longitud": "Longitud (m)",
@@ -558,7 +557,7 @@ class MaquetadorPlano:
         c_texto = pl.get("color_cabecera_texto", "#FFFFFF")
         c_acento = pl.get("color_cabecera_acento", "#2ECC71")
 
-        org = "CONSEJERÍA DE SOSTENIBILIDAD\nJUNTA DE ANDALUCÍA"
+        org = ""
         subtit = "PLANO DE INFRAESTRUCTURA FORESTAL"
         titulo_proy = ""
         logo_path = ""
@@ -716,7 +715,7 @@ def crear_portada(formato_key: str, titulo_proyecto: str,
         ax.text(0.5, 0.72, subtitulo.upper(), ha="center", va="center",
                 fontsize=12, color="white")
 
-    org = "CONSEJERÍA DE SOSTENIBILIDAD - JUNTA DE ANDALUCÍA"
+    org = ""
     if cajetin and cajetin.get("organizacion"):
         org = cajetin["organizacion"].replace("\n", " - ")
     ax.text(0.5, 0.62, org, ha="center", va="center", fontsize=8,

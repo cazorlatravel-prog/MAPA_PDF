@@ -139,7 +139,7 @@ class App(tk.Tk):
                   relief="flat", cursor="hand2", padx=6).pack(side="left", padx=2)
 
         tk.Label(
-            barra, text="ETRS89 \u00b7 UTM H30N \u00b7 INFOCA",
+            barra, text="ETRS89 \u00b7 UTM H30N",
             font=("Helvetica", 9), bg="#141B2D", fg=COLOR_TEXTO_GRIS,
         ).pack(side="right", padx=16)
 

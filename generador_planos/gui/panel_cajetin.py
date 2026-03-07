@@ -52,7 +52,7 @@ class PanelCajetin:
         tk.Label(f, text="Organización:", font=FONT_SMALL, bg=COLOR_PANEL,
                  fg=COLOR_TEXTO).grid(row=row_idx, column=0, sticky="w")
         self._org = tk.StringVar(
-            value="CONSEJERÍA DE SOSTENIBILIDAD - JUNTA DE ANDALUCÍA")
+            value="")
         tk.Entry(f, textvariable=self._org, font=FONT_SMALL, bg=COLOR_BORDE,
                  fg=COLOR_TEXTO, insertbackground="white",
                  relief="flat").grid(row=row_idx + 1, column=0,
