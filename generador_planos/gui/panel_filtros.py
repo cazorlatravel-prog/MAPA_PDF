@@ -9,7 +9,7 @@ import tkinter as tk
 from tkinter import ttk
 
 from .estilos import (
-    COLOR_PANEL, COLOR_TEXTO, COLOR_TEXTO_GRIS, COLOR_BORDE,
+    COLOR_PANEL, COLOR_TEXTO, COLOR_TEXTO_GRIS, COLOR_BORDE, COLOR_ENTRY,
     COLOR_ACENTO, FONT_BOLD, FONT_SMALL,
     crear_frame_seccion,
 )
@@ -35,7 +35,7 @@ class PanelFiltros:
         self._busqueda = tk.StringVar()
         self._busqueda.trace_add("write", lambda *a: self._aplicar_filtros())
         tk.Entry(f, textvariable=self._busqueda, font=FONT_SMALL,
-                 bg=COLOR_BORDE, fg=COLOR_TEXTO, insertbackground="white",
+                 bg=COLOR_ENTRY, fg=COLOR_TEXTO, insertbackground="white",
                  relief="flat").grid(row=1, column=0, sticky="ew", pady=(2, 6))
 
         # ── Filtro por campo ──
@@ -65,13 +65,13 @@ class PanelFiltros:
         rango_sup.grid(row=6, column=0, sticky="ew", pady=(2, 6))
 
         self._sup_min = tk.Entry(rango_sup, width=8, font=FONT_SMALL,
-                                  bg=COLOR_BORDE, fg=COLOR_TEXTO,
+                                  bg=COLOR_ENTRY, fg=COLOR_TEXTO,
                                   insertbackground="white", relief="flat")
         self._sup_min.pack(side="left")
         tk.Label(rango_sup, text=" - ", bg=COLOR_PANEL, fg=COLOR_TEXTO,
                  font=FONT_SMALL).pack(side="left")
         self._sup_max = tk.Entry(rango_sup, width=8, font=FONT_SMALL,
-                                  bg=COLOR_BORDE, fg=COLOR_TEXTO,
+                                  bg=COLOR_ENTRY, fg=COLOR_TEXTO,
                                   insertbackground="white", relief="flat")
         self._sup_max.pack(side="left")
 
@@ -83,13 +83,13 @@ class PanelFiltros:
         rango_lon.grid(row=8, column=0, sticky="ew", pady=(2, 6))
 
         self._lon_min = tk.Entry(rango_lon, width=8, font=FONT_SMALL,
-                                  bg=COLOR_BORDE, fg=COLOR_TEXTO,
+                                  bg=COLOR_ENTRY, fg=COLOR_TEXTO,
                                   insertbackground="white", relief="flat")
         self._lon_min.pack(side="left")
         tk.Label(rango_lon, text=" - ", bg=COLOR_PANEL, fg=COLOR_TEXTO,
                  font=FONT_SMALL).pack(side="left")
         self._lon_max = tk.Entry(rango_lon, width=8, font=FONT_SMALL,
-                                  bg=COLOR_BORDE, fg=COLOR_TEXTO,
+                                  bg=COLOR_ENTRY, fg=COLOR_TEXTO,
                                   insertbackground="white", relief="flat")
         self._lon_max.pack(side="left")
 

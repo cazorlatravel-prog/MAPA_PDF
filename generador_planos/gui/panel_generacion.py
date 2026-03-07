@@ -10,8 +10,8 @@ import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 
 from .estilos import (
-    COLOR_PANEL, COLOR_TEXTO, COLOR_TEXTO_GRIS, COLOR_BORDE, COLOR_ACENTO,
-    FONT_BOLD, FONT_SMALL, FONT_LABEL,
+    COLOR_PANEL, COLOR_TEXTO, COLOR_TEXTO_GRIS, COLOR_BORDE, COLOR_ENTRY,
+    COLOR_ACENTO, FONT_BOLD, FONT_SMALL, FONT_LABEL,
     crear_frame_seccion, crear_boton,
 )
 from ..motor.maquetacion import ETIQUETAS_CAMPOS
@@ -58,7 +58,7 @@ class PanelGeneracion:
         rango_f.grid(row=3, column=1, sticky="w", padx=(4, 0))
 
         self._rango_desde = tk.Entry(rango_f, width=5, font=FONT_SMALL,
-                                      bg=COLOR_BORDE, fg=COLOR_TEXTO,
+                                      bg=COLOR_ENTRY, fg=COLOR_TEXTO,
                                       insertbackground="white", relief="flat")
         self._rango_desde.insert(0, "1")
         self._rango_desde.pack(side="left")
@@ -67,7 +67,7 @@ class PanelGeneracion:
                  font=FONT_SMALL).pack(side="left", padx=2)
 
         self._rango_hasta = tk.Entry(rango_f, width=5, font=FONT_SMALL,
-                                      bg=COLOR_BORDE, fg=COLOR_TEXTO,
+                                      bg=COLOR_ENTRY, fg=COLOR_TEXTO,
                                       insertbackground="white", relief="flat")
         self._rango_hasta.insert(0, "10")
         self._rango_hasta.pack(side="left")

@@ -13,6 +13,7 @@ COLOR_ACENTO2    = "#27AE60"
 COLOR_TEXTO      = "#ECF0F1"
 COLOR_TEXTO_GRIS = "#95A5A6"
 COLOR_BORDE      = "#2C3E50"
+COLOR_ENTRY      = "#1A2636"   # fondo campos de texto (más oscuro → más contraste)
 COLOR_HOVER      = "#2ECC7120"
 COLOR_ERROR      = "#E74C3C"
 COLOR_ADVERTENCIA = "#F39C12"
@@ -33,13 +34,24 @@ def aplicar_estilos(root: tk.Tk):
 
     style.configure(
         "TCombobox",
-        fieldbackground=COLOR_BORDE,
+        fieldbackground=COLOR_ENTRY,
         background=COLOR_BORDE,
         foreground=COLOR_TEXTO,
         selectbackground=COLOR_ACENTO,
         selectforeground="#1A1A2E",
         arrowcolor=COLOR_ACENTO,
     )
+    style.map(
+        "TCombobox",
+        fieldbackground=[("readonly", COLOR_ENTRY)],
+        foreground=[("readonly", COLOR_TEXTO)],
+    )
+
+    # Popdown (lista desplegable) del Combobox
+    root.option_add("*TCombobox*Listbox.background", COLOR_ENTRY)
+    root.option_add("*TCombobox*Listbox.foreground", COLOR_TEXTO)
+    root.option_add("*TCombobox*Listbox.selectBackground", COLOR_ACENTO)
+    root.option_add("*TCombobox*Listbox.selectForeground", "#1A1A2E")
 
     style.configure(
         "Horizontal.TProgressbar",

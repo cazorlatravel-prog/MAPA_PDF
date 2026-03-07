@@ -17,7 +17,7 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 from .estilos import (
-    COLOR_PANEL, COLOR_TEXTO, COLOR_TEXTO_GRIS, COLOR_BORDE,
+    COLOR_PANEL, COLOR_TEXTO, COLOR_TEXTO_GRIS, COLOR_BORDE, COLOR_ENTRY,
     COLOR_ACENTO, COLOR_ERROR,
     FONT_BOLD, FONT_SMALL,
     crear_frame_seccion, crear_boton,
@@ -354,7 +354,7 @@ class PanelCapas:
                  bg=COLOR_PANEL, fg=COLOR_TEXTO).pack(padx=10, pady=(10, 2))
         nombre_var = tk.StringVar(value=capa)
         tk.Entry(dialog, textvariable=nombre_var, font=FONT_SMALL,
-                 bg=COLOR_BORDE, fg=COLOR_TEXTO, insertbackground="white",
+                 bg=COLOR_ENTRY, fg=COLOR_TEXTO, insertbackground="white",
                  relief="flat").pack(padx=10, fill="x")
 
         tk.Label(dialog, text="Tipo de capa:", font=FONT_BOLD,
@@ -402,7 +402,7 @@ class PanelCapas:
         nombre_var = tk.StringVar(
             value=os.path.splitext(os.path.basename(ruta))[0])
         tk.Entry(dialog, textvariable=nombre_var, font=FONT_SMALL,
-                 bg=COLOR_BORDE, fg=COLOR_TEXTO, insertbackground="white",
+                 bg=COLOR_ENTRY, fg=COLOR_TEXTO, insertbackground="white",
                  relief="flat").pack(padx=10, fill="x")
 
         tk.Label(dialog, text="Tipo de capa:", font=FONT_BOLD,
