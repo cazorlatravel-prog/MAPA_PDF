@@ -183,7 +183,7 @@ class MaquetadorPlano:
         ax.set_yticklabels([f"{int(y):,}" for y in ys], fontsize=4.5,
                            color="#2C3E50")
         ax.tick_params(which="major", length=4, width=0.6, color="#2C3E50",
-                       direction="outside", labelbottom=True, labelleft=True,
+                       direction="out", labelbottom=True, labelleft=True,
                        pad=1)
 
         # Cruces interiores sutiles en las intersecciones
