@@ -236,7 +236,11 @@ class PanelGeneracion:
         for widget in self._inner_valores.winfo_children():
             widget.destroy()
         self._check_valores.clear()
-        self._indices_filtrados.clear()
+        # Solo limpiar filtro detallado si cambió el campo de agrupación
+        campo_actual = self._campo_agrupacion.get()
+        if not hasattr(self, "_ultimo_campo_agrup") or self._ultimo_campo_agrup != campo_actual:
+            self._indices_filtrados.clear()
+            self._ultimo_campo_agrup = campo_actual
 
         campo = self._campo_agrupacion.get()
         valores = self.motor.obtener_valores_unicos(campo)
@@ -280,7 +284,7 @@ class PanelGeneracion:
 
         popup = tk.Toplevel(self._parent_window)
         popup.title("Seleccionar infraestructuras por grupo")
-        popup.geometry("620x500")
+        popup.geometry("800x550")
         popup.configure(bg=COLOR_PANEL)
         popup.transient(self._parent_window)
         popup.grab_set()
@@ -305,10 +309,11 @@ class PanelGeneracion:
 
         # Construir checkboxes por grupo → infraestructuras
         check_vars = {}  # {valor_grupo: [(idx, BooleanVar), ...]}
-        nombre_campo = "Nombre_Infra"
-        # Buscar el nombre real del campo en el mapeo
-        if self.motor._campo_mapeo and nombre_campo in self.motor._campo_mapeo:
-            nombre_campo = self.motor._campo_mapeo[nombre_campo]
+
+        # Determinar columnas útiles para la etiqueta de cada infra
+        gdf = self.motor.gdf_infra
+        cols_etiqueta = [c for c in gdf.columns
+                         if c.lower() != "geometry"][:5]  # máx 5 campos
 
         for valor in valores_sel:
             indices = self.motor.obtener_indices_por_valor(campo, valor)
@@ -320,11 +325,17 @@ class PanelGeneracion:
             grupo_vars = []
             prev_sel = self._indices_filtrados.get(valor)
             for idx in indices:
-                row = self.motor.gdf_infra.iloc[idx]
-                nombre = str(row.get(nombre_campo,
-                             row.get("Nombre_Infra", f"#{idx}")))
-                if nombre == "nan":
-                    nombre = f"#{idx}"
+                row = gdf.iloc[idx]
+                # Construir etiqueta con los campos reales disponibles
+                partes = []
+                for col in cols_etiqueta:
+                    val = str(row.get(col, ""))
+                    if val and val != "nan":
+                        # Truncar valores largos
+                        if len(val) > 25:
+                            val = val[:24] + "\u2026"
+                        partes.append(val)
+                nombre = " | ".join(partes) if partes else f"#{idx}"
 
                 default_on = prev_sel is None or idx in prev_sel
                 var = tk.BooleanVar(value=default_on)
@@ -352,16 +363,21 @@ class PanelGeneracion:
                 for _, v in gvars:
                     v.set(False)
 
-        def _aceptar():
+        def _guardar_seleccion():
             self._indices_filtrados.clear()
             for valor, gvars in check_vars.items():
                 sel = [idx for idx, v in gvars if v.get()]
-                # Solo guardar si se han excluido algunos
                 todos = [idx for idx, _ in gvars]
                 if len(sel) < len(todos):
                     self._indices_filtrados[valor] = sel
+
+        def _aceptar():
+            _guardar_seleccion()
             popup.destroy()
             self.callback_log("Selección de infraestructuras actualizada.", "info")
+
+        # Guardar también al cerrar con la X
+        popup.protocol("WM_DELETE_WINDOW", lambda: (_guardar_seleccion(), popup.destroy()))
 
         tk.Button(btn_f, text="Todos", command=_sel_todos,
                   font=FONT_SMALL, bg=COLOR_BORDE, fg=COLOR_TEXTO,
