@@ -88,7 +88,7 @@ class MaquetadorPlano:
             top=gs_top, bottom=inf,
             width_ratios=[0.28, 0.42, 0.30],
             height_ratios=[RATIO_MAPA_ALTO, 1 - RATIO_MAPA_ALTO],
-            hspace=0.012, wspace=0.008,
+            hspace=0.04, wspace=0.005,
         )
 
         # Mapa principal: fila 0, ancho completo (3 columnas)
@@ -410,7 +410,7 @@ class MaquetadorPlano:
 
         ax.set_xlim(xmin_m, xmax_m)
         ax.set_ylim(ymin_m, ymax_m)
-        ax.set_aspect("equal")
+        ax.set_aspect("auto")
         ax.set_facecolor("#E8E8E0")
 
         for sp in ax.spines.values():
@@ -549,24 +549,36 @@ class MaquetadorPlano:
                 f"Escala 1:{self.escala:,}", ha="center", va="bottom",
                 fontsize=5, fontweight="bold", color="#1A1A2E")
 
-        # ── Norte geográfico ──
-        norte_x = 0.82
-        norte_y_base = esc_y - 0.005
-        norte_h = 0.09
-
-        ax.annotate("", xy=(norte_x, norte_y_base + norte_h),
-                    xytext=(norte_x, norte_y_base),
-                    arrowprops=dict(arrowstyle="->", color="#1A1A2E", lw=1.0))
-        ax.text(norte_x, norte_y_base + norte_h + 0.012, "N",
-                ha="center", va="bottom", fontsize=5.5, fontweight="bold",
-                color="#1A1A2E")
-
         # ── Créditos ──
         fecha = date.today().strftime("%d/%m/%Y")
         ax.text(0.5, 0.02,
                 f"{proveedor} | ETRS89 UTM H30N | {fecha}",
                 ha="center", va="bottom", fontsize=3.2, color="#666",
                 style="italic")
+
+    # ── Rosa de los vientos (dentro del mapa principal, arriba-izquierda) ──
+
+    def dibujar_norte_en_mapa(self):
+        """Dibuja la flecha de norte dentro del mapa principal (esquina sup-izq)."""
+        ax = self.ax_map
+        nx, ny_base = 0.06, 0.82
+        nh = 0.12
+
+        # Fondo semitransparente
+        ax.add_patch(FancyBboxPatch(
+            (nx - 0.025, ny_base - 0.015), 0.05, nh + 0.06,
+            boxstyle="round,pad=0.008", facecolor="white", edgecolor="#2C3E50",
+            linewidth=0.5, alpha=0.85, transform=ax.transAxes, zorder=14))
+
+        ax.annotate("", xy=(nx, ny_base + nh),
+                    xytext=(nx, ny_base),
+                    xycoords="axes fraction", textcoords="axes fraction",
+                    arrowprops=dict(arrowstyle="->,head_width=0.4,head_length=0.3",
+                                    color="#1A1A2E", lw=1.2),
+                    zorder=15)
+        ax.text(nx, ny_base + nh + 0.015, "N",
+                ha="center", va="bottom", fontsize=7, fontweight="bold",
+                color="#1A1A2E", transform=ax.transAxes, zorder=15)
 
     # ── Cajetín (integrado) ────────────────────────────────────────────
 
