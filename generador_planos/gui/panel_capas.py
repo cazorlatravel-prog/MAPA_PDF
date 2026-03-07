@@ -77,9 +77,25 @@ class PanelCapas:
         crear_boton(btn_montes_f, "Cargar GDB", self._cargar_montes_gdb,
                     icono="\U0001f4c1").grid(row=0, column=1, sticky="ew", padx=(2, 0))
 
-        # ── Transparencia ──
+        # ── Transparencia infraestructuras ──
+        transp_infra_header = tk.Frame(f, bg=COLOR_PANEL)
+        transp_infra_header.grid(row=6, column=0, sticky="ew", pady=(6, 0))
+        tk.Label(transp_infra_header, text="Transparencia infraestructuras:",
+                 font=FONT_SMALL, bg=COLOR_PANEL, fg=COLOR_TEXTO_GRIS).pack(side="left")
+        self._lbl_transp_infra = tk.Label(transp_infra_header, text="0.65",
+                                           font=FONT_SMALL, bg=COLOR_PANEL,
+                                           fg=COLOR_ACENTO)
+        self._lbl_transp_infra.pack(side="right")
+
+        self.transparencia_infra = tk.DoubleVar(value=0.65)
+        self.transparencia_infra.trace_add("write", lambda *_: self._lbl_transp_infra.configure(
+            text=f"{self.transparencia_infra.get():.2f}"))
+        ttk.Scale(f, from_=0.0, to=1.0, variable=self.transparencia_infra,
+                  orient="horizontal").grid(row=7, column=0, sticky="ew", pady=(2, 4))
+
+        # ── Transparencia montes ──
         transp_header = tk.Frame(f, bg=COLOR_PANEL)
-        transp_header.grid(row=6, column=0, sticky="ew", pady=(6, 0))
+        transp_header.grid(row=8, column=0, sticky="ew", pady=(4, 0))
         tk.Label(transp_header, text="Transparencia capa montes:",
                  font=FONT_SMALL, bg=COLOR_PANEL, fg=COLOR_TEXTO_GRIS).pack(side="left")
         self._lbl_transp = tk.Label(transp_header, text="0.50", font=FONT_SMALL,
@@ -89,20 +105,19 @@ class PanelCapas:
         self.transparencia = tk.DoubleVar(value=0.5)
         self.transparencia.trace_add("write", lambda *_: self._lbl_transp.configure(
             text=f"{self.transparencia.get():.2f}"))
-        sl = ttk.Scale(f, from_=0.0, to=1.0, variable=self.transparencia,
-                        orient="horizontal")
-        sl.grid(row=7, column=0, sticky="ew", pady=(2, 4))
+        ttk.Scale(f, from_=0.0, to=1.0, variable=self.transparencia,
+                  orient="horizontal").grid(row=9, column=0, sticky="ew", pady=(2, 4))
 
         # ── Capas extra ──
         tk.Label(f, text="Capas adicionales:", font=FONT_BOLD,
                  bg=COLOR_PANEL, fg=COLOR_TEXTO).grid(
-                 row=8, column=0, sticky="w", pady=(6, 2))
+                 row=10, column=0, sticky="w", pady=(6, 2))
 
         self._frame_capas_extra = tk.Frame(f, bg=COLOR_PANEL)
-        self._frame_capas_extra.grid(row=9, column=0, sticky="ew")
+        self._frame_capas_extra.grid(row=11, column=0, sticky="ew")
 
         btn_capas_f = tk.Frame(f, bg=COLOR_PANEL)
-        btn_capas_f.grid(row=10, column=0, sticky="ew", pady=(4, 2))
+        btn_capas_f.grid(row=12, column=0, sticky="ew", pady=(4, 2))
         btn_capas_f.columnconfigure(0, weight=1)
         btn_capas_f.columnconfigure(1, weight=1)
         btn_capas_f.columnconfigure(2, weight=1)
@@ -128,7 +143,7 @@ class PanelCapas:
 
         # ── Mini-canvas de previsualización ──
         self._preview_frame = tk.Frame(f, bg=COLOR_PANEL, height=120)
-        self._preview_frame.grid(row=11, column=0, sticky="ew", pady=(4, 8))
+        self._preview_frame.grid(row=13, column=0, sticky="ew", pady=(4, 8))
         self._preview_frame.grid_propagate(False)
         self._canvas_widget = None
 
