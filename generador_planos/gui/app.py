@@ -151,7 +151,7 @@ class App(tk.Tk):
         ).pack(side="right", padx=16)
 
     def _crear_notebook(self, parent):
-        """Crea el Notebook central con pestañas: Infraestructuras, Mapa General, Mapa Posición."""
+        """Crea el Notebook central con pestañas: Infraestructuras, Mapa General."""
         self._notebook = ttk.Notebook(parent)
         self._notebook.pack(fill="both", expand=True, padx=4, pady=(4, 4))
 
@@ -164,11 +164,6 @@ class App(tk.Tk):
         tab_mapa = tk.Frame(self._notebook, bg="#0D1117")
         self._notebook.add(tab_mapa, text=" 🗺 Mapa General ")
         self._crear_panel_mapa_general(tab_mapa)
-
-        # ── Pestaña 3: Mapa Posición ──
-        tab_pos = tk.Frame(self._notebook, bg="#0D1117")
-        self._notebook.add(tab_pos, text=" 📍 Mapa Posición ")
-        self._crear_panel_mapa_posicion(tab_pos)
 
     def _crear_panel_tabla_en(self, parent):
         """Crea la tabla de infraestructuras dentro de un frame."""
@@ -423,116 +418,6 @@ class App(tk.Tk):
                 zorder=10, alpha=0.9)
             self._mapa_canvas.draw_idle()
 
-    # ── Mapa Posición (pestaña 3) ────────────────────────────────────────
-
-    def _crear_panel_mapa_posicion(self, parent):
-        """Vista previa del mapa de posición/localización."""
-        toolbar = tk.Frame(parent, bg=COLOR_PANEL, height=32)
-        toolbar.pack(fill="x", padx=2, pady=(2, 0))
-        toolbar.pack_propagate(False)
-
-        tk.Button(toolbar, text="🔄 Actualizar posición",
-                  command=self._actualizar_mapa_posicion,
-                  font=FONT_SMALL, bg="#2C3E50", fg=COLOR_TEXTO, relief="flat",
-                  cursor="hand2", padx=6).pack(side="left", padx=4, pady=2)
-
-        self._lbl_pos_info = tk.Label(toolbar, text="Carga capas para ver la localización",
-                                       font=FONT_SMALL, bg=COLOR_PANEL, fg=COLOR_TEXTO_GRIS)
-        self._lbl_pos_info.pack(side="left", padx=8)
-
-        self._pos_frame = tk.Frame(parent, bg="#0D1117")
-        self._pos_frame.pack(fill="both", expand=True, padx=2, pady=2)
-        self._pos_canvas = None
-        self._pos_fig = None
-
-    def _actualizar_mapa_posicion(self):
-        """Redibuja el mapa de posición con fondo topográfico."""
-        gdf = self.motor.gdf_infra
-        if gdf is None:
-            self._lbl_pos_info.configure(text="No hay infraestructuras cargadas")
-            return
-
-        # Limpiar canvas anterior
-        if self._pos_canvas is not None:
-            self._pos_canvas.get_tk_widget().destroy()
-        if self._pos_fig is not None:
-            plt.close(self._pos_fig)
-
-        fig, ax = plt.subplots(1, 1, figsize=(8, 5), dpi=96)
-        fig.patch.set_facecolor("#0D1117")
-        ax.set_facecolor("#E8E8E0")
-        self._pos_fig = fig
-
-        # Centroide de todas las infraestructuras
-        from shapely.ops import unary_union
-        geom_union = unary_union(gdf.geometry)
-        cx, cy = geom_union.centroid.x, geom_union.centroid.y
-
-        # Escala fija 1:250.000 para localización
-        escala_loc = 250_000
-        semi_x = 25_000  # ~50 km de ancho
-        semi_y = 18_000  # ~36 km de alto
-
-        xmin_m, xmax_m = cx - semi_x, cx + semi_x
-        ymin_m, ymax_m = cy - semi_y, cy + semi_y
-
-        ax.set_xlim(xmin_m, xmax_m)
-        ax.set_ylim(ymin_m, ymax_m)
-
-        # Fondo topográfico IGN
-        try:
-            from ..motor.cartografia import _descargar_teselas_manual, CAPAS_BASE
-            url = CAPAS_BASE.get("IGN Topográfico")
-            if url:
-                _descargar_teselas_manual(ax, url, xmin_m, xmax_m, ymin_m, ymax_m)
-                ax.set_xlim(xmin_m, xmax_m)
-                ax.set_ylim(ymin_m, ymax_m)
-        except Exception:
-            pass
-
-        # Dibujar todas las infraestructuras como puntos
-        for _, row in gdf.iterrows():
-            geom = row.geometry
-            if geom is None:
-                continue
-            pcx, pcy = geom.centroid.x, geom.centroid.y
-            ax.plot(pcx, pcy, "o", color="#E74C3C", markersize=5,
-                    markeredgecolor="white", markeredgewidth=0.4, zorder=5)
-
-        # Recuadro de extensión total
-        bounds = gdf.total_bounds  # [minx, miny, maxx, maxy]
-        rw = bounds[2] - bounds[0]
-        rh = bounds[3] - bounds[1]
-        margin = max(rw, rh) * 0.1
-        ax.add_patch(MplRectangle(
-            (bounds[0] - margin, bounds[1] - margin),
-            rw + 2 * margin, rh + 2 * margin,
-            fill=False, edgecolor="#E74C3C", linewidth=1.5, zorder=7,
-            linestyle="--"))
-
-        # Estilo
-        for sp in ax.spines.values():
-            sp.set_color("#2C3E50")
-        ax.tick_params(colors=COLOR_TEXTO_GRIS, labelsize=6)
-        ax.set_title("Mapa de localización", fontsize=9,
-                      color=COLOR_ACENTO, fontweight="bold", pad=8)
-
-        # CRS
-        ax.text(0.99, 0.02, "ETRS89 / UTM zona 30N · EPSG:25830",
-                ha="right", va="bottom", fontsize=6, color="#666666",
-                transform=ax.transAxes,
-                bbox=dict(boxstyle="round,pad=0.1", facecolor="white",
-                          edgecolor="#BDC3C7", linewidth=0.3, alpha=0.8))
-
-        fig.tight_layout(pad=0.5)
-
-        self._pos_canvas = FigureCanvasTkAgg(fig, master=self._pos_frame)
-        self._pos_canvas.draw()
-        self._pos_canvas.get_tk_widget().pack(fill="both", expand=True)
-
-        self._lbl_pos_info.configure(
-            text=f"Centro: {cx:.0f}, {cy:.0f} · Extensión: {rw:.0f} x {rh:.0f} m")
-
     def _crear_panel_log(self, parent):
         lf = tk.LabelFrame(
             parent, text=" LOG DE PROCESO ",
@@ -610,9 +495,8 @@ class App(tk.Tk):
         # Actualizar checkboxes de campos con las columnas reales del shapefile
         self.panel_campos.actualizar_campos(columnas)
         self.panel_cajetin.actualizar_campos_subtitulo(columnas)
-        # Actualizar mapas de previsualización
+        # Actualizar mapa de previsualización
         self._actualizar_mapa_general()
-        self._actualizar_mapa_posicion()
 
     def _on_filtro_aplicado(self, indices: list):
         self._poblar_tabla(indices)
