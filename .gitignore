@@ -7,3 +7,5 @@ build/
 .eggs/
 Output/
 *.spec
+*.exe
+GeneradorPlanos_Portable_v*.zip
