@@ -150,10 +150,26 @@ class MaquetadorPlano:
                        direction="out", labelbottom=True, labelleft=True,
                        pad=1)
 
+        # Líneas de cuadrícula completas (estilo cartográfico profesional)
+        for x in xs:
+            ax.axvline(x, color="#2C3E50", linewidth=0.15, alpha=0.4,
+                        linestyle=(0, (8, 6)), zorder=3)
+        for y in ys:
+            ax.axhline(y, color="#2C3E50", linewidth=0.15, alpha=0.4,
+                        linestyle=(0, (8, 6)), zorder=3)
+
+        # Cruces de intersección reforzadas
         for x in xs:
             for y in ys:
-                ax.plot(x, y, "+", color="#2C3E50", markersize=3,
-                        markeredgewidth=0.3, alpha=0.35, zorder=3)
+                ax.plot(x, y, "+", color="#2C3E50", markersize=4,
+                        markeredgewidth=0.5, alpha=0.5, zorder=4)
+
+        # Indicación del sistema de referencia (esquina inferior derecha del mapa)
+        ax.text(0.995, 0.005, "ETRS89 / UTM zona 30N · EPSG:25830",
+                ha="right", va="bottom", fontsize=3.2, color="#2C3E50",
+                transform=ax.transAxes, zorder=12,
+                bbox=dict(boxstyle="round,pad=0.12", facecolor="white",
+                          edgecolor="#BDC3C7", linewidth=0.3, alpha=0.85))
 
     # ── Etiquetas ──────────────────────────────────────────────────────
 
@@ -239,11 +255,17 @@ class MaquetadorPlano:
 
         if handles:
             leg = self.ax_map.legend(
-                handles=handles, loc="lower left", fontsize=5,
-                frameon=True, framealpha=0.9, facecolor="white",
-                edgecolor="#CCCCCC", borderpad=0.5, labelspacing=0.4,
+                handles=handles, loc="lower left", fontsize=4.5,
+                title="LEYENDA", title_fontsize=5,
+                frameon=True, framealpha=0.92, facecolor="white",
+                edgecolor="#2C3E50", borderpad=0.6, labelspacing=0.5,
+                handlelength=1.8, handletextpad=0.6,
+                shadow=False, fancybox=True,
             )
             leg.set_zorder(15)
+            leg.get_title().set_fontweight("bold")
+            leg.get_title().set_color("#2C3E50")
+            leg.get_frame().set_linewidth(0.6)
 
 
     # ── Panel de atributos (centro, 2 columnas, campos dinámicos) ─────
@@ -584,7 +606,7 @@ class MaquetadorPlano:
             ("FIRMA", caj.get("firma", "")),
             ("FECHA", fecha),
             ("SRC", srs),
-            ("ESCALA", f"1:{self.escala:,}"),
+            ("ESCALA", f"1:{self.escala:,}".replace(",", ".")),
         ]
 
         n_campos = len(campos_caj)
@@ -622,33 +644,76 @@ class MaquetadorPlano:
                 color=COL_MID, linewidth=0.6, zorder=2)
 
         # ═══════════════════════════════════════════════════════════════
-        # ZONA INFERIOR: Barra de escala gráfica
+        # ZONA INFERIOR: Barra de escala gráfica profesional
         # ═══════════════════════════════════════════════════════════════
         barra_m = BARRA_ESCALA_M.get(self.escala, 1000)
         barra_frac = 0.55
         esc_y = 0.10
-        esc_x0 = (1 - barra_frac) / 2  # centrada
+        bar_h = 0.022
+
+        # Subdivisión izquierda (1 segmento extra antes del 0)
+        sub_m = barra_m // 4  # subdivisión = 1/4 de la barra principal
+        sub_frac = barra_frac / 4  # fracción gráfica de la subdivisión
+        esc_x0 = (1 - barra_frac - sub_frac) / 2  # inicio con subdivisión
+
+        # Formato de escala con punto (convención española)
+        escala_txt = f"1:{self.escala:,}".replace(",", ".")
 
         # Texto de escala sobre la barra
-        ax.text(0.5, esc_y + 0.065, f"Escala 1:{self.escala:,}",
+        ax.text(0.5, esc_y + 0.058, f"Escala {escala_txt}",
                 ha="center", va="bottom", fontsize=5.5, fontweight="bold",
                 color=COL_DARK, zorder=3)
 
-        # Barra segmentada
+        # ── Subdivisión izquierda (antes del 0): 4 micro-segmentos ──
+        n_micro = 4
+        micro_seg = sub_frac / n_micro
+        for i in range(n_micro):
+            c = COL_DARK if i % 2 == 0 else "white"
+            ax.add_patch(Rectangle(
+                (esc_x0 + i * micro_seg, esc_y), micro_seg, bar_h,
+                facecolor=c, edgecolor=COL_DARK, linewidth=0.3, zorder=2))
+
+        # ── Barra principal: 4 segmentos ──
         n_seg = 4
         seg = barra_frac / n_seg
-        bar_h = 0.028
+        main_x0 = esc_x0 + sub_frac  # el 0 está aquí
         for i in range(n_seg):
             c = COL_DARK if i % 2 == 0 else "white"
             ax.add_patch(Rectangle(
-                (esc_x0 + i * seg, esc_y), seg, bar_h,
-                facecolor=c, edgecolor=COL_DARK, linewidth=0.4, zorder=2))
+                (main_x0 + i * seg, esc_y), seg, bar_h,
+                facecolor=c, edgecolor=COL_DARK, linewidth=0.3, zorder=2))
 
-        # Etiquetas de distancia
-        ax.text(esc_x0, esc_y - 0.015, "0", ha="center", va="top",
-                fontsize=3.5, color=COL_TXT, zorder=3)
-        ax.text(esc_x0 + barra_frac, esc_y - 0.015, f"{barra_m} m",
-                ha="center", va="top", fontsize=3.5, color=COL_TXT, zorder=3)
+        # ── Ticks y etiquetas ──
+        tick_y_top = esc_y + bar_h + 0.003
+        tick_y_bot = esc_y - 0.003
+        label_y = esc_y - 0.018
+
+        # Tick y etiqueta de subdivisión (izquierda del 0)
+        ax.plot([esc_x0, esc_x0], [esc_y, tick_y_top],
+                color=COL_DARK, linewidth=0.4, transform=ax.transAxes, zorder=3)
+        ax.text(esc_x0, label_y, f"{sub_m}", ha="center", va="top",
+                fontsize=3, color=COL_TXT, zorder=3)
+
+        # Tick y etiqueta del 0
+        ax.plot([main_x0, main_x0], [esc_y, tick_y_top],
+                color=COL_DARK, linewidth=0.4, transform=ax.transAxes, zorder=3)
+        ax.text(main_x0, label_y, "0", ha="center", va="top",
+                fontsize=3.5, fontweight="bold", color=COL_TXT, zorder=3)
+
+        # Ticks intermedios y final
+        for i in range(1, n_seg + 1):
+            x_tick = main_x0 + i * seg
+            ax.plot([x_tick, x_tick], [esc_y, tick_y_top],
+                    color=COL_DARK, linewidth=0.4,
+                    transform=ax.transAxes, zorder=3)
+            dist = int(barra_m * i / n_seg)
+            # Formatear distancias: usar km si >= 1000
+            if dist >= 1000:
+                txt = f"{dist // 1000} km" if dist % 1000 == 0 else f"{dist} m"
+            else:
+                txt = f"{dist} m"
+            ax.text(x_tick, label_y, txt, ha="center", va="top",
+                    fontsize=3, color=COL_TXT, zorder=3)
 
         # ── Créditos: cartografía base ──
         ax.text(0.5, 0.015, f"Base cartogr\u00e1fica: {proveedor}",
@@ -658,26 +723,71 @@ class MaquetadorPlano:
     # ── Rosa de los vientos (dentro del mapa principal, arriba-izquierda) ──
 
     def dibujar_norte_en_mapa(self):
-        """Dibuja la flecha de norte dentro del mapa principal (esquina sup-izq)."""
+        """Dibuja una rosa de los vientos profesional dentro del mapa (esquina sup-izq)."""
         ax = self.ax_map
-        nx, ny_base = 0.04, 0.88
-        nh = 0.04
+        from matplotlib.patches import Polygon as MplPolygon
 
-        # Fondo semitransparente
-        ax.add_patch(FancyBboxPatch(
-            (nx - 0.012, ny_base - 0.008), 0.024, nh + 0.025,
-            boxstyle="round,pad=0.004", facecolor="white", edgecolor="#2C3E50",
-            linewidth=0.3, alpha=0.85, transform=ax.transAxes, zorder=14))
+        # Centro y tamaño en coordenadas de ejes
+        cx, cy = 0.045, 0.91
+        r = 0.022  # radio de la rosa
 
-        ax.annotate("", xy=(nx, ny_base + nh),
-                    xytext=(nx, ny_base),
-                    xycoords="axes fraction", textcoords="axes fraction",
-                    arrowprops=dict(arrowstyle="->,head_width=0.2,head_length=0.15",
-                                    color="#1A1A2E", lw=0.6),
-                    zorder=15)
-        ax.text(nx, ny_base + nh + 0.006, "N",
-                ha="center", va="bottom", fontsize=3, fontweight="bold",
-                color="#1A1A2E", transform=ax.transAxes, zorder=15)
+        # Fondo circular semitransparente
+        circle_bg = plt.Circle((cx, cy - 0.005), r + 0.012,
+                                facecolor="white", edgecolor="#2C3E50",
+                                linewidth=0.5, alpha=0.90,
+                                transform=ax.transAxes, zorder=14)
+        ax.add_patch(circle_bg)
+
+        # Triángulos de la rosa (N, S, E, W)
+        # Norte (punta arriba) — mitad oscura y mitad clara
+        tri_n_l = MplPolygon(
+            [(cx, cy + r * 1.1), (cx - r * 0.3, cy), (cx, cy)],
+            facecolor="#1A1A2E", edgecolor="#1A1A2E", linewidth=0.3,
+            transform=ax.transAxes, zorder=15)
+        tri_n_r = MplPolygon(
+            [(cx, cy + r * 1.1), (cx + r * 0.3, cy), (cx, cy)],
+            facecolor="#666666", edgecolor="#1A1A2E", linewidth=0.3,
+            transform=ax.transAxes, zorder=15)
+        # Sur
+        tri_s_l = MplPolygon(
+            [(cx, cy - r * 1.1), (cx - r * 0.3, cy), (cx, cy)],
+            facecolor="#AAAAAA", edgecolor="#1A1A2E", linewidth=0.3,
+            transform=ax.transAxes, zorder=15)
+        tri_s_r = MplPolygon(
+            [(cx, cy - r * 1.1), (cx + r * 0.3, cy), (cx, cy)],
+            facecolor="#DDDDDD", edgecolor="#1A1A2E", linewidth=0.3,
+            transform=ax.transAxes, zorder=15)
+        # Este
+        tri_e_l = MplPolygon(
+            [(cx + r * 1.1, cy), (cx, cy + r * 0.3), (cx, cy)],
+            facecolor="#888888", edgecolor="#1A1A2E", linewidth=0.3,
+            transform=ax.transAxes, zorder=15)
+        tri_e_r = MplPolygon(
+            [(cx + r * 1.1, cy), (cx, cy - r * 0.3), (cx, cy)],
+            facecolor="#CCCCCC", edgecolor="#1A1A2E", linewidth=0.3,
+            transform=ax.transAxes, zorder=15)
+        # Oeste
+        tri_w_l = MplPolygon(
+            [(cx - r * 1.1, cy), (cx, cy - r * 0.3), (cx, cy)],
+            facecolor="#888888", edgecolor="#1A1A2E", linewidth=0.3,
+            transform=ax.transAxes, zorder=15)
+        tri_w_r = MplPolygon(
+            [(cx - r * 1.1, cy), (cx, cy + r * 0.3), (cx, cy)],
+            facecolor="#CCCCCC", edgecolor="#1A1A2E", linewidth=0.3,
+            transform=ax.transAxes, zorder=15)
+
+        for tri in [tri_n_l, tri_n_r, tri_s_l, tri_s_r,
+                    tri_e_l, tri_e_r, tri_w_l, tri_w_r]:
+            ax.add_patch(tri)
+
+        # Punto central
+        ax.plot(cx, cy, "o", color="#1A1A2E", markersize=1.5,
+                transform=ax.transAxes, zorder=16)
+
+        # Letra "N" sobre el triángulo norte
+        ax.text(cx, cy + r * 1.1 + 0.008, "N",
+                ha="center", va="bottom", fontsize=4.5, fontweight="bold",
+                color="#1A1A2E", transform=ax.transAxes, zorder=16)
 
     # ── Cajetín (integrado) ────────────────────────────────────────────
 
