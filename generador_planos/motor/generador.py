@@ -84,10 +84,10 @@ class GeneradorPlanos:
 
     # ── Carga de capas ───────────────────────────────────────────────────
 
-    def cargar_infraestructuras(self, ruta: str) -> tuple:
-        """Carga shapefile de infraestructuras y reproyecta a EPSG:25830."""
+    def cargar_infraestructuras(self, ruta: str, layer: str = None) -> tuple:
+        """Carga shapefile/GDB de infraestructuras y reproyecta a EPSG:25830."""
         try:
-            gdf = gpd.read_file(ruta)
+            gdf = gpd.read_file(ruta, layer=layer)
             if gdf.crs is None:
                 gdf = gdf.set_crs("EPSG:4326")
             gdf = gdf.to_crs("EPSG:25830")
@@ -101,26 +101,28 @@ class GeneradorPlanos:
             faltantes = [c for c in CAMPOS_ATRIBUTOS if c not in cols]
             self._campo_mapeo = None
 
-            msg = f"\u2713 {len(gdf)} infraestructuras cargadas | CRS: {gdf.crs.name}"
+            origen = f"capa '{layer}'" if layer else os.path.basename(ruta)
+            msg = f"\u2713 {len(gdf)} infraestructuras cargadas ({origen}) | CRS: {gdf.crs.name}"
             if faltantes:
                 msg += f"\n  \u26a0 Campos no encontrados: {', '.join(faltantes)}"
                 msg += f"\n  Campos disponibles: {', '.join(sorted(cols - {'geometry'}))}"
 
             return True, msg, faltantes
         except Exception as e:
-            return False, f"Error al cargar shapefile: {e}", []
+            return False, f"Error al cargar capa: {e}", []
 
     def establecer_mapeo_campos(self, mapeo: dict):
         self._campo_mapeo = mapeo
 
-    def cargar_montes(self, ruta: str) -> tuple:
+    def cargar_montes(self, ruta: str, layer: str = None) -> tuple:
         try:
-            gdf = gpd.read_file(ruta)
+            gdf = gpd.read_file(ruta, layer=layer)
             if gdf.crs is None:
                 gdf = gdf.set_crs("EPSG:4326")
             gdf = gdf.to_crs("EPSG:25830")
             self.gdf_montes = gdf
-            return True, f"\u2713 Capa montes: {len(gdf)} elementos"
+            origen = f"capa '{layer}'" if layer else os.path.basename(ruta)
+            return True, f"\u2713 Capa montes ({origen}): {len(gdf)} elementos"
         except Exception as e:
             return False, f"Error al cargar montes: {e}"
 
@@ -263,9 +265,6 @@ class GeneradorPlanos:
 
         # Etiquetas
         maq.dibujar_etiquetas_infra(gdf_sel, campo_mapeo=self._campo_mapeo)
-
-        # Vértices numerados
-        maq.dibujar_vertices_numerados(geom)
 
         # Leyenda
         items_ley = self._construir_items_leyenda(gdf_sel, color_infra)
@@ -465,7 +464,7 @@ class GeneradorPlanos:
                     datos_extra=datos,
                     cajetin=self._cajetin, plantilla=self._plantilla,
                 )
-                pdf.savefig(fig_portada, dpi=150, facecolor="white")
+                pdf.savefig(fig_portada, dpi=300, facecolor="white")
                 plt.close(fig_portada)
                 if callback_log:
                     callback_log("  \u2713 Portada a\u00f1adida")
@@ -478,7 +477,7 @@ class GeneradorPlanos:
                     items_idx.append((i + 1, nombre, ""))
                 fig_indice = crear_indice(formato_key, items_idx,
                                            plantilla=self._plantilla)
-                pdf.savefig(fig_indice, dpi=150, facecolor="white")
+                pdf.savefig(fig_indice, dpi=300, facecolor="white")
                 plt.close(fig_indice)
                 if callback_log:
                     callback_log("  \u2713 \u00cdndice a\u00f1adido")
@@ -517,7 +516,6 @@ class GeneradorPlanos:
                     # Etiquetas y vértices
                     maq.dibujar_etiquetas_infra(gdf_sel,
                                                  campo_mapeo=self._campo_mapeo)
-                    maq.dibujar_vertices_numerados(geom)
 
                     # Leyenda
                     items_ley = self._construir_items_leyenda(gdf_sel, color_infra)
@@ -536,7 +534,7 @@ class GeneradorPlanos:
                     maq.dibujar_cajetin(self._cajetin)
                     maq.dibujar_marcos(plantilla=self._plantilla)
 
-                    pdf.savefig(fig, dpi=150, facecolor="white")
+                    pdf.savefig(fig, dpi=300, facecolor="white")
                     plt.close(fig)
 
                     if callback_log:

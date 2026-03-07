@@ -40,7 +40,7 @@ class App(tk.Tk):
 
     def __init__(self):
         super().__init__()
-        self.title("Generador de Planos Forestales v2.0")
+        self.title("Generador de Planos Forestales - Jose Caballero Sánchez (Cazorla) - Open Source")
         self.geometry("1100x780")
         self.minsize(1100, 780)
         self.configure(bg=COLOR_FONDO_APP)
@@ -118,8 +118,14 @@ class App(tk.Tk):
 
         tk.Label(
             barra, text="\U0001f5fa  GENERADOR DE PLANOS FORESTALES",
-            font=("Helvetica", 16, "bold"), bg="#141B2D", fg=COLOR_ACENTO,
+            font=("Helvetica", 14, "bold"), bg="#141B2D", fg=COLOR_ACENTO,
         ).pack(side="left", padx=16, pady=10)
+
+        tk.Label(
+            barra,
+            text="App creada por Jose Caballero Sánchez (Cazorla) · Open Source · Uso gratuito",
+            font=("Helvetica", 8), bg="#141B2D", fg="#7F8C8D",
+        ).pack(side="left", padx=(0, 8), pady=10)
 
         # Botones de proyecto en la barra
         btn_f = tk.Frame(barra, bg="#141B2D")
@@ -238,6 +244,10 @@ class App(tk.Tk):
         self.panel_generacion.actualizar_valores_si_agrupado()
         self.panel_filtros.actualizar_campos()
         self.panel_simbologia.actualizar_capas_extra()
+        # Actualizar checkboxes de campos con las columnas reales del shapefile
+        columnas = self.motor.obtener_columnas_shapefile()
+        self.panel_campos.actualizar_campos(columnas)
+        self.panel_cajetin.actualizar_campos_subtitulo(columnas)
 
     def _on_filtro_aplicado(self, indices: list):
         self._poblar_tabla(indices)

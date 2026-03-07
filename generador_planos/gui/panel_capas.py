@@ -1,9 +1,10 @@
 """
-Panel de carga de capas (Infraestructuras SHP + Montes SHP + Capas extra +
+Panel de carga de capas (Infraestructuras SHP/GDB + Montes SHP/GDB + Capas extra +
 Transparencia).
 
 Incluye previsualización rápida de la capa en un mini-canvas al cargarla,
-diálogo de mapeo de campos y gestión de capas SHP adicionales.
+diálogo de mapeo de campos, selección de capa dentro de geodatabases
+y gestión de capas SHP/GDB adicionales.
 """
 
 import os
@@ -38,7 +39,7 @@ class PanelCapas:
         f = crear_frame_seccion(parent, "\U0001f4c2  CAPAS")
 
         # ── Infraestructuras ──
-        tk.Label(f, text="Shapefile Infraestructuras *",
+        tk.Label(f, text="Capa Infraestructuras *",
                  font=FONT_BOLD, bg=COLOR_PANEL, fg=COLOR_TEXTO).grid(
                  row=0, column=0, sticky="w", pady=(0, 2))
 
@@ -47,8 +48,14 @@ class PanelCapas:
                  bg=COLOR_PANEL, fg=COLOR_TEXTO_GRIS,
                  wraplength=240, justify="left").grid(row=1, column=0, sticky="w")
 
-        crear_boton(f, "Cargar Shapefile", self._cargar_infra, icono="\U0001f4e5").grid(
-            row=2, column=0, sticky="ew", pady=(4, 8))
+        btn_infra_f = tk.Frame(f, bg=COLOR_PANEL)
+        btn_infra_f.grid(row=2, column=0, sticky="ew", pady=(4, 8))
+        crear_boton(btn_infra_f, "Cargar SHP", self._cargar_infra,
+                    icono="\U0001f4e5").pack(side="left", fill="x", expand=True)
+        tk.Button(btn_infra_f, text="GDB", command=self._cargar_infra_gdb,
+                  font=FONT_SMALL, bg="#2C3E50", fg=COLOR_TEXTO,
+                  relief="flat", cursor="hand2", padx=6).pack(
+                  side="left", padx=(4, 0))
 
         # ── Montes ──
         tk.Label(f, text="Capa Montes (opcional)",
@@ -60,8 +67,14 @@ class PanelCapas:
                  bg=COLOR_PANEL, fg=COLOR_TEXTO_GRIS,
                  wraplength=240, justify="left").grid(row=4, column=0, sticky="w")
 
-        crear_boton(f, "Cargar Montes", self._cargar_montes, icono="\U0001f332").grid(
-            row=5, column=0, sticky="ew", pady=(4, 2))
+        btn_montes_f = tk.Frame(f, bg=COLOR_PANEL)
+        btn_montes_f.grid(row=5, column=0, sticky="ew", pady=(4, 2))
+        crear_boton(btn_montes_f, "Cargar Montes", self._cargar_montes,
+                    icono="\U0001f332").pack(side="left", fill="x", expand=True)
+        tk.Button(btn_montes_f, text="GDB", command=self._cargar_montes_gdb,
+                  font=FONT_SMALL, bg="#2C3E50", fg=COLOR_TEXTO,
+                  relief="flat", cursor="hand2", padx=6).pack(
+                  side="left", padx=(4, 0))
 
         # ── Transparencia ──
         tk.Label(f, text="Transparencia capa montes:",
@@ -82,11 +95,15 @@ class PanelCapas:
 
         btn_capas_f = tk.Frame(f, bg=COLOR_PANEL)
         btn_capas_f.grid(row=10, column=0, sticky="ew", pady=(4, 2))
-        tk.Button(btn_capas_f, text="+ A\u00f1adir capa SHP",
+        tk.Button(btn_capas_f, text="+ SHP",
                   command=self._añadir_capa_extra, font=FONT_SMALL,
                   bg=COLOR_BORDE, fg=COLOR_TEXTO, relief="flat",
+                  cursor="hand2", padx=4).pack(side="left", padx=(0, 2))
+        tk.Button(btn_capas_f, text="+ GDB",
+                  command=self._añadir_capa_extra_gdb, font=FONT_SMALL,
+                  bg="#2C3E50", fg=COLOR_TEXTO, relief="flat",
                   cursor="hand2", padx=4).pack(side="left", padx=(0, 4))
-        tk.Button(btn_capas_f, text="- Eliminar sel.",
+        tk.Button(btn_capas_f, text="- Eliminar",
                   command=self._eliminar_capa_extra, font=FONT_SMALL,
                   bg=COLOR_BORDE, fg=COLOR_TEXTO, relief="flat",
                   cursor="hand2", padx=4).pack(side="left")
@@ -143,6 +160,173 @@ class PanelCapas:
         else:
             self._ruta_montes.set("Error al cargar")
             self.callback_log(msg, "error")
+
+    # ── GDB helpers ────────────────────────────────────────────────────
+
+    def _listar_capas_gdb(self, ruta_gdb: str) -> list:
+        """Lista las capas disponibles en una geodatabase."""
+        try:
+            import fiona
+            return fiona.listlayers(ruta_gdb)
+        except ImportError:
+            import geopandas as _gpd
+            df = _gpd.list_layers(ruta_gdb)
+            return list(df["name"])
+
+    def _seleccionar_gdb(self, titulo: str = "Seleccionar Geodatabase"):
+        """Abre diálogo para elegir carpeta .gdb y devuelve (ruta_gdb, capa) o (None, None)."""
+        ruta = filedialog.askdirectory(title=titulo)
+        if not ruta:
+            return None, None
+
+        if not ruta.lower().endswith(".gdb"):
+            messagebox.showwarning(
+                "No es una GDB",
+                "La carpeta seleccionada no tiene extensión .gdb.\n"
+                "Selecciona una carpeta de tipo File Geodatabase.")
+            return None, None
+
+        try:
+            capas = self._listar_capas_gdb(ruta)
+        except Exception as e:
+            messagebox.showerror("Error", f"No se pudo leer la GDB:\n{e}")
+            return None, None
+
+        if not capas:
+            messagebox.showinfo("GDB vacía", "La geodatabase no contiene capas.")
+            return None, None
+
+        if len(capas) == 1:
+            return ruta, capas[0]
+
+        # Diálogo de selección de capa
+        seleccion = [None]
+        dialog = tk.Toplevel()
+        dialog.title("Seleccionar capa de la GDB")
+        dialog.configure(bg=COLOR_PANEL)
+        dialog.geometry("400x350")
+        dialog.transient()
+        dialog.grab_set()
+
+        tk.Label(dialog, text=f"GDB: {os.path.basename(ruta)}",
+                 font=FONT_BOLD, bg=COLOR_PANEL, fg=COLOR_ACENTO).pack(
+                 padx=10, pady=(10, 2))
+        tk.Label(dialog, text=f"{len(capas)} capas encontradas. Selecciona una:",
+                 font=FONT_SMALL, bg=COLOR_PANEL, fg=COLOR_TEXTO).pack(
+                 padx=10, pady=(0, 6))
+
+        frame_list = tk.Frame(dialog, bg=COLOR_PANEL)
+        frame_list.pack(fill="both", expand=True, padx=10)
+
+        lb = tk.Listbox(frame_list, font=FONT_SMALL, bg="#0D1117",
+                        fg=COLOR_TEXTO, selectbackground=COLOR_ACENTO,
+                        selectforeground="#1A1A2E", relief="flat")
+        sb = ttk.Scrollbar(frame_list, orient="vertical", command=lb.yview)
+        lb.configure(yscrollcommand=sb.set)
+        lb.pack(side="left", fill="both", expand=True)
+        sb.pack(side="right", fill="y")
+
+        for capa in capas:
+            lb.insert("end", capa)
+
+        def _aceptar():
+            idx = lb.curselection()
+            if idx:
+                seleccion[0] = capas[idx[0]]
+                dialog.destroy()
+            else:
+                messagebox.showinfo("Selección", "Selecciona una capa de la lista.")
+
+        tk.Button(dialog, text="Cargar capa seleccionada", command=_aceptar,
+                  font=FONT_SMALL, bg=COLOR_ACENTO, fg="#1A1A2E",
+                  relief="flat", cursor="hand2", pady=4).pack(
+                  padx=10, pady=10, fill="x")
+
+        dialog.wait_window()
+        if seleccion[0] is None:
+            return None, None
+        return ruta, seleccion[0]
+
+    def _cargar_infra_gdb(self):
+        """Carga infraestructuras desde una capa de geodatabase."""
+        ruta, capa = self._seleccionar_gdb(
+            "Seleccionar GDB de Infraestructuras")
+        if not ruta:
+            return
+
+        ok, msg, faltantes = self.motor.cargar_infraestructuras(ruta, layer=capa)
+        if ok:
+            self._ruta_infra.set(f"{os.path.basename(ruta)} / {capa}")
+            self.callback_log(msg, "ok")
+            self.callback_tabla()
+            self._previsualizar(self.motor.gdf_infra)
+            if faltantes:
+                self._dialogo_mapeo_campos(faltantes)
+        else:
+            self._ruta_infra.set("Error al cargar")
+            self.callback_log(msg, "error")
+            messagebox.showerror("Error", msg)
+
+    def _cargar_montes_gdb(self):
+        """Carga capa de montes desde una geodatabase."""
+        ruta, capa = self._seleccionar_gdb(
+            "Seleccionar GDB de Montes")
+        if not ruta:
+            return
+
+        ok, msg = self.motor.cargar_montes(ruta, layer=capa)
+        if ok:
+            self._ruta_montes.set(f"{os.path.basename(ruta)} / {capa}")
+            self.callback_log(msg, "ok")
+        else:
+            self._ruta_montes.set("Error al cargar")
+            self.callback_log(msg, "error")
+
+    def _añadir_capa_extra_gdb(self):
+        """Añade capa extra desde una geodatabase."""
+        ruta, capa = self._seleccionar_gdb(
+            "Seleccionar GDB para capa adicional")
+        if not ruta:
+            return
+
+        # Diálogo para nombre y tipo
+        dialog = tk.Toplevel()
+        dialog.title("Configurar capa GDB")
+        dialog.configure(bg=COLOR_PANEL)
+        dialog.geometry("350x200")
+        dialog.transient()
+        dialog.grab_set()
+
+        tk.Label(dialog, text="Nombre de la capa:", font=FONT_BOLD,
+                 bg=COLOR_PANEL, fg=COLOR_TEXTO).pack(padx=10, pady=(10, 2))
+        nombre_var = tk.StringVar(value=capa)
+        tk.Entry(dialog, textvariable=nombre_var, font=FONT_SMALL,
+                 bg=COLOR_BORDE, fg=COLOR_TEXTO, insertbackground="white",
+                 relief="flat").pack(padx=10, fill="x")
+
+        tk.Label(dialog, text="Tipo de capa:", font=FONT_BOLD,
+                 bg=COLOR_PANEL, fg=COLOR_TEXTO).pack(padx=10, pady=(10, 2))
+        tipo_var = tk.StringVar(value="Personalizada")
+        ttk.Combobox(dialog, textvariable=tipo_var, values=TIPOS_CAPA,
+                     state="readonly", font=FONT_SMALL).pack(padx=10, fill="x")
+
+        def _aceptar():
+            nombre = nombre_var.get().strip() or capa
+            tipo = tipo_var.get()
+            ok, msg, capa_obj = self.motor.gestor_capas.cargar_capa(
+                ruta, nombre, tipo, layer=capa)
+            if ok:
+                self.callback_log(msg, "ok")
+                self._actualizar_lista_capas()
+            else:
+                self.callback_log(msg, "error")
+                messagebox.showerror("Error", msg)
+            dialog.destroy()
+
+        tk.Button(dialog, text="Añadir capa", command=_aceptar,
+                  font=FONT_SMALL, bg=COLOR_ACENTO, fg="#1A1A2E",
+                  relief="flat", cursor="hand2", pady=4).pack(
+                  padx=10, pady=10, fill="x")
 
     def _añadir_capa_extra(self):
         ruta = filedialog.askopenfilename(
