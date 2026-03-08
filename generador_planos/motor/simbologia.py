@@ -115,7 +115,7 @@ class GestorSimbologia:
         )
         # Simbología por defecto de infraestructuras
         self.infra_fondo = ConfigSimbologia(
-            color="#999999", linewidth=0.6, alpha=0.5, label="Otras infraestructuras",
+            color="#999999", linewidth=1.2, alpha=0.7, label="Otras infraestructuras",
         )
 
     def generar_por_categoria(self, campo: str, valores: list):
