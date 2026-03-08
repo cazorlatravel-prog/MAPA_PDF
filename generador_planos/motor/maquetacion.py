@@ -190,6 +190,10 @@ class MaquetadorPlano:
         if campo_mapeo and campo_etiqueta in campo_mapeo:
             campo_real = campo_mapeo[campo_etiqueta]
 
+        # Offset vertical proporcional a la extensión del mapa
+        ylim = self.ax_map.get_ylim()
+        offset_y = (ylim[1] - ylim[0]) * 0.012
+
         for _, row in gdf_sel.iterrows():
             geom = row.geometry
             if geom is None:
@@ -199,9 +203,21 @@ class MaquetadorPlano:
                 continue
             if len(texto) > 25:
                 texto = texto[:24] + "\u2026"
-            cx, cy = geom.centroid.x, geom.centroid.y
+
+            # Para líneas: punto medio real de la línea
+            gt = str(geom.geom_type).lower()
+            if "line" in gt or "string" in gt:
+                try:
+                    pt = geom.interpolate(0.5, normalized=True)
+                    cx, cy = pt.x, pt.y
+                except Exception:
+                    cx, cy = geom.centroid.x, geom.centroid.y
+            else:
+                cx, cy = geom.centroid.x, geom.centroid.y
+
+            # Centrada horizontalmente, desplazada encima de la geometría
             self.ax_map.annotate(
-                texto, xy=(cx, cy), fontsize=4.5, fontweight="bold",
+                texto, xy=(cx, cy + offset_y), fontsize=4.5, fontweight="bold",
                 color="#1A1A2E", ha="center", va="bottom", zorder=8,
                 bbox=dict(boxstyle="round,pad=0.15", facecolor="white",
                           edgecolor="#666666", linewidth=0.3, alpha=0.85),
