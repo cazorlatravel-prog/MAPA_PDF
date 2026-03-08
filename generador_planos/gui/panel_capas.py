@@ -90,7 +90,7 @@ class PanelCapas:
         self.transparencia_infra = tk.DoubleVar(value=0.35)
         self.transparencia_infra.trace_add("write", lambda *_: self._lbl_transp_infra.configure(
             text=f"{self.transparencia_infra.get():.2f}"))
-        ttk.Scale(f, from_=0.0, to=1.0, variable=self.transparencia_infra,
+        ttk.Scale(f, from_=0.0, to=2.0, variable=self.transparencia_infra,
                   orient="horizontal").grid(row=7, column=0, sticky="ew", pady=(2, 4))
 
         # ── Transparencia montes ──
