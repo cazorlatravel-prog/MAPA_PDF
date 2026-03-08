@@ -54,25 +54,25 @@ class PanelSimbologia:
         grosor_header.grid(row=4, column=0, sticky="ew")
         tk.Label(grosor_header, text="Grosor l\u00ednea infra:", font=FONT_SMALL,
                  bg=COLOR_PANEL, fg=COLOR_TEXTO).pack(side="left")
-        self._lbl_grosor = tk.Label(grosor_header, text="4.0", font=FONT_SMALL,
+        self._lbl_grosor = tk.Label(grosor_header, text="2.5", font=FONT_SMALL,
                                      bg=COLOR_PANEL, fg=COLOR_ACENTO)
         self._lbl_grosor.pack(side="right")
 
-        self._grosor_infra = tk.DoubleVar(value=4.0)
+        self._grosor_infra = tk.DoubleVar(value=2.5)
         self._grosor_infra.trace_add("write", lambda *_: self._lbl_grosor.configure(
             text=f"{self._grosor_infra.get():.1f}"))
-        ttk.Scale(f, from_=0.5, to=8.0, variable=self._grosor_infra,
+        ttk.Scale(f, from_=0.5, to=5.0, variable=self._grosor_infra,
                   orient="horizontal").grid(row=5, column=0, sticky="ew", pady=(2, 6))
 
         alpha_header = tk.Frame(f, bg=COLOR_PANEL)
         alpha_header.grid(row=6, column=0, sticky="ew")
         tk.Label(alpha_header, text="Transparencia infra:", font=FONT_SMALL,
                  bg=COLOR_PANEL, fg=COLOR_TEXTO).pack(side="left")
-        self._lbl_alpha = tk.Label(alpha_header, text="1.00", font=FONT_SMALL,
+        self._lbl_alpha = tk.Label(alpha_header, text="0.35", font=FONT_SMALL,
                                     bg=COLOR_PANEL, fg=COLOR_ACENTO)
         self._lbl_alpha.pack(side="right")
 
-        self._alpha_infra = tk.DoubleVar(value=1.0)
+        self._alpha_infra = tk.DoubleVar(value=0.35)
         self._alpha_infra.trace_add("write", lambda *_: self._lbl_alpha.configure(
             text=f"{self._alpha_infra.get():.2f}"))
         ttk.Scale(f, from_=0.1, to=1.0, variable=self._alpha_infra,
