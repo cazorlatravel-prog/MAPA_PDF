@@ -75,7 +75,7 @@ class PanelSimbologia:
         self._alpha_infra = tk.DoubleVar(value=0.35)
         self._alpha_infra.trace_add("write", lambda *_: self._lbl_alpha.configure(
             text=f"{self._alpha_infra.get():.2f}"))
-        ttk.Scale(f, from_=0.1, to=2.0, variable=self._alpha_infra,
+        ttk.Scale(f, from_=0.1, to=1.0, variable=self._alpha_infra,
                   orient="horizontal").grid(row=7, column=0, sticky="ew", pady=(2, 6))
 
         tk.Label(f, text="Trazo l\u00ednea infra:", font=FONT_SMALL,
