@@ -167,7 +167,7 @@ def _descargar_teselas_manual(ax, url_template, xmin, xmax, ymin, ymax, crs_epsg
     lon_span = lon_max - lon_min
     for zoom in range(18, 0, -1):
         n_tiles_x = (2 ** zoom) * lon_span / 360.0
-        if n_tiles_x <= 12:
+        if n_tiles_x <= 20:
             break
     else:
         zoom = 5

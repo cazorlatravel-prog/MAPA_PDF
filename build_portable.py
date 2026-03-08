@@ -72,6 +72,7 @@ COLLECT_ALL = [
     "certifi",
     "pyogrio",
     "xyzservices",
+    "adjustText",
 ]
 
 HIDDEN_IMPORTS = [
@@ -121,6 +122,7 @@ HIDDEN_IMPORTS = [
     "generador_planos.gui.panel_simbologia",
     "generador_planos.gui.panel_cajetin",
     "generador_planos.gui.panel_generacion",
+    "adjustText",
 ]
 
 EXCLUDE = [

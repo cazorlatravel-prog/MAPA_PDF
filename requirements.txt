@@ -6,3 +6,4 @@ Pillow>=10.0
 contextily>=1.6
 pyproj>=3.6
 reportlab>=4.0
+adjustText>=1.0
