@@ -229,8 +229,15 @@ class App(tk.Tk):
         gdf = self.motor.gdf_infra
         if gdf is None:
             return
-        for item in self._tabla.get_children():
-            self._tabla.delete(item)
+
+        # Borrar todo de golpe (más rápido que uno a uno)
+        children = self._tabla.get_children()
+        if children:
+            self._tabla.delete(*children)
+
+        # Configurar tags UNA VEZ antes del bucle
+        self._tabla.tag_configure("par", background="#1E2A3A")
+        self._tabla.tag_configure("impar", background="#172030")
 
         # Columnas reales del shapefile (sin geometry)
         columnas = [c for c in gdf.columns if c != "geometry"]
@@ -242,15 +249,11 @@ class App(tk.Tk):
             row = gdf.iloc[i]
             vals = [i + 1]
             for col in columnas:
-                v = str(row.get(col, "\u2014"))
-                if v == "nan":
-                    v = "\u2014"
-                vals.append(v)
+                v = row.get(col)
+                vals.append("\u2014" if v is None or str(v) == "nan" else str(v))
             tag = "par" if i % 2 == 0 else "impar"
             self._tabla.insert("", "end", values=vals, tags=(tag,))
 
-        self._tabla.tag_configure("par", background="#1E2A3A")
-        self._tabla.tag_configure("impar", background="#172030")
         n = len(list(indices)) if not isinstance(indices, range) else len(indices)
         self._escribir_log(f"Tabla actualizada: {n} infraestructuras.", "info")
 

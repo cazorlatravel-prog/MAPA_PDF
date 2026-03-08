@@ -691,13 +691,11 @@ class PanelGeneracion:
         threading.Thread(target=_worker_lotes, daemon=True).start()
 
     def _actualizar_progreso(self, actual, total):
-        self._parent_window.after(
-            0, lambda: self._progreso.__setitem__("value", actual))
-        self._parent_window.after(
-            0, lambda: self._progreso.__setitem__("maximum", total))
-        self._parent_window.after(
-            0, lambda: self._lbl_progreso.configure(
-                text=f"{actual}/{total} planos generados"))
+        def _update():
+            self._progreso.configure(value=actual, maximum=total)
+            self._lbl_progreso.configure(
+                text=f"{actual}/{total} planos generados")
+        self._parent_window.after(0, _update)
 
     def _fin_generacion(self):
         cfg = self.get_config()

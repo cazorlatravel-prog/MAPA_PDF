@@ -373,7 +373,7 @@ class GeneradorPlanos:
         xmin, xmax, ymin, ymax = maq.calcular_extension_mapa(geom)
         maq.configurar_mapa_principal(xmin, xmax, ymin, ymax)
 
-        gdf_view = self.gdf_infra.iloc[[idx_fila]].copy()
+        gdf_view = self.gdf_infra.iloc[[idx_fila]]
         añadir_fondo_cartografico(ax_map, gdf_view, proveedor,
                                   xmin=xmin, xmax=xmax, ymin=ymin, ymax=ymax)
         ax_map.set_xlim(xmin, xmax)
@@ -453,8 +453,7 @@ class GeneradorPlanos:
         xmin, xmax, ymin, ymax = maq.calcular_extension_mapa(geom_union)
         maq.configurar_mapa_principal(xmin, xmax, ymin, ymax)
 
-        gdf_view = gdf_grupo.copy()
-        añadir_fondo_cartografico(ax_map, gdf_view, proveedor,
+        añadir_fondo_cartografico(ax_map, gdf_grupo, proveedor,
                                   xmin=xmin, xmax=xmax, ymin=ymin, ymax=ymax)
         ax_map.set_xlim(xmin, xmax)
         ax_map.set_ylim(ymin, ymax)
@@ -658,7 +657,7 @@ class GeneradorPlanos:
                     xmin, xmax, ymin, ymax = maq.calcular_extension_mapa(geom)
                     maq.configurar_mapa_principal(xmin, xmax, ymin, ymax)
 
-                    gdf_view = self.gdf_infra.iloc[[idx]].copy()
+                    gdf_view = self.gdf_infra.iloc[[idx]]
                     añadir_fondo_cartografico(ax_map, gdf_view, proveedor,
                                               xmin=xmin, xmax=xmax,
                                               ymin=ymin, ymax=ymax)

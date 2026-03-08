@@ -1010,9 +1010,11 @@ class MaquetadorPlano:
         )
 
     def guardar(self, ruta_out: str):
-        self.fig.savefig(ruta_out, format="pdf", dpi=DPI,
-                          facecolor="white")
-        plt.close(self.fig)
+        try:
+            self.fig.savefig(ruta_out, format="pdf", dpi=DPI,
+                              facecolor="white")
+        finally:
+            plt.close(self.fig)
 
 
 # ════════════════════════════════════════════════════════════════════════

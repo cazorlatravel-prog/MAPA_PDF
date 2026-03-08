@@ -8,12 +8,16 @@ Soporta:
   - Stamen Terrain
 
 Implementa fallback manual para teselas IGN si contextily falla.
+Incluye caché de teselas en disco para evitar descargas repetidas.
 """
 
 import io
 import math
+import os
+import hashlib
 import warnings
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
 
 import numpy as np
 import requests
@@ -23,6 +27,22 @@ try:
     import contextily as ctx
 except ImportError:
     ctx = None
+
+# Directorio de caché de teselas
+_TILE_CACHE_DIR = Path.home() / ".mapa_pdf_cache" / "tiles"
+
+# Caché de Transformers de pyproj (son costosos de crear)
+_TRANSFORMER_CACHE = {}
+
+
+def _get_transformer(from_crs: str, to_crs: str):
+    """Devuelve un Transformer cacheado para la combinación de CRS."""
+    key = (from_crs, to_crs)
+    if key not in _TRANSFORMER_CACHE:
+        from pyproj import Transformer
+        _TRANSFORMER_CACHE[key] = Transformer.from_crs(
+            from_crs, to_crs, always_xy=True)
+    return _TRANSFORMER_CACHE[key]
 
 
 CAPAS_BASE = {
@@ -101,15 +121,36 @@ def _lat_lon_to_tile(lat, lon, zoom):
 
 
 def _descargar_tesela(url_template, z, x, y, timeout=10):
-    """Descarga una tesela individual."""
+    """Descarga una tesela individual, con caché en disco."""
+    # Generar clave de caché basada en URL + coordenadas
     url = url_template.format(z=z, x=x, y=y)
+    cache_key = hashlib.md5(url.encode()).hexdigest()
+    cache_path = _TILE_CACHE_DIR / f"{cache_key}.png"
+
+    # Intentar desde caché
+    if cache_path.exists():
+        try:
+            return Image.open(cache_path).copy()
+        except Exception:
+            cache_path.unlink(missing_ok=True)
+
+    # Descargar
     headers = {
         "User-Agent": "GeneradorPlanosForestales/1.0",
         "Referer": "https://www.ign.es/",
     }
     resp = requests.get(url, headers=headers, timeout=timeout)
     resp.raise_for_status()
-    return Image.open(io.BytesIO(resp.content))
+    img = Image.open(io.BytesIO(resp.content))
+
+    # Guardar en caché
+    try:
+        _TILE_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        img.save(cache_path, "PNG")
+    except Exception:
+        pass
+
+    return img
 
 
 def _descargar_teselas_manual(ax, url_template, xmin, xmax, ymin, ymax, crs_epsg=25830):
@@ -118,9 +159,7 @@ def _descargar_teselas_manual(ax, url_template, xmin, xmax, ymin, ymax, crs_epsg
     Convierte las coordenadas del eje (EPSG:25830) a EPSG:4326 para
     calcular tiles, descarga y compone la imagen de fondo.
     """
-    from pyproj import Transformer
-
-    transformer = Transformer.from_crs(f"EPSG:{crs_epsg}", "EPSG:4326", always_xy=True)
+    transformer = _get_transformer(f"EPSG:{crs_epsg}", "EPSG:4326")
     lon_min, lat_min = transformer.transform(xmin, ymin)
     lon_max, lat_max = transformer.transform(xmax, ymax)
 
@@ -167,7 +206,7 @@ def _descargar_teselas_manual(ax, url_template, xmin, xmax, ymin, ymax, crs_epsg
         return False
 
     # Convertir bounds de cada tile de lon/lat a EPSG:25830
-    transformer_inv = Transformer.from_crs("EPSG:4326", f"EPSG:{crs_epsg}", always_xy=True)
+    transformer_inv = _get_transformer("EPSG:4326", f"EPSG:{crs_epsg}")
     for img, tlon_min, tlon_max, tlat_min, tlat_max in tiles:
         txmin_m, tymin_m = transformer_inv.transform(tlon_min, tlat_min)
         txmax_m, tymax_m = transformer_inv.transform(tlon_max, tlat_max)
