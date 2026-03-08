@@ -232,13 +232,9 @@ class MaquetadorPlano:
                 from adjustText import adjust_text
                 adjust_text(textos_anotados, ax=self.ax_map,
                             arrowprops=dict(arrowstyle="-", color="#999999",
-                                            lw=0.4),
-                            expand=(1.2, 1.4),
-                            force_text=(0.5, 0.8),
-                            only_move={"text": "xy"},
-                            ensure_inside_axes=True)
-            except ImportError:
-                pass  # Si adjustText no está instalado, se queda sin ajustar
+                                            lw=0.4))
+            except Exception:
+                pass  # Si adjustText falla o no está instalado, continuar
 
     # ── Vértices ───────────────────────────────────────────────────────
 
