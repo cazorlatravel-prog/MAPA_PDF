@@ -195,6 +195,7 @@ class MaquetadorPlano:
         offset_y = (ylim[1] - ylim[0]) * 0.012
 
         textos_anotados = []  # para adjustText
+        etiquetas_vistas = set()  # evitar duplicados
 
         for _, row in gdf_sel.iterrows():
             geom = row.geometry
@@ -205,6 +206,11 @@ class MaquetadorPlano:
                 continue
             if len(texto) > 25:
                 texto = texto[:24] + "\u2026"
+
+            # Saltar si ya se dibujó una etiqueta con este mismo texto
+            if texto in etiquetas_vistas:
+                continue
+            etiquetas_vistas.add(texto)
 
             # Para líneas: punto medio real de la línea
             gt = str(geom.geom_type).lower()
