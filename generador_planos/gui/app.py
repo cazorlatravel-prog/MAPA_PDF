@@ -280,11 +280,10 @@ class App(tk.Tk):
         plantilla = self.panel_cajetin.obtener_plantilla()
         self.motor.set_cajetin(cajetin)
         self.motor.set_plantilla(plantilla)
-        config_infra = self.panel_simbologia.obtener_config_infra()
-        # La transparencia de infraestructuras del panel Capas tiene prioridad
-        config_infra["alpha"] = self.panel_capas.transparencia_infra.get()
-        self.motor.config_infra = config_infra
+        # Primero aplicar simbología (colores de categorías, montes, capas extra)
         self.panel_simbologia._aplicar()
+        # Después sobreescribir alpha con el valor del panel Capas (tiene prioridad)
+        self.motor.config_infra["alpha"] = self.panel_capas.transparencia_infra.get()
 
     def _get_config(self) -> dict:
         return {
