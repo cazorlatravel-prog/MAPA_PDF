@@ -6,11 +6,11 @@ Layout: 1100x780 px mínimo, redimensionable.
 │  GENERADOR DE PLANOS FORESTALES            ETRS89·UTM H30N  │
 ├──────────────────┬──────────────────────────────────────────┤
 │  CAPAS           │  TABLA DE INFRAESTRUCTURAS               │
-│  CONFIGURACIÓN   │                                          │
-│  CAMPOS PLANO    ├──────────────────────────────────────────┤
-│  FILTROS         │  LOG DE PROCESO                          │
-│  SIMBOLOGÍA      │                                          │
+│  FILTROS         │                                          │
+│  SIMBOLOGÍA      ├──────────────────────────────────────────┤
+│  CAMPOS PLANO    │  LOG DE PROCESO                          │
 │  CAJETÍN         │                                          │
+│  CONFIGURACIÓN   │                                          │
 │  GENERACIÓN      │                                          │
 └──────────────────┴──────────────────────────────────────────┘
 """
@@ -18,12 +18,6 @@ Layout: 1100x780 px mínimo, redimensionable.
 import os
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
-
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-from matplotlib.patches import Rectangle as MplRectangle
 
 from .estilos import (
     COLOR_FONDO_APP, COLOR_ACENTO, COLOR_TEXTO_GRIS, COLOR_PANEL, COLOR_TEXTO,
@@ -46,7 +40,7 @@ class App(tk.Tk):
 
     def __init__(self):
         super().__init__()
-        self.title("Generador de Planos Forestales - Jose Caballero Sánchez (Cazorla) - Open Source")
+        self.title("Generador de Planos Forestales - \u00a9 Jose Caballero S\u00e1nchez (Cazorla 2026)")
         self.geometry("1100x780")
         self.minsize(1100, 780)
         self.configure(bg=COLOR_FONDO_APP)
@@ -87,26 +81,40 @@ class App(tk.Tk):
         der = tk.Frame(main, bg=COLOR_FONDO_APP)
         der.pack(side="right", fill="both", expand=True, pady=4)
 
-        # ── Paneles izquierda ──
+        # ── Paneles izquierda (orden de flujo de trabajo) ──
+
+        # 1. Carga de datos
         self.panel_capas = PanelCapas(
             izq, self.motor,
             callback_log=self._escribir_log,
             callback_tabla=self._on_tabla_cargada,
         )
-        self.panel_config = PanelConfig(izq)
-        self.panel_campos = PanelCampos(izq)
+
+        # 2. Filtrado de datos
         self.panel_filtros = PanelFiltros(
             izq, self.motor,
             callback_filtro=self._on_filtro_aplicado,
         )
+
+        # 3. Estilo visual
         self.panel_simbologia = PanelSimbologia(
             izq, self.motor,
             callback_log=self._escribir_log,
         )
+
+        # 4. Campos a mostrar en el plano
+        self.panel_campos = PanelCampos(izq)
+
+        # 5. Cajetín y plantilla
         self.panel_cajetin = PanelCajetin(
             izq, self.motor,
             callback_log=self._escribir_log,
         )
+
+        # 6. Configuración de salida
+        self.panel_config = PanelConfig(izq)
+
+        # 7. Generación final
         self.panel_generacion = PanelGeneracion(
             izq, self.motor,
             get_config=self._get_config,
@@ -114,8 +122,8 @@ class App(tk.Tk):
             auto_aplicar=self._auto_aplicar_todo,
         )
 
-        # ── Paneles derecha: Notebook con pestañas + log ──
-        self._crear_notebook(der)
+        # ── Panel derecho: tabla + log ──
+        self._crear_panel_tabla(der)
         self._crear_panel_log(der)
 
     def _barra_superior(self):
@@ -130,7 +138,7 @@ class App(tk.Tk):
 
         tk.Label(
             barra,
-            text="App creada por Jose Caballero Sánchez (Cazorla) · Open Source · Uso gratuito",
+            text="\u00a9 Jose Caballero S\u00e1nchez (Cazorla 2026) \u00b7 Todos los derechos reservados",
             font=("Helvetica", 8), bg="#141B2D", fg="#7F8C8D",
         ).pack(side="left", padx=(0, 8), pady=10)
 
@@ -150,37 +158,23 @@ class App(tk.Tk):
             font=("Helvetica", 9), bg="#141B2D", fg=COLOR_TEXTO_GRIS,
         ).pack(side="right", padx=16)
 
-    def _crear_notebook(self, parent):
-        """Crea el Notebook central con pestañas: Infraestructuras, Mapa General, Mapa Posición."""
-        self._notebook = ttk.Notebook(parent)
-        self._notebook.pack(fill="both", expand=True, padx=4, pady=(4, 4))
-
-        # ── Pestaña 1: Tabla de infraestructuras ──
-        tab_tabla = tk.Frame(self._notebook, bg=COLOR_FONDO_APP)
-        self._notebook.add(tab_tabla, text=" 📋 Infraestructuras ")
-        self._crear_panel_tabla_en(tab_tabla)
-
-        # ── Pestaña 2: Mapa General ──
-        tab_mapa = tk.Frame(self._notebook, bg="#0D1117")
-        self._notebook.add(tab_mapa, text=" 🗺 Mapa General ")
-        self._crear_panel_mapa_general(tab_mapa)
-
-        # ── Pestaña 3: Mapa Posición ──
-        tab_pos = tk.Frame(self._notebook, bg="#0D1117")
-        self._notebook.add(tab_pos, text=" 📍 Mapa Posición ")
-        self._crear_panel_mapa_posicion(tab_pos)
-
-    def _crear_panel_tabla_en(self, parent):
-        """Crea la tabla de infraestructuras dentro de un frame."""
-        self._tabla_frame = parent
+    def _crear_panel_tabla(self, parent):
+        """Crea la tabla de infraestructuras directamente en el panel derecho."""
+        lf = tk.LabelFrame(
+            parent, text=" INFRAESTRUCTURAS ",
+            font=FONT_BOLD, bg=COLOR_FONDO_APP, fg=COLOR_ACENTO,
+            bd=1, relief="solid",
+        )
+        lf.pack(fill="both", expand=True, padx=4, pady=(4, 4))
+        self._tabla_frame = lf
         cols = ["#"]
-        self._tabla = ttk.Treeview(parent, columns=cols, show="headings",
+        self._tabla = ttk.Treeview(lf, columns=cols, show="headings",
                                     selectmode="extended")
         self._tabla.heading("#", text="#")
         self._tabla.column("#", width=60, minwidth=40)
 
-        sb_v = ttk.Scrollbar(parent, orient="vertical", command=self._tabla.yview)
-        sb_h = ttk.Scrollbar(parent, orient="horizontal", command=self._tabla.xview)
+        sb_v = ttk.Scrollbar(lf, orient="vertical", command=self._tabla.yview)
+        sb_h = ttk.Scrollbar(lf, orient="horizontal", command=self._tabla.xview)
         self._tabla.configure(yscrollcommand=sb_v.set, xscrollcommand=sb_h.set)
 
         sb_h.pack(side="bottom", fill="x")
@@ -195,215 +189,6 @@ class App(tk.Tk):
             ancho = 50 if col == "#" else 120
             self._tabla.heading(col, text=col)
             self._tabla.column(col, width=ancho, minwidth=40)
-
-    # ── Mapa General (pestaña 2) ─────────────────────────────────────────
-
-    def _crear_panel_mapa_general(self, parent):
-        """Vista previa del mapa general con todas las capas cargadas."""
-        # Barra de herramientas
-        toolbar = tk.Frame(parent, bg=COLOR_PANEL, height=32)
-        toolbar.pack(fill="x", padx=2, pady=(2, 0))
-        toolbar.pack_propagate(False)
-
-        tk.Button(toolbar, text="🔄 Actualizar mapa", command=self._actualizar_mapa_general,
-                  font=FONT_SMALL, bg="#2C3E50", fg=COLOR_TEXTO, relief="flat",
-                  cursor="hand2", padx=6).pack(side="left", padx=4, pady=2)
-
-        self._lbl_mapa_info = tk.Label(toolbar, text="Carga capas para ver el mapa",
-                                        font=FONT_SMALL, bg=COLOR_PANEL, fg=COLOR_TEXTO_GRIS)
-        self._lbl_mapa_info.pack(side="left", padx=8)
-
-        # Canvas matplotlib
-        self._mapa_frame = tk.Frame(parent, bg="#0D1117")
-        self._mapa_frame.pack(fill="both", expand=True, padx=2, pady=2)
-        self._mapa_canvas = None
-        self._mapa_fig = None
-
-    def _actualizar_mapa_general(self):
-        """Redibuja el mapa general con las capas cargadas."""
-        gdf = self.motor.gdf_infra
-        if gdf is None:
-            self._lbl_mapa_info.configure(text="No hay infraestructuras cargadas")
-            return
-
-        # Limpiar canvas anterior
-        if self._mapa_canvas is not None:
-            self._mapa_canvas.get_tk_widget().destroy()
-        if self._mapa_fig is not None:
-            plt.close(self._mapa_fig)
-
-        fig, ax = plt.subplots(1, 1, figsize=(8, 5), dpi=96)
-        fig.patch.set_facecolor("#0D1117")
-        ax.set_facecolor("#172030")
-        self._mapa_fig = fig
-
-        # Infraestructuras: por categoría o color único
-        ci = self.motor.config_infra
-        campo_cat = ci.get("campo_categoria")
-        color_infra = "#E74C3C"
-
-        if campo_cat and campo_cat in gdf.columns:
-            campo_real = campo_cat
-            mapeo = self.motor._campo_mapeo
-            if mapeo and campo_cat in mapeo:
-                campo_real = mapeo[campo_cat]
-            valores = sorted(gdf[campo_real].astype(str).unique())
-            for valor in valores:
-                simb = self.motor.gestor_simbologia.obtener_simbologia_infra(
-                    campo_cat, valor)
-                mask = gdf[campo_real].astype(str) == valor
-                gdf_cat = gdf[mask]
-                if not gdf_cat.empty:
-                    gdf_cat.plot(ax=ax, color=simb.color, linewidth=1.2,
-                                 label=str(valor)[:20], alpha=0.9)
-        else:
-            gdf.plot(ax=ax, color=color_infra, linewidth=1.2,
-                     label="Infraestructuras", alpha=0.9)
-
-        # Montes
-        if self.motor.gdf_montes is not None:
-            self.motor.gdf_montes.plot(ax=ax, facecolor="#22992244",
-                                        edgecolor="#1a5c10", linewidth=0.5,
-                                        alpha=0.5, label="Montes")
-
-        # Capas extra
-        for capa in self.motor.gestor_capas.capas:
-            if capa.visible and capa.gdf is not None:
-                simb = self.motor.gestor_simbologia.obtener_simbologia_capa(capa.nombre)
-                capa.gdf.plot(ax=ax, color=simb.color, linewidth=0.8,
-                              alpha=simb.alpha, label=capa.nombre)
-
-        ax.legend(loc="upper right", fontsize=7, framealpha=0.85,
-                  facecolor="#1C2333", edgecolor="#2C3E50", labelcolor=COLOR_TEXTO)
-
-        # Estilo del mapa
-        ax.tick_params(colors=COLOR_TEXTO_GRIS, labelsize=6)
-        for sp in ax.spines.values():
-            sp.set_color("#2C3E50")
-        ax.set_title("Vista general de capas cargadas", fontsize=9,
-                      color=COLOR_ACENTO, fontweight="bold", pad=8)
-
-        fig.tight_layout(pad=0.5)
-
-        self._mapa_canvas = FigureCanvasTkAgg(fig, master=self._mapa_frame)
-        self._mapa_canvas.draw()
-        self._mapa_canvas.get_tk_widget().pack(fill="both", expand=True)
-
-        n_infra = len(gdf)
-        n_capas = len(self.motor.gestor_capas.capas)
-        montes = "Sí" if self.motor.gdf_montes is not None else "No"
-        self._lbl_mapa_info.configure(
-            text=f"{n_infra} infraestructuras · {n_capas} capas extra · Montes: {montes}")
-
-    # ── Mapa Posición (pestaña 3) ────────────────────────────────────────
-
-    def _crear_panel_mapa_posicion(self, parent):
-        """Vista previa del mapa de posición/localización."""
-        toolbar = tk.Frame(parent, bg=COLOR_PANEL, height=32)
-        toolbar.pack(fill="x", padx=2, pady=(2, 0))
-        toolbar.pack_propagate(False)
-
-        tk.Button(toolbar, text="🔄 Actualizar posición",
-                  command=self._actualizar_mapa_posicion,
-                  font=FONT_SMALL, bg="#2C3E50", fg=COLOR_TEXTO, relief="flat",
-                  cursor="hand2", padx=6).pack(side="left", padx=4, pady=2)
-
-        self._lbl_pos_info = tk.Label(toolbar, text="Carga capas para ver la localización",
-                                       font=FONT_SMALL, bg=COLOR_PANEL, fg=COLOR_TEXTO_GRIS)
-        self._lbl_pos_info.pack(side="left", padx=8)
-
-        self._pos_frame = tk.Frame(parent, bg="#0D1117")
-        self._pos_frame.pack(fill="both", expand=True, padx=2, pady=2)
-        self._pos_canvas = None
-        self._pos_fig = None
-
-    def _actualizar_mapa_posicion(self):
-        """Redibuja el mapa de posición con fondo topográfico."""
-        gdf = self.motor.gdf_infra
-        if gdf is None:
-            self._lbl_pos_info.configure(text="No hay infraestructuras cargadas")
-            return
-
-        # Limpiar canvas anterior
-        if self._pos_canvas is not None:
-            self._pos_canvas.get_tk_widget().destroy()
-        if self._pos_fig is not None:
-            plt.close(self._pos_fig)
-
-        fig, ax = plt.subplots(1, 1, figsize=(8, 5), dpi=96)
-        fig.patch.set_facecolor("#0D1117")
-        ax.set_facecolor("#E8E8E0")
-        self._pos_fig = fig
-
-        # Centroide de todas las infraestructuras
-        from shapely.ops import unary_union
-        geom_union = unary_union(gdf.geometry)
-        cx, cy = geom_union.centroid.x, geom_union.centroid.y
-
-        # Escala fija 1:250.000 para localización
-        escala_loc = 250_000
-        semi_x = 25_000  # ~50 km de ancho
-        semi_y = 18_000  # ~36 km de alto
-
-        xmin_m, xmax_m = cx - semi_x, cx + semi_x
-        ymin_m, ymax_m = cy - semi_y, cy + semi_y
-
-        ax.set_xlim(xmin_m, xmax_m)
-        ax.set_ylim(ymin_m, ymax_m)
-
-        # Fondo topográfico IGN
-        try:
-            from ..motor.cartografia import _descargar_teselas_manual, CAPAS_BASE
-            url = CAPAS_BASE.get("IGN Topográfico")
-            if url:
-                _descargar_teselas_manual(ax, url, xmin_m, xmax_m, ymin_m, ymax_m)
-                ax.set_xlim(xmin_m, xmax_m)
-                ax.set_ylim(ymin_m, ymax_m)
-        except Exception:
-            pass
-
-        # Dibujar todas las infraestructuras como puntos
-        for _, row in gdf.iterrows():
-            geom = row.geometry
-            if geom is None:
-                continue
-            pcx, pcy = geom.centroid.x, geom.centroid.y
-            ax.plot(pcx, pcy, "o", color="#E74C3C", markersize=5,
-                    markeredgecolor="white", markeredgewidth=0.4, zorder=5)
-
-        # Recuadro de extensión total
-        bounds = gdf.total_bounds  # [minx, miny, maxx, maxy]
-        rw = bounds[2] - bounds[0]
-        rh = bounds[3] - bounds[1]
-        margin = max(rw, rh) * 0.1
-        ax.add_patch(MplRectangle(
-            (bounds[0] - margin, bounds[1] - margin),
-            rw + 2 * margin, rh + 2 * margin,
-            fill=False, edgecolor="#E74C3C", linewidth=1.5, zorder=7,
-            linestyle="--"))
-
-        # Estilo
-        for sp in ax.spines.values():
-            sp.set_color("#2C3E50")
-        ax.tick_params(colors=COLOR_TEXTO_GRIS, labelsize=6)
-        ax.set_title("Mapa de localización", fontsize=9,
-                      color=COLOR_ACENTO, fontweight="bold", pad=8)
-
-        # CRS
-        ax.text(0.99, 0.02, "ETRS89 / UTM zona 30N · EPSG:25830",
-                ha="right", va="bottom", fontsize=6, color="#666666",
-                transform=ax.transAxes,
-                bbox=dict(boxstyle="round,pad=0.1", facecolor="white",
-                          edgecolor="#BDC3C7", linewidth=0.3, alpha=0.8))
-
-        fig.tight_layout(pad=0.5)
-
-        self._pos_canvas = FigureCanvasTkAgg(fig, master=self._pos_frame)
-        self._pos_canvas.draw()
-        self._pos_canvas.get_tk_widget().pack(fill="both", expand=True)
-
-        self._lbl_pos_info.configure(
-            text=f"Centro: {cx:.0f}, {cy:.0f} · Extensión: {rw:.0f} x {rh:.0f} m")
 
     def _crear_panel_log(self, parent):
         lf = tk.LabelFrame(
@@ -444,8 +229,15 @@ class App(tk.Tk):
         gdf = self.motor.gdf_infra
         if gdf is None:
             return
-        for item in self._tabla.get_children():
-            self._tabla.delete(item)
+
+        # Borrar todo de golpe (más rápido que uno a uno)
+        children = self._tabla.get_children()
+        if children:
+            self._tabla.delete(*children)
+
+        # Configurar tags UNA VEZ antes del bucle
+        self._tabla.tag_configure("par", background="#1E2A3A")
+        self._tabla.tag_configure("impar", background="#172030")
 
         # Columnas reales del shapefile (sin geometry)
         columnas = [c for c in gdf.columns if c != "geometry"]
@@ -457,15 +249,11 @@ class App(tk.Tk):
             row = gdf.iloc[i]
             vals = [i + 1]
             for col in columnas:
-                v = str(row.get(col, "\u2014"))
-                if v == "nan":
-                    v = "\u2014"
-                vals.append(v)
+                v = row.get(col)
+                vals.append("\u2014" if v is None or str(v) == "nan" else str(v))
             tag = "par" if i % 2 == 0 else "impar"
             self._tabla.insert("", "end", values=vals, tags=(tag,))
 
-        self._tabla.tag_configure("par", background="#1E2A3A")
-        self._tabla.tag_configure("impar", background="#172030")
         n = len(list(indices)) if not isinstance(indices, range) else len(indices)
         self._escribir_log(f"Tabla actualizada: {n} infraestructuras.", "info")
 
@@ -482,9 +270,6 @@ class App(tk.Tk):
         # Actualizar checkboxes de campos con las columnas reales del shapefile
         self.panel_campos.actualizar_campos(columnas)
         self.panel_cajetin.actualizar_campos_subtitulo(columnas)
-        # Actualizar mapas de previsualización
-        self._actualizar_mapa_general()
-        self._actualizar_mapa_posicion()
 
     def _on_filtro_aplicado(self, indices: list):
         self._poblar_tabla(indices)
@@ -495,7 +280,10 @@ class App(tk.Tk):
         plantilla = self.panel_cajetin.obtener_plantilla()
         self.motor.set_cajetin(cajetin)
         self.motor.set_plantilla(plantilla)
-        self.motor.config_infra = self.panel_simbologia.obtener_config_infra()
+        config_infra = self.panel_simbologia.obtener_config_infra()
+        # La transparencia de infraestructuras del panel Capas tiene prioridad
+        config_infra["alpha"] = self.panel_capas.transparencia_infra.get()
+        self.motor.config_infra = config_infra
         self.panel_simbologia._aplicar()
 
     def _get_config(self) -> dict:

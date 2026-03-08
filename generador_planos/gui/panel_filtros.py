@@ -25,6 +25,8 @@ class PanelFiltros:
         """
         self.motor = motor
         self.callback_filtro = callback_filtro
+        self._parent = parent
+        self._debounce_id = None
 
         f = crear_frame_seccion(parent, "\U0001f50d  FILTROS")
 
@@ -33,7 +35,7 @@ class PanelFiltros:
                  bg=COLOR_PANEL, fg=COLOR_TEXTO).grid(
                  row=0, column=0, sticky="w")
         self._busqueda = tk.StringVar()
-        self._busqueda.trace_add("write", lambda *a: self._aplicar_filtros())
+        self._busqueda.trace_add("write", lambda *a: self._debounce_filtros())
         tk.Entry(f, textvariable=self._busqueda, font=FONT_SMALL,
                  bg=COLOR_ENTRY, fg=COLOR_TEXTO, insertbackground="white",
                  relief="flat").grid(row=1, column=0, sticky="ew", pady=(2, 6))
@@ -128,66 +130,66 @@ class PanelFiltros:
         self._cb_valor["values"] = ["(todos)"] + valores
         self._valor_filtro.set("(todos)")
 
+    def _debounce_filtros(self):
+        """Aplica filtros con retardo de 300ms para evitar recálculos por tecla."""
+        if self._debounce_id is not None:
+            self._parent.after_cancel(self._debounce_id)
+        self._debounce_id = self._parent.after(300, self._aplicar_filtros)
+
     def _aplicar_filtros(self):
+        self._debounce_id = None
         gdf = self.motor.gdf_infra
         if gdf is None:
+            self._lbl_resultado.configure(text="")
             return
 
-        mask = [True] * len(gdf)
+        import numpy as np
+        mask = np.ones(len(gdf), dtype=bool)
 
-        # Filtro por texto libre
+        # Filtro por texto libre (vectorizado)
         texto = self._busqueda.get().strip().lower()
         if texto:
-            for i in range(len(gdf)):
-                row_str = " ".join(str(v).lower() for v in gdf.iloc[i].values
-                                   if str(v) != "nan")
-                if texto not in row_str:
-                    mask[i] = False
+            cols = [c for c in gdf.columns if c != "geometry"]
+            text_match = np.zeros(len(gdf), dtype=bool)
+            for col in cols:
+                text_match |= gdf[col].astype(str).str.lower().str.contains(
+                    texto, na=False, regex=False)
+            mask &= text_match
 
-        # Filtro por campo/valor
+        # Filtro por campo/valor (vectorizado)
         campo = self._campo_filtro.get()
         valor = self._valor_filtro.get()
         if campo != "(todos)" and valor != "(todos)":
             if campo in gdf.columns:
-                for i in range(len(gdf)):
-                    if str(gdf.iloc[i].get(campo, "")) != valor:
-                        mask[i] = False
+                mask &= (gdf[campo].astype(str) == valor).values
 
-        # Filtro por superficie
+        # Filtro por superficie (vectorizado)
         sup_min_txt = self._sup_min.get().strip()
         sup_max_txt = self._sup_max.get().strip()
         if (sup_min_txt or sup_max_txt) and "Superficie" in gdf.columns:
             try:
-                sup_min = float(sup_min_txt) if sup_min_txt else 0
-                sup_max = float(sup_max_txt) if sup_max_txt else float("inf")
-                for i in range(len(gdf)):
-                    try:
-                        val = float(gdf.iloc[i]["Superficie"])
-                        if val < sup_min or val > sup_max:
-                            mask[i] = False
-                    except (ValueError, TypeError):
-                        pass
-            except ValueError:
+                sup_vals = gdf["Superficie"].astype(float)
+                if sup_min_txt:
+                    mask &= (sup_vals >= float(sup_min_txt)).values
+                if sup_max_txt:
+                    mask &= (sup_vals <= float(sup_max_txt)).values
+            except (ValueError, TypeError):
                 pass
 
-        # Filtro por longitud
+        # Filtro por longitud (vectorizado)
         lon_min_txt = self._lon_min.get().strip()
         lon_max_txt = self._lon_max.get().strip()
         if (lon_min_txt or lon_max_txt) and "Longitud" in gdf.columns:
             try:
-                lon_min = float(lon_min_txt) if lon_min_txt else 0
-                lon_max = float(lon_max_txt) if lon_max_txt else float("inf")
-                for i in range(len(gdf)):
-                    try:
-                        val = float(gdf.iloc[i]["Longitud"])
-                        if val < lon_min or val > lon_max:
-                            mask[i] = False
-                    except (ValueError, TypeError):
-                        pass
-            except ValueError:
+                lon_vals = gdf["Longitud"].astype(float)
+                if lon_min_txt:
+                    mask &= (lon_vals >= float(lon_min_txt)).values
+                if lon_max_txt:
+                    mask &= (lon_vals <= float(lon_max_txt)).values
+            except (ValueError, TypeError):
                 pass
 
-        indices = [i for i, m in enumerate(mask) if m]
+        indices = list(np.where(mask)[0])
         self._lbl_resultado.configure(
             text=f"{len(indices)}/{len(gdf)} infraestructuras")
         self.callback_filtro(indices)

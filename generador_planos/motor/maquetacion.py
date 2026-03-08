@@ -154,10 +154,12 @@ class MaquetadorPlano:
                            color="#2C3E50", rotation=30, ha="left")
         ax.set_yticklabels([f"{int(y)}" for y in ys_filt], fontsize=4.5,
                            color="#2C3E50")
-        # Mover etiquetas X arriba para evitar solapamiento con cajetines inferiores
+        # Etiquetas en los cuatro lados del mapa
         ax.tick_params(which="major", length=4, width=0.6, color="#2C3E50",
-                       direction="out", labelbottom=False, labeltop=True,
-                       labelleft=True, pad=1)
+                       direction="out", labelbottom=True, labeltop=True,
+                       labelleft=True, labelright=True, pad=1)
+        # Etiquetas inferiores sin rotación y tamaño reducido para no solapar cajetines
+        ax.tick_params(axis="x", which="major", labelsize=3.5)
 
         # Líneas de cuadrícula completas (estilo cartográfico profesional)
         for x in xs:
@@ -611,8 +613,11 @@ class MaquetadorPlano:
 
         if items_categoria and len(items_categoria) > 0:
             n_cat = len(items_categoria)
-            cat_row_h = min(0.032, 0.20 / max(n_cat, 1))
-            cat_zone_h = cat_row_h * n_cat + 0.03  # filas + título + padding
+            import math as _math
+            n_cols = 2
+            n_rows = _math.ceil(n_cat / n_cols)
+            cat_row_h = min(0.032, 0.20 / max(n_rows, 1))
+            cat_zone_h = cat_row_h * n_rows + 0.03  # filas + título + padding
 
             # Título
             ax.text(0.5, cat_top - 0.005, "SIMBOLOGÍA",
@@ -620,14 +625,20 @@ class MaquetadorPlano:
                     color=COL_DARK, zorder=3)
 
             margin_x = 0.05
-            line_x0 = margin_x + 0.02
-            line_x1 = margin_x + 0.12
-            text_x = line_x1 + 0.03
+            col_width = (1.0 - 2 * margin_x) / n_cols
             y_start = cat_top - 0.022
 
             for i, (label, color, geom_type, linestyle, marker,
                     facecolor) in enumerate(items_categoria):
-                y = y_start - i * cat_row_h
+                col_idx = i // n_rows
+                row_idx = i % n_rows
+                y = y_start - row_idx * cat_row_h
+
+                # Posiciones X para esta columna
+                col_x0 = margin_x + col_idx * col_width
+                line_x0 = col_x0 + 0.02
+                line_x1 = col_x0 + 0.12
+                text_x = line_x1 + 0.03
 
                 # Dibujar muestra de trazo/símbolo
                 if "point" in geom_type:
@@ -656,7 +667,7 @@ class MaquetadorPlano:
                         transform=ax.transAxes, zorder=3)
 
             # Línea separadora bajo las categorías
-            sep_y = y_start - n_cat * cat_row_h - 0.006
+            sep_y = y_start - n_rows * cat_row_h - 0.006
             ax.plot([margin_x, 1 - margin_x], [sep_y, sep_y],
                     color=COL_LINE, linewidth=0.5, transform=ax.transAxes,
                     zorder=2)
@@ -999,9 +1010,11 @@ class MaquetadorPlano:
         )
 
     def guardar(self, ruta_out: str):
-        self.fig.savefig(ruta_out, format="pdf", dpi=DPI,
-                          facecolor="white")
-        plt.close(self.fig)
+        try:
+            self.fig.savefig(ruta_out, format="pdf", dpi=DPI,
+                              facecolor="white")
+        finally:
+            plt.close(self.fig)
 
 
 # ════════════════════════════════════════════════════════════════════════

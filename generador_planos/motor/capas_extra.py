@@ -55,6 +55,8 @@ class GestorCapasExtra:
             if gdf.crs is None:
                 gdf = gdf.set_crs("EPSG:4326")
             gdf = gdf.to_crs("EPSG:25830")
+            # Construir índice espacial para consultas .cx[] rápidas
+            gdf.sindex
 
             if not nombre:
                 import os

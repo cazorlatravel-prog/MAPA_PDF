@@ -125,6 +125,9 @@ class GeneradorPlanos:
             # Auto-calcular longitud/superficie si no existen
             gdf = _auto_calcular_campos(gdf)
 
+            # Construir índice espacial para consultas .cx[] rápidas
+            gdf.sindex
+
             self.gdf_infra = gdf
 
             cols = set(gdf.columns)
@@ -150,6 +153,8 @@ class GeneradorPlanos:
             if gdf.crs is None:
                 gdf = gdf.set_crs("EPSG:4326")
             gdf = gdf.to_crs("EPSG:25830")
+            # Construir índice espacial para consultas .cx[] rápidas
+            gdf.sindex
             self.gdf_montes = gdf
             origen = f"capa '{layer}'" if layer else os.path.basename(ruta)
             return True, f"\u2713 Capa montes ({origen}): {len(gdf)} elementos"
@@ -220,7 +225,7 @@ class GeneradorPlanos:
         # Infraestructuras seleccionadas (resaltadas)
         ci = self.config_infra
         lw = ci.get("linewidth", 2.5)
-        alpha_infra = ci.get("alpha", 1.0)
+        alpha_infra = ci.get("alpha", 0.65)
         campo_cat = ci.get("campo_categoria")
 
         geom_type = ""
@@ -368,7 +373,7 @@ class GeneradorPlanos:
         xmin, xmax, ymin, ymax = maq.calcular_extension_mapa(geom)
         maq.configurar_mapa_principal(xmin, xmax, ymin, ymax)
 
-        gdf_view = self.gdf_infra.iloc[[idx_fila]].copy()
+        gdf_view = self.gdf_infra.iloc[[idx_fila]]
         añadir_fondo_cartografico(ax_map, gdf_view, proveedor,
                                   xmin=xmin, xmax=xmax, ymin=ymin, ymax=ymax)
         ax_map.set_xlim(xmin, xmax)
@@ -448,8 +453,7 @@ class GeneradorPlanos:
         xmin, xmax, ymin, ymax = maq.calcular_extension_mapa(geom_union)
         maq.configurar_mapa_principal(xmin, xmax, ymin, ymax)
 
-        gdf_view = gdf_grupo.copy()
-        añadir_fondo_cartografico(ax_map, gdf_view, proveedor,
+        añadir_fondo_cartografico(ax_map, gdf_grupo, proveedor,
                                   xmin=xmin, xmax=xmax, ymin=ymin, ymax=ymax)
         ax_map.set_xlim(xmin, xmax)
         ax_map.set_ylim(ymin, ymax)
@@ -653,7 +657,7 @@ class GeneradorPlanos:
                     xmin, xmax, ymin, ymax = maq.calcular_extension_mapa(geom)
                     maq.configurar_mapa_principal(xmin, xmax, ymin, ymax)
 
-                    gdf_view = self.gdf_infra.iloc[[idx]].copy()
+                    gdf_view = self.gdf_infra.iloc[[idx]]
                     añadir_fondo_cartografico(ax_map, gdf_view, proveedor,
                                               xmin=xmin, xmax=xmax,
                                               ymin=ymin, ymax=ymax)
