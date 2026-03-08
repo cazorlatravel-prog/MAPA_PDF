@@ -219,13 +219,13 @@ class GeneradorPlanos:
         if not infra_fondo.empty:
             infra_fondo.plot(
                 ax=ax_map, color="#999999", linewidth=0.6,
-                markersize=3, alpha=0.5,
+                markersize=3, alpha=0.25,
             )
 
         # Infraestructuras seleccionadas (resaltadas)
         ci = self.config_infra
         lw = ci.get("linewidth", 2.5)
-        alpha_infra = ci.get("alpha", 0.65)
+        alpha_infra = ci.get("alpha", 0.35)
         campo_cat = ci.get("campo_categoria")
 
         geom_type = ""

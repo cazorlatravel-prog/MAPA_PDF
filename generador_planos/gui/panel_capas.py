@@ -82,12 +82,12 @@ class PanelCapas:
         transp_infra_header.grid(row=6, column=0, sticky="ew", pady=(6, 0))
         tk.Label(transp_infra_header, text="Transparencia infraestructuras:",
                  font=FONT_SMALL, bg=COLOR_PANEL, fg=COLOR_TEXTO_GRIS).pack(side="left")
-        self._lbl_transp_infra = tk.Label(transp_infra_header, text="0.65",
+        self._lbl_transp_infra = tk.Label(transp_infra_header, text="0.35",
                                            font=FONT_SMALL, bg=COLOR_PANEL,
                                            fg=COLOR_ACENTO)
         self._lbl_transp_infra.pack(side="right")
 
-        self.transparencia_infra = tk.DoubleVar(value=0.65)
+        self.transparencia_infra = tk.DoubleVar(value=0.35)
         self.transparencia_infra.trace_add("write", lambda *_: self._lbl_transp_infra.configure(
             text=f"{self.transparencia_infra.get():.2f}"))
         ttk.Scale(f, from_=0.0, to=1.0, variable=self.transparencia_infra,

@@ -634,11 +634,18 @@ class MaquetadorPlano:
                 row_idx = i % n_rows
                 y = y_start - row_idx * cat_row_h
 
-                # Posiciones X para esta columna
-                col_x0 = margin_x + col_idx * col_width
-                line_x0 = col_x0 + 0.02
-                line_x1 = col_x0 + 0.12
-                text_x = line_x1 + 0.03
+                if col_idx == 0:
+                    # ── Columna izquierda: [línea] [texto] alineado a la izquierda
+                    line_x0 = margin_x + 0.02
+                    line_x1 = margin_x + 0.12
+                    text_x = line_x1 + 0.03
+                    text_ha = "left"
+                else:
+                    # ── Columna derecha: [texto] [línea] alineado a la derecha
+                    line_x1 = 1.0 - margin_x - 0.02
+                    line_x0 = line_x1 - 0.10
+                    text_x = line_x0 - 0.03
+                    text_ha = "right"
 
                 # Dibujar muestra de trazo/símbolo
                 if "point" in geom_type:
@@ -662,7 +669,7 @@ class MaquetadorPlano:
 
                 # Etiqueta
                 txt = str(label)[:22]
-                ax.text(text_x, y, txt, ha="left", va="center",
+                ax.text(text_x, y, txt, ha=text_ha, va="center",
                         fontsize=3.8, color=COL_TXT,
                         transform=ax.transAxes, zorder=3)
 
