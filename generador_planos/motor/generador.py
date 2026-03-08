@@ -354,7 +354,8 @@ class GeneradorPlanos:
                       proveedor: str, transparencia_montes: float,
                       campos_visibles: list, color_infra: str,
                       salida_dir: str, escala_manual: int = None,
-                      callback_log=None, campo_encabezado: str = None) -> str:
+                      callback_log=None, campo_encabezado: str = None,
+                      patron_nombre: str = None) -> str:
         self._ensure_agg()
 
         def log(msg):
@@ -416,8 +417,16 @@ class GeneradorPlanos:
         maq.dibujar_marcos(plantilla=self._plantilla, cajetin=self._cajetin)
 
         nombre_infra = str(row.get("Nombre_Infra", f"infra_{idx_fila:04d}"))
-        nombre_infra = "".join(c for c in nombre_infra if c.isalnum() or c in "_ -")[:40]
-        nombre_arch = f"plano_{idx_fila:04d}_{nombre_infra}.pdf"
+        nombre_infra_safe = "".join(c for c in nombre_infra if c.isalnum() or c in "_ -")[:40]
+
+        if patron_nombre:
+            nombre_base = patron_nombre.format(
+                num=f"{idx_fila:04d}", nombre=nombre_infra_safe,
+                campo=nombre_infra_safe)
+            nombre_base = "".join(c for c in nombre_base if c.isalnum() or c in "_ -.")[:80]
+        else:
+            nombre_base = f"plano_{idx_fila:04d}_{nombre_infra_safe}"
+        nombre_arch = f"{nombre_base}.pdf"
         ruta_out = os.path.join(salida_dir, nombre_arch)
 
         maq.guardar(ruta_out)
@@ -433,7 +442,8 @@ class GeneradorPlanos:
                                 salida_dir: str, num_plano: int = 1,
                                 escala_manual: int = None,
                                 callback_log=None,
-                                campo_encabezado: str = None) -> str:
+                                campo_encabezado: str = None,
+                                patron_nombre: str = None) -> str:
         self._ensure_agg()
 
         def log(msg):
@@ -502,7 +512,14 @@ class GeneradorPlanos:
         maq.dibujar_marcos(plantilla=self._plantilla, cajetin=self._cajetin)
 
         nombre_safe = "".join(c for c in valor_grupo if c.isalnum() or c in "_ -")[:40]
-        nombre_arch = f"plano_grupo_{num_plano:04d}_{nombre_safe}.pdf"
+        if patron_nombre:
+            nombre_base = patron_nombre.format(
+                num=f"{num_plano:04d}", nombre=nombre_safe,
+                campo=nombre_safe)
+            nombre_base = "".join(c for c in nombre_base if c.isalnum() or c in "_ -.")[:80]
+        else:
+            nombre_base = f"plano_grupo_{num_plano:04d}_{nombre_safe}"
+        nombre_arch = f"{nombre_base}.pdf"
         ruta_out = os.path.join(salida_dir, nombre_arch)
 
         maq.guardar(ruta_out)
@@ -515,7 +532,8 @@ class GeneradorPlanos:
                       transparencia: float, campos: list, color_infra: str,
                       salida_dir: str, escala_manual: int = None,
                       callback_log=None, callback_progreso=None,
-                      campo_encabezado: str = None) -> list:
+                      campo_encabezado: str = None,
+                      patron_nombre: str = None) -> list:
         rutas = []
         total = len(indices)
         for i, idx in enumerate(indices):
@@ -531,6 +549,7 @@ class GeneradorPlanos:
                     salida_dir=salida_dir, escala_manual=escala_manual,
                     callback_log=callback_log,
                     campo_encabezado=campo_encabezado,
+                    patron_nombre=patron_nombre,
                 )
                 rutas.append(ruta)
             except GeneracionCancelada:
@@ -552,7 +571,8 @@ class GeneradorPlanos:
                                 callback_log=None,
                                 callback_progreso=None,
                                 indices_filtro: dict = None,
-                                campo_encabezado: str = None) -> list:
+                                campo_encabezado: str = None,
+                                patron_nombre: str = None) -> list:
         rutas = []
         total = len(valores)
         for i, valor in enumerate(valores):
@@ -580,6 +600,7 @@ class GeneradorPlanos:
                     escala_manual=escala_manual,
                     callback_log=callback_log,
                     campo_encabezado=campo_encabezado,
+                    patron_nombre=patron_nombre,
                 )
                 rutas.append(ruta)
             except GeneracionCancelada:
@@ -600,7 +621,8 @@ class GeneradorPlanos:
                                  incluir_portada: bool = False,
                                  callback_log=None,
                                  callback_progreso=None,
-                                 campo_encabezado: str = None) -> str:
+                                 campo_encabezado: str = None,
+                                 patron_nombre: str = None) -> str:
         from matplotlib.backends.backend_pdf import PdfPages
 
         self._ensure_agg()

@@ -37,6 +37,7 @@ class Proyecto:
         self.campos_visibles = []
         self.campo_mapeo = {}
         self.carpeta_salida = ""
+        self.patron_nombre = "plano_{num}_{nombre}"
 
         # Cajetín
         self.cajetin = {
@@ -80,6 +81,7 @@ class Proyecto:
             "campos_visibles": self.campos_visibles,
             "campo_mapeo": self.campo_mapeo,
             "carpeta_salida": self.carpeta_salida,
+            "patron_nombre": self.patron_nombre,
             "cajetin": self.cajetin,
             "plantilla": self.plantilla,
             "capas_extra": self.capas_extra,
@@ -93,7 +95,7 @@ class Proyecto:
             "nombre", "fecha_creacion", "fecha_modificacion",
             "ruta_infra", "ruta_montes", "formato", "proveedor",
             "escala_manual", "transparencia_montes", "color_infra",
-            "campos_visibles", "campo_mapeo", "carpeta_salida",
+            "campos_visibles", "campo_mapeo", "carpeta_salida", "patron_nombre",
             "cajetin", "plantilla", "capas_extra", "simbologia",
         ]:
             if key in d:

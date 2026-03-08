@@ -10,7 +10,7 @@ from tkinter import ttk, filedialog, colorchooser
 from pathlib import Path
 
 from .estilos import (
-    COLOR_PANEL, COLOR_TEXTO, COLOR_TEXTO_GRIS, COLOR_BORDE,
+    COLOR_PANEL, COLOR_TEXTO, COLOR_TEXTO_GRIS, COLOR_BORDE, COLOR_ENTRY,
     FONT_BOLD, FONT_SMALL, FONT_LABEL,
     crear_frame_seccion, crear_boton,
 )
@@ -71,15 +71,26 @@ class PanelConfig:
                   font=FONT_SMALL, bg=COLOR_BORDE, fg=COLOR_TEXTO,
                   relief="flat", cursor="hand2").pack(side="left")
 
+        # ── Nombre de archivo ──
+        tk.Label(f, text="Nombre de archivo:", font=FONT_BOLD,
+                 bg=COLOR_PANEL, fg=COLOR_TEXTO).grid(row=8, column=0, sticky="w")
+        self.patron_nombre = tk.StringVar(value="plano_{num}_{nombre}")
+        tk.Entry(f, textvariable=self.patron_nombre, font=FONT_SMALL,
+                 bg=COLOR_ENTRY, fg=COLOR_TEXTO, insertbackground="white",
+                 relief="flat").grid(row=9, column=0, sticky="ew", pady=(2, 0))
+        tk.Label(f, text="Variables: {num} {nombre} {campo}",
+                 font=("Helvetica", 8), bg=COLOR_PANEL,
+                 fg=COLOR_TEXTO_GRIS).grid(row=10, column=0, sticky="w", pady=(0, 8))
+
         # ── Carpeta de salida ──
         tk.Label(f, text="Carpeta de salida:", font=FONT_BOLD,
-                 bg=COLOR_PANEL, fg=COLOR_TEXTO).grid(row=8, column=0, sticky="w")
+                 bg=COLOR_PANEL, fg=COLOR_TEXTO).grid(row=11, column=0, sticky="w")
         self.salida = tk.StringVar(value=str(Path.home() / "Planos_Forestales"))
         tk.Label(f, textvariable=self.salida, font=FONT_SMALL,
                  bg=COLOR_PANEL, fg=COLOR_TEXTO_GRIS,
-                 wraplength=240, justify="left").grid(row=9, column=0, sticky="w")
+                 wraplength=240, justify="left").grid(row=12, column=0, sticky="w")
         crear_boton(f, "Seleccionar carpeta", self._elegir_carpeta,
-                    icono="\U0001f4c1").grid(row=10, column=0, sticky="ew", pady=(4, 4))
+                    icono="\U0001f4c1").grid(row=13, column=0, sticky="ew", pady=(4, 4))
 
         f.columnconfigure(0, weight=1)
 

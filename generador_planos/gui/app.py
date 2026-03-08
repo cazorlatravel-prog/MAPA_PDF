@@ -294,6 +294,7 @@ class App(tk.Tk):
             "campo_encabezado": self.panel_campos.obtener_campo_encabezado(),
             "color_infra": self.panel_config.color_infra,
             "salida": self.panel_config.salida.get(),
+            "patron_nombre": self.panel_config.patron_nombre.get(),
             "escala_manual": self.panel_config.escala_manual,
             "tabla": self._tabla,
         }
@@ -318,6 +319,7 @@ class App(tk.Tk):
         p.color_infra = self.panel_config.color_infra
         p.campos_visibles = self.panel_campos.obtener_campos_activos()
         p.carpeta_salida = self.panel_config.salida.get()
+        p.patron_nombre = self.panel_config.patron_nombre.get()
         p.cajetin = self.panel_cajetin.obtener_cajetin()
         p.plantilla = self.panel_cajetin.obtener_plantilla()
         p.simbologia = self.motor.gestor_simbologia.to_dict()
@@ -344,6 +346,8 @@ class App(tk.Tk):
             self.panel_config.proveedor.set(p.proveedor)
             self.panel_capas.transparencia.set(p.transparencia_montes)
             self.panel_config.salida.set(p.carpeta_salida)
+            if hasattr(p, "patron_nombre") and p.patron_nombre:
+                self.panel_config.patron_nombre.set(p.patron_nombre)
             self.panel_cajetin.cargar_desde_proyecto(p.cajetin, p.plantilla)
 
             # Aplicar cajetín y plantilla al motor
