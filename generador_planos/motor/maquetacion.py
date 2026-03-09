@@ -1386,9 +1386,12 @@ class MaquetadorPlano:
         ax.text(mid_r, monte_y + monte_h * 0.78,
                 "Nº DE PLANO:", ha="center", va="center",
                 fontsize=fsz_label_np, color=C_LABEL, fontweight="bold", zorder=3)
-        ax.text(mid_r, monte_y + monte_h * 0.35,
+        ax.text(mid_r, monte_y + monte_h * 0.45,
                 str(n_plano), ha="center", va="center",
                 fontsize=fsz_num_np, fontweight="bold", color=C_GREEN_DARK, zorder=3)
+        ax.text(mid_r, monte_y + monte_h * 0.15,
+                f"Formato {self.formato_key}", ha="center", va="center",
+                fontsize=fsz_label_np, color=C_LABEL, fontweight="bold", zorder=3)
 
         # ═══════════════════════════════════════════════════════════════
         # 4. AUTORES (un solo recuadro) | Vº.Bº | ESCALA / FECHA
