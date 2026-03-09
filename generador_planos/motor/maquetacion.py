@@ -160,7 +160,7 @@ class MaquetadorPlano:
         gs_lateral = gridspec.GridSpecFromSubplotSpec(
             4, 1, subplot_spec=gs[0, 1],
             height_ratios=[0.40, 0.06, 0.16, 0.38],
-            hspace=0.003,
+            hspace=0.01,
         )
 
         self.ax_mini = self.fig.add_subplot(gs_lateral[0, 0])    # minimapa
@@ -612,10 +612,10 @@ class MaquetadorPlano:
         total_rows = n_rows_data + 1  # +1 cabecera
         row_h = 1.0 / max(total_rows, 1)
 
-        lw_h = 0.5   # linewidth cabecera
-        lw_d = 0.3   # linewidth datos
-        fsz_h = 2.2  # fontsize cabecera
-        fsz_d = 1.8  # fontsize datos
+        lw_h = 0.8   # linewidth cabecera
+        lw_d = 0.5   # linewidth datos
+        fsz_h = 2.5  # fontsize cabecera
+        fsz_d = 2.0  # fontsize datos
 
         # ── Cabecera ──
         for ci, campo in enumerate(campos):
@@ -1136,7 +1136,7 @@ class MaquetadorPlano:
         # ═══════════════════════════════════════════════════════════════
         # 1. BARRA ORGANIZACIÓN (fondo BLANCO, texto VERDE)
         # ═══════════════════════════════════════════════════════════════
-        org_h = 0.18
+        org_h = 0.22
         org_y = 1.0 - org_h
 
         ax.add_patch(Rectangle((0, org_y), 1, org_h,
@@ -1181,7 +1181,7 @@ class MaquetadorPlano:
         # ═══════════════════════════════════════════════════════════════
         # 2. TÍTULO DEL PROYECTO
         # ═══════════════════════════════════════════════════════════════
-        proy_h = 0.14
+        proy_h = 0.16
         proy_y = org_y - proy_h
 
         ax.add_patch(Rectangle((0, proy_y), 1, proy_h,
@@ -1210,7 +1210,7 @@ class MaquetadorPlano:
         # ═══════════════════════════════════════════════════════════════
         # 3. MONTE / T.M. (izq 65%) + Nº DE PLANO (der 35%)
         # ═══════════════════════════════════════════════════════════════
-        monte_h = 0.14
+        monte_h = 0.16
         monte_y = proy_y - monte_h
         col_r = 0.65  # divisor izquierda/derecha
 
@@ -1267,7 +1267,7 @@ class MaquetadorPlano:
         # ═══════════════════════════════════════════════════════════════
         # 4. AUTORES | Vº.Bº | ESCALA  (fila de cabeceras)
         # ═══════════════════════════════════════════════════════════════
-        aut_h = 0.10
+        aut_h = 0.12
         aut_y = monte_y - aut_h
         c1 = 0.33
         c2 = 0.66
@@ -1303,7 +1303,7 @@ class MaquetadorPlano:
         # ═══════════════════════════════════════════════════════════════
         # 5. FIRMAS: Autor+Firma juntos | Vº.Bº firma | FECHA
         # ═══════════════════════════════════════════════════════════════
-        firma_h = 0.22
+        firma_h = 0.28
         firma_y = aut_y - firma_h
 
         autor = caj.get("autor", "")
