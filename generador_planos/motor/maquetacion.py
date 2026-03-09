@@ -16,8 +16,25 @@ import math
 from datetime import date
 
 import numpy as np
+import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
+import matplotlib.font_manager as fm
+
+# ── Tipografía corporativa: Noto Sans HK ──
+_FONT_CORP = "Noto Sans HK"
+# Registrar fuente si existe en el sistema
+for _fpath in ["/root/.fonts/NotoSansHK-Variable.ttf",
+               "/usr/share/fonts/truetype/noto/NotoSansHK-Regular.ttf"]:
+    try:
+        fm.fontManager.addfont(_fpath)
+    except Exception:
+        pass
+# Verificar disponibilidad y aplicar como fuente por defecto de matplotlib
+_available = any(f.name == _FONT_CORP for f in fm.fontManager.ttflist)
+if _available:
+    matplotlib.rcParams["font.family"] = "sans-serif"
+    matplotlib.rcParams["font.sans-serif"] = [_FONT_CORP, "DejaVu Sans"]
 from matplotlib.patches import FancyBboxPatch, Rectangle
 from matplotlib.lines import Line2D
 from .escala import (

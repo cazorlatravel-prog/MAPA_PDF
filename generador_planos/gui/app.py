@@ -134,13 +134,13 @@ class App(tk.Tk):
 
         tk.Label(
             barra, text="\U0001f5fa  GENERADOR DE PLANOS FORESTALES",
-            font=("Helvetica", 14, "bold"), bg="#141B2D", fg=COLOR_ACENTO,
+            font=("Noto Sans HK", 14, "bold"), bg="#141B2D", fg=COLOR_ACENTO,
         ).pack(side="left", padx=16, pady=10)
 
         tk.Label(
             barra,
             text="\u00a9 Jose Caballero S\u00e1nchez (Cazorla 2026) \u00b7 Todos los derechos reservados",
-            font=("Helvetica", 8), bg="#141B2D", fg="#7F8C8D",
+            font=("Noto Sans HK", 8), bg="#141B2D", fg="#7F8C8D",
         ).pack(side="left", padx=(0, 8), pady=10)
 
         # Botones de proyecto en la barra
@@ -148,15 +148,15 @@ class App(tk.Tk):
         btn_f.pack(side="right", padx=8)
 
         tk.Button(btn_f, text="Guardar proyecto", command=self._guardar_proyecto,
-                  font=("Helvetica", 9), bg="#2C3E50", fg="#ECF0F1",
+                  font=("Noto Sans HK", 9), bg="#2C3E50", fg="#ECF0F1",
                   relief="flat", cursor="hand2", padx=6).pack(side="left", padx=2)
         tk.Button(btn_f, text="Cargar proyecto", command=self._cargar_proyecto,
-                  font=("Helvetica", 9), bg="#2C3E50", fg="#ECF0F1",
+                  font=("Noto Sans HK", 9), bg="#2C3E50", fg="#ECF0F1",
                   relief="flat", cursor="hand2", padx=6).pack(side="left", padx=2)
 
         tk.Label(
             barra, text="ETRS89 \u00b7 UTM H30N",
-            font=("Helvetica", 9), bg="#141B2D", fg=COLOR_TEXTO_GRIS,
+            font=("Noto Sans HK", 9), bg="#141B2D", fg=COLOR_TEXTO_GRIS,
         ).pack(side="right", padx=16)
 
     def _crear_panel_tabla(self, parent):
