@@ -1164,9 +1164,9 @@ class MaquetadorPlano:
 
         # ── Alturas de cada fila (de arriba a abajo) ──
         org_h = 0.22
-        proy_h = 0.16
-        monte_h = 0.16
-        aut_h = 0.18
+        proy_h = 0.18
+        monte_h = 0.18
+        aut_h = 0.14
         total_h = org_h + proy_h + monte_h + aut_h  # 0.72
 
         # Posiciones calculadas desde la parte inferior (y=0)
@@ -1359,27 +1359,27 @@ class MaquetadorPlano:
                                 facecolor="white", edgecolor=C_BORDER,
                                 linewidth=LW, zorder=1))
         # Título "AUTORES:" arriba-izquierda
-        ax.text(0.01, aut_y + aut_h * 0.90,
-                "AUTORES:", ha="left", va="center",
+        ax.text(0.01, aut_y + aut_h * 0.92,
+                "AUTORES:", ha="left", va="top",
                 fontsize=3.0, fontweight="bold", color=C_TXT, zorder=3)
         # Firma autor 1 (mitad izquierda)
         mid_a1 = c1 * 0.25  # centro de la mitad izq
         if autor:
-            ax.text(mid_a1, aut_y + aut_h * 0.50,
+            ax.text(mid_a1, aut_y + aut_h * 0.62,
                     f"Fdo.: {autor}", ha="center", va="center",
                     fontsize=2.8, color=C_TXT, zorder=3)
         if cargo_autor:
-            ax.text(mid_a1, aut_y + aut_h * 0.25,
+            ax.text(mid_a1, aut_y + aut_h * 0.38,
                     cargo_autor, ha="center", va="center",
                     fontsize=2.3, color=C_TXT, zorder=3)
         # Firma autor 2 (mitad derecha)
         mid_a2 = c1 * 0.75  # centro de la mitad der
         if firma_txt:
-            ax.text(mid_a2, aut_y + aut_h * 0.50,
+            ax.text(mid_a2, aut_y + aut_h * 0.62,
                     f"Fdo.: {firma_txt}", ha="center", va="center",
                     fontsize=2.8, color=C_TXT, zorder=3)
         if cargo_firma:
-            ax.text(mid_a2, aut_y + aut_h * 0.25,
+            ax.text(mid_a2, aut_y + aut_h * 0.38,
                     cargo_firma, ha="center", va="center",
                     fontsize=2.3, color=C_TXT, zorder=3)
 
@@ -1387,15 +1387,15 @@ class MaquetadorPlano:
         ax.add_patch(Rectangle((c1, aut_y), c2 - c1, aut_h,
                                 facecolor="white", edgecolor=C_BORDER,
                                 linewidth=LW, zorder=1))
-        ax.text(c1 + 0.01, aut_y + aut_h * 0.90,
-                "Vº.Bº", ha="left", va="center",
+        ax.text(c1 + 0.01, aut_y + aut_h * 0.92,
+                "Vº.Bº", ha="left", va="top",
                 fontsize=3.0, fontweight="bold", color=C_TXT, zorder=3)
         if revision:
-            ax.text((c1 + c2) / 2, aut_y + aut_h * 0.50,
+            ax.text((c1 + c2) / 2, aut_y + aut_h * 0.62,
                     f"Fdo.: {revision}", ha="center", va="center",
                     fontsize=2.8, color=C_TXT, zorder=3)
         if cargo_revision:
-            ax.text((c1 + c2) / 2, aut_y + aut_h * 0.25,
+            ax.text((c1 + c2) / 2, aut_y + aut_h * 0.38,
                     cargo_revision, ha="center", va="center",
                     fontsize=2.3, color=C_TXT, zorder=3)
 
