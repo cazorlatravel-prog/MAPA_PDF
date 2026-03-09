@@ -94,6 +94,8 @@ class GeneradorPlanos:
         self._plantilla = {}
         self.config_infra = {}  # linewidth, alpha, linestyle, marker
         self.layout_key = "Plantilla 1 (Clásica)"
+        self.dpi_figura = None   # None = default (400)
+        self.dpi_guardado = None  # None = same as dpi_figura
         self._cancelar = threading.Event()
 
     def cancelar_generacion(self):
@@ -453,7 +455,7 @@ class GeneradorPlanos:
         escala = seleccionar_escala(geom, formato_key, escala_manual)
         log(f"  Escala elegida: 1:{escala:,}")
 
-        maq = MaquetadorPlano(formato_key, escala, layout_key=self.layout_key)
+        maq = MaquetadorPlano(formato_key, escala, layout_key=self.layout_key, dpi=self.dpi_figura)
         fig, ax_map, ax_info, ax_mini, ax_esc = maq.crear_figura()
 
         xmin, xmax, ymin, ymax = maq.calcular_extension_mapa(geom)
@@ -525,7 +527,7 @@ class GeneradorPlanos:
         nombre_arch = f"{nombre_base}.pdf"
         ruta_out = os.path.join(salida_dir, nombre_arch)
 
-        maq.guardar(ruta_out)
+        maq.guardar(ruta_out, dpi_save=self.dpi_guardado)
         log(f"  \u2713 Guardado: {nombre_arch}")
         return ruta_out
 
@@ -553,7 +555,7 @@ class GeneradorPlanos:
         escala = seleccionar_escala(geom_union, formato_key, escala_manual)
         log(f"  Escala elegida: 1:{escala:,} ({len(indices)} infraestructuras)")
 
-        maq = MaquetadorPlano(formato_key, escala, layout_key=self.layout_key)
+        maq = MaquetadorPlano(formato_key, escala, layout_key=self.layout_key, dpi=self.dpi_figura)
         fig, ax_map, ax_info, ax_mini, ax_esc = maq.crear_figura()
 
         xmin, xmax, ymin, ymax = maq.calcular_extension_mapa(geom_union)
@@ -626,7 +628,7 @@ class GeneradorPlanos:
         nombre_arch = f"{nombre_base}.pdf"
         ruta_out = os.path.join(salida_dir, nombre_arch)
 
-        maq.guardar(ruta_out)
+        maq.guardar(ruta_out, dpi_save=self.dpi_guardado)
         log(f"  \u2713 Guardado: {nombre_arch}")
         return ruta_out
 
@@ -748,7 +750,7 @@ class GeneradorPlanos:
                     datos_extra=datos,
                     cajetin=self._cajetin, plantilla=self._plantilla,
                 )
-                pdf.savefig(fig_portada, dpi=300, facecolor="white")
+                pdf.savefig(fig_portada, dpi=self.dpi_guardado or 300, facecolor="white")
                 plt.close(fig_portada)
                 if callback_log:
                     callback_log("  \u2713 Portada a\u00f1adida")
@@ -761,7 +763,7 @@ class GeneradorPlanos:
                     items_idx.append((i + 1, nombre, ""))
                 fig_indice = crear_indice(formato_key, items_idx,
                                            plantilla=self._plantilla)
-                pdf.savefig(fig_indice, dpi=300, facecolor="white")
+                pdf.savefig(fig_indice, dpi=self.dpi_guardado or 300, facecolor="white")
                 plt.close(fig_indice)
                 if callback_log:
                     callback_log("  \u2713 \u00cdndice a\u00f1adido")
@@ -777,7 +779,7 @@ class GeneradorPlanos:
                     geom = row.geometry
 
                     escala = seleccionar_escala(geom, formato_key, escala_manual)
-                    maq = MaquetadorPlano(formato_key, escala, layout_key=self.layout_key)
+                    maq = MaquetadorPlano(formato_key, escala, layout_key=self.layout_key, dpi=self.dpi_figura)
                     fig, ax_map, ax_info, ax_mini, ax_esc = maq.crear_figura()
 
                     xmin, xmax, ymin, ymax = maq.calcular_extension_mapa(geom)
@@ -835,7 +837,7 @@ class GeneradorPlanos:
                                           plantilla=self._plantilla)
                     maq.dibujar_marcos(plantilla=self._plantilla, cajetin=self._cajetin)
 
-                    pdf.savefig(fig, dpi=300, facecolor="white")
+                    pdf.savefig(fig, dpi=self.dpi_guardado or 300, facecolor="white")
                     plt.close(fig)
 
                     if callback_log:

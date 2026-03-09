@@ -41,7 +41,14 @@ ETIQUETAS_CAMPOS = {
     "Tipo_Trabajos": "Tipo de Trabajos",
 }
 
-DPI = 400  # calidad de impresión alta
+DPI_DEFAULT = 400  # calidad de impresión alta
+
+# Presets de calidad: (DPI figura, DPI guardado)
+CALIDADES_PDF = {
+    "Alta (400 DPI)": (400, 300),
+    "Media (200 DPI)": (200, 150),
+    "Baja (100 DPI)": (100, 100),
+}
 _CABECERA_MM = 8
 
 def _etiqueta_campo(campo):
@@ -56,11 +63,13 @@ def _etiqueta_campo(campo):
 class MaquetadorPlano:
     """Crea la maquetación completa del plano cartográfico (layout v4)."""
 
-    def __init__(self, formato_key: str, escala: int, layout_key: str = None):
+    def __init__(self, formato_key: str, escala: int, layout_key: str = None,
+                 dpi: int = None):
         self.formato_key = formato_key
         self.fmt_mm = FORMATOS[formato_key]
         self.escala = escala
         self.layout_key = layout_key or "Plantilla 1 (Clásica)"
+        self.dpi = dpi or DPI_DEFAULT
         self.fig = None
         self.ax_map = None
         self.ax_info = None   # datos infraestructura (centro)
@@ -81,7 +90,7 @@ class MaquetadorPlano:
     def _crear_figura_clasica(self):
         fig_w = self.fmt_mm[0] / 25.4
         fig_h = self.fmt_mm[1] / 25.4
-        self.fig = plt.figure(figsize=(fig_w, fig_h), dpi=DPI,
+        self.fig = plt.figure(figsize=(fig_w, fig_h), dpi=self.dpi,
                               facecolor="white")
 
         izq = MARGENES_MM["izq"] / self.fmt_mm[0]
@@ -115,7 +124,7 @@ class MaquetadorPlano:
         """Plantilla 2: Mapa a la izquierda, panel lateral derecho."""
         fig_w = self.fmt_mm[0] / 25.4
         fig_h = self.fmt_mm[1] / 25.4
-        self.fig = plt.figure(figsize=(fig_w, fig_h), dpi=DPI,
+        self.fig = plt.figure(figsize=(fig_w, fig_h), dpi=self.dpi,
                               facecolor="white")
 
         izq = MARGENES_MM["izq"] / self.fmt_mm[0]
@@ -549,8 +558,13 @@ class MaquetadorPlano:
         ancho_util = self.fmt_mm[0] - MARGENES_MM["izq"] - MARGENES_MM["der"]
         alto_util = (self.fmt_mm[1] - MARGENES_MM["sup"] - MARGENES_MM["inf"]
                      - _CABECERA_MM)
-        panel_w_mm = ancho_util * 0.30 * 0.95   # col 2 ratio, menos wspace
-        panel_h_mm = alto_util * (1 - RATIO_MAPA_ALTO) * 0.90  # menos hspace
+        if self.es_lateral:
+            # Panel lateral: 28% del ancho, ~20% del alto
+            panel_w_mm = ancho_util * 0.28 * 0.90
+            panel_h_mm = alto_util * 0.20 * 0.90
+        else:
+            panel_w_mm = ancho_util * 0.30 * 0.95   # col 2 ratio, menos wspace
+            panel_h_mm = alto_util * (1 - RATIO_MAPA_ALTO) * 0.90  # menos hspace
 
         # Extensión real a 1:25.000
         semi_x = (panel_w_mm / 1000.0) * escala_loc / 2
@@ -570,15 +584,18 @@ class MaquetadorPlano:
         ax.tick_params(labelbottom=False, labelleft=False,
                        bottom=False, left=False)
 
-        # Fondo topográfico IGN
+        # Fondo cartográfico WMS 1:250.000 (IGN Base)
         try:
-            from .cartografia import _descargar_teselas_manual, CAPAS_BASE
-            url = CAPAS_BASE.get("IGN Topográfico")
-            if url:
-                _descargar_teselas_manual(ax, url, xmin_m, xmax_m,
-                                          ymin_m, ymax_m)
-                ax.set_xlim(xmin_m, xmax_m)
-                ax.set_ylim(ymin_m, ymax_m)
+            from .cartografia import _descargar_wms
+            wms_url = (
+                "https://www.ign.es/wms-inspire/mapa-raster?"
+                "SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0"
+                "&LAYERS=mtn_rasterizado&STYLES="
+                "&CRS=EPSG:25830&FORMAT=image/png"
+            )
+            _descargar_wms(ax, wms_url, xmin_m, xmax_m, ymin_m, ymax_m)
+            ax.set_xlim(xmin_m, xmax_m)
+            ax.set_ylim(ymin_m, ymax_m)
         except Exception:
             pass
 
@@ -1440,9 +1457,10 @@ class MaquetadorPlano:
             fontsize=3.5, color="#666666", alpha=0.7,
         )
 
-    def guardar(self, ruta_out: str):
+    def guardar(self, ruta_out: str, dpi_save: int = None):
         try:
-            self.fig.savefig(ruta_out, format="pdf", dpi=DPI,
+            self.fig.savefig(ruta_out, format="pdf",
+                              dpi=dpi_save or self.dpi,
                               facecolor="white")
         finally:
             plt.close(self.fig)
@@ -1461,7 +1479,7 @@ def crear_portada(formato_key: str, titulo_proyecto: str,
 
     fmt = FORMATOS[formato_key]
     fig = plt.figure(figsize=(fmt[0] / 25.4, fmt[1] / 25.4),
-                      dpi=DPI, facecolor="white")
+                      dpi=DPI_DEFAULT, facecolor="white")
     ax = fig.add_axes([0, 0, 1, 1])
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
@@ -1521,7 +1539,7 @@ def crear_indice(formato_key: str, items: list,
 
     fmt = FORMATOS[formato_key]
     fig = plt.figure(figsize=(fmt[0] / 25.4, fmt[1] / 25.4),
-                      dpi=DPI, facecolor="white")
+                      dpi=DPI_DEFAULT, facecolor="white")
     ax = fig.add_axes([0.08, 0.05, 0.84, 0.88])
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)

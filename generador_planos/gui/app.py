@@ -288,6 +288,9 @@ class App(tk.Tk):
         self.motor.set_plantilla(plantilla)
         # Plantilla de layout
         self.motor.layout_key = self.panel_cajetin.obtener_layout_key()
+        # Calidad PDF (DPI)
+        self.motor.dpi_figura = self.panel_config.dpi_figura
+        self.motor.dpi_guardado = self.panel_config.dpi_guardado
         # Primero aplicar simbología (colores de categorías, montes, capas extra)
         self.panel_simbologia._aplicar()
         # Después sobreescribir alpha con el valor del panel Capas (tiene prioridad)
