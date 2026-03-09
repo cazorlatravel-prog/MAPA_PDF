@@ -798,7 +798,7 @@ class MaquetadorPlano:
 
     # ── Mapa de localización (panel inferior derecho) ──────────────────
 
-    def dibujar_mapa_posicion(self, cx, cy):
+    def dibujar_mapa_posicion(self, cx, cy, ruta_raster_loc=""):
         ax = self.ax_mini
 
         # ── Escala fija 1:250.000 ──
@@ -834,20 +834,34 @@ class MaquetadorPlano:
         ax.tick_params(labelbottom=False, labelleft=False,
                        bottom=False, left=False)
 
-        # Fondo cartográfico WMS 1:250.000 (IGN Base)
-        try:
-            from .cartografia import _descargar_wms
-            wms_url = (
-                "https://www.ign.es/wms-inspire/mapa-raster?"
-                "SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0"
-                "&LAYERS=mtn_rasterizado&STYLES="
-                "&CRS=EPSG:25830&FORMAT=image/png"
-            )
-            _descargar_wms(ax, wms_url, xmin_m, xmax_m, ymin_m, ymax_m)
-            ax.set_xlim(xmin_m, xmax_m)
-            ax.set_ylim(ymin_m, ymax_m)
-        except Exception:
-            pass
+        # Fondo: ráster local o WMS IGN
+        _fondo_ok = False
+        if ruta_raster_loc:
+            try:
+                import os
+                if os.path.isfile(ruta_raster_loc):
+                    from .cartografia import añadir_fondo_raster_local
+                    añadir_fondo_raster_local(ax, ruta_raster_loc,
+                                               xmin_m, xmax_m, ymin_m, ymax_m)
+                    ax.set_xlim(xmin_m, xmax_m)
+                    ax.set_ylim(ymin_m, ymax_m)
+                    _fondo_ok = True
+            except Exception:
+                pass
+        if not _fondo_ok:
+            try:
+                from .cartografia import _descargar_wms
+                wms_url = (
+                    "https://www.ign.es/wms-inspire/mapa-raster?"
+                    "SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0"
+                    "&LAYERS=mtn_rasterizado&STYLES="
+                    "&CRS=EPSG:25830&FORMAT=image/png"
+                )
+                _descargar_wms(ax, wms_url, xmin_m, xmax_m, ymin_m, ymax_m)
+                ax.set_xlim(xmin_m, xmax_m)
+                ax.set_ylim(ymin_m, ymax_m)
+            except Exception:
+                pass
 
         # Punto de localización
         ax.plot(cx, cy, "o", color="white", markersize=7, zorder=5)

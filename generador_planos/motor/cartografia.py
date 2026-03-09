@@ -311,6 +311,47 @@ def _descargar_wms(ax, wms_url, xmin, xmax, ymin, ymax, crs_epsg=25830):
     return True
 
 
+def añadir_fondo_raster_local(ax, ruta_raster: str, xmin, xmax, ymin, ymax):
+    """Carga un ráster local (GeoTIFF, ECW, JP2…) y lo dibuja como fondo del mapa.
+
+    Lee solo la ventana necesaria (el extent del plano) para no cargar
+    todo el archivo en memoria.
+    """
+    try:
+        import rasterio
+        from rasterio.windows import from_bounds
+    except ImportError:
+        raise ImportError(
+            "Se necesita la librería 'rasterio' para cargar rásters locales.\n"
+            "Instálala con: pip install rasterio")
+
+    with rasterio.open(ruta_raster) as src:
+        # Recortar al extent del plano
+        window = from_bounds(xmin, ymin, xmax, ymax, src.transform)
+        # Leer bandas visibles (máx 3 para RGB)
+        n_bands = min(src.count, 3)
+        data = src.read(list(range(1, n_bands + 1)), window=window)
+
+        # Calcular extent real de la ventana leída
+        win_transform = src.window_transform(window)
+        h, w = data.shape[1], data.shape[2]
+        rx_min = win_transform.c
+        ry_max = win_transform.f
+        rx_max = rx_min + w * win_transform.a
+        ry_min = ry_max + h * win_transform.e  # e es negativo
+
+        if n_bands == 1:
+            img = data[0]
+        else:
+            img = np.moveaxis(data, 0, -1)  # (bands, h, w) → (h, w, bands)
+
+    ax.imshow(
+        img, extent=[rx_min, rx_max, ry_min, ry_max],
+        aspect="auto", zorder=0, interpolation="bilinear",
+    )
+    return True
+
+
 def añadir_fondo_cartografico(ax, gdf_view, proveedor_key: str, xmin=None, xmax=None,
                                ymin=None, ymax=None):
     """Añade capa base de teselas o WMS al eje matplotlib.

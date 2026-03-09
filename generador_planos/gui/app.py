@@ -307,11 +307,16 @@ class App(tk.Tk):
         self.panel_simbologia._aplicar()
         # Después sobreescribir alpha con el valor del panel Capas (tiene prioridad)
         self.motor.config_infra["alpha"] = self.panel_capas.transparencia_infra.get()
+        # Rutas de ráster local
+        self.motor.ruta_raster_general = self.panel_config.ruta_raster_general
+        self.motor.ruta_raster_localizacion = self.panel_config.ruta_raster_localizacion
 
     def _get_config(self) -> dict:
         return {
             "formato": self.panel_config.formato.get(),
             "proveedor": self.panel_config.proveedor.get(),
+            "ruta_raster_general": self.panel_config.ruta_raster_general,
+            "ruta_raster_localizacion": self.panel_config.ruta_raster_localizacion,
             "transparencia": self.panel_capas.transparencia.get(),
             "campos": self.panel_campos.obtener_campos_activos(),
             "campo_encabezado": self.panel_campos.obtener_campo_encabezado(),
@@ -337,6 +342,9 @@ class App(tk.Tk):
         p.nombre = os.path.splitext(os.path.basename(ruta))[0]
         p.formato = self.panel_config.formato.get()
         p.proveedor = self.panel_config.proveedor.get()
+        p.ruta_raster_general = self.panel_config.ruta_raster_general
+        p.ruta_raster_localizacion = self.panel_config.ruta_raster_localizacion
+        p.prov_localizacion = self.panel_config._prov_localizacion.get()
         p.escala_manual = self.panel_config.escala_manual
         p.transparencia_montes = self.panel_capas.transparencia.get()
         p.transparencia_infra = self.panel_capas.transparencia_infra.get()
@@ -387,6 +395,20 @@ class App(tk.Tk):
             # ── Configuración general ──
             self.panel_config.formato.set(p.formato)
             self.panel_config.proveedor.set(p.proveedor)
+            # Ráster local
+            if p.ruta_raster_general:
+                self.panel_config._ruta_raster.set(p.ruta_raster_general)
+                self.panel_config._lbl_raster.configure(
+                    text=os.path.basename(p.ruta_raster_general))
+            if p.ruta_raster_localizacion:
+                self.panel_config._ruta_raster_loc.set(p.ruta_raster_localizacion)
+                self.panel_config._lbl_raster_loc.configure(
+                    text=os.path.basename(p.ruta_raster_localizacion))
+            if hasattr(p, "prov_localizacion") and p.prov_localizacion:
+                self.panel_config._prov_localizacion.set(p.prov_localizacion)
+            # Mostrar/ocultar frames de ráster según proveedor
+            self.panel_config._on_proveedor_changed()
+            self.panel_config._on_prov_loc_changed()
             self.panel_config.salida.set(p.carpeta_salida)
             if p.patron_nombre:
                 self.panel_config.patron_nombre.set(p.patron_nombre)

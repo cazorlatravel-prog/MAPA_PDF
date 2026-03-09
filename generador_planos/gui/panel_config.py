@@ -35,19 +35,61 @@ class PanelConfig:
         cb_fmt.grid(row=1, column=0, sticky="ew", pady=(2, 8))
 
         # ── Cartografía ──
-        tk.Label(f, text="Cartograf\u00eda de fondo:", font=FONT_BOLD,
+        tk.Label(f, text="Cartografía de fondo:", font=FONT_BOLD,
                  bg=COLOR_PANEL, fg=COLOR_TEXTO).grid(row=2, column=0, sticky="w")
+        opciones_prov = list(PROVIDERS_CTX.keys()) + ["── Ráster local ──"]
         self.proveedor = tk.StringVar(value="OpenStreetMap")
-        cb_prov = ttk.Combobox(f, textvariable=self.proveedor,
-                               values=list(PROVIDERS_CTX.keys()),
+        self._cb_prov = ttk.Combobox(f, textvariable=self.proveedor,
+                               values=opciones_prov,
                                state="readonly", font=FONT_LABEL)
-        cb_prov.grid(row=3, column=0, sticky="ew", pady=(2, 8))
+        self._cb_prov.grid(row=3, column=0, sticky="ew", pady=(2, 4))
+        self._cb_prov.bind("<<ComboboxSelected>>", self._on_proveedor_changed)
+
+        # Ráster local para mapa general
+        self._ruta_raster = tk.StringVar(value="")
+        self._frame_raster = tk.Frame(f, bg=COLOR_PANEL)
+        self._frame_raster.grid(row=4, column=0, sticky="ew", pady=(0, 4))
+        self._lbl_raster = tk.Label(self._frame_raster, text="Sin ráster",
+                                     font=FONT_SMALL, bg=COLOR_PANEL,
+                                     fg=COLOR_TEXTO_GRIS, anchor="w",
+                                     wraplength=220)
+        self._lbl_raster.pack(side="left", fill="x", expand=True)
+        tk.Button(self._frame_raster, text="...", width=3,
+                  command=self._elegir_raster_general,
+                  font=FONT_SMALL, bg=COLOR_BORDE, fg=COLOR_TEXTO,
+                  relief="flat", cursor="hand2").pack(side="right")
+        self._frame_raster.grid_remove()  # Oculto por defecto
+
+        # Ráster local para mapa de localización
+        tk.Label(f, text="Cartografía localización:", font=FONT_BOLD,
+                 bg=COLOR_PANEL, fg=COLOR_TEXTO).grid(row=5, column=0, sticky="w")
+        opciones_loc = ["WMS IGN (online)"] + ["── Ráster local ──"]
+        self._prov_localizacion = tk.StringVar(value="WMS IGN (online)")
+        self._cb_prov_loc = ttk.Combobox(f, textvariable=self._prov_localizacion,
+                                          values=opciones_loc,
+                                          state="readonly", font=FONT_LABEL)
+        self._cb_prov_loc.grid(row=6, column=0, sticky="ew", pady=(2, 4))
+        self._cb_prov_loc.bind("<<ComboboxSelected>>", self._on_prov_loc_changed)
+
+        self._ruta_raster_loc = tk.StringVar(value="")
+        self._frame_raster_loc = tk.Frame(f, bg=COLOR_PANEL)
+        self._frame_raster_loc.grid(row=7, column=0, sticky="ew", pady=(0, 8))
+        self._lbl_raster_loc = tk.Label(self._frame_raster_loc, text="Sin ráster",
+                                         font=FONT_SMALL, bg=COLOR_PANEL,
+                                         fg=COLOR_TEXTO_GRIS, anchor="w",
+                                         wraplength=220)
+        self._lbl_raster_loc.pack(side="left", fill="x", expand=True)
+        tk.Button(self._frame_raster_loc, text="...", width=3,
+                  command=self._elegir_raster_localizacion,
+                  font=FONT_SMALL, bg=COLOR_BORDE, fg=COLOR_TEXTO,
+                  relief="flat", cursor="hand2").pack(side="right")
+        self._frame_raster_loc.grid_remove()  # Oculto por defecto
 
         # ── Escala manual ──
-        tk.Label(f, text="Escala (0 = autom\u00e1tica):", font=FONT_BOLD,
-                 bg=COLOR_PANEL, fg=COLOR_TEXTO).grid(row=4, column=0, sticky="w")
+        tk.Label(f, text="Escala (0 = automática):", font=FONT_BOLD,
+                 bg=COLOR_PANEL, fg=COLOR_TEXTO).grid(row=8, column=0, sticky="w")
         escala_f = tk.Frame(f, bg=COLOR_PANEL)
-        escala_f.grid(row=5, column=0, sticky="ew", pady=(2, 8))
+        escala_f.grid(row=9, column=0, sticky="ew", pady=(2, 8))
 
         tk.Label(escala_f, text="1:", font=FONT_SMALL, bg=COLOR_PANEL,
                  fg=COLOR_TEXTO).pack(side="left")
@@ -61,10 +103,10 @@ class PanelConfig:
 
         # ── Color infraestructura ──
         tk.Label(f, text="Color infraestructura:", font=FONT_BOLD,
-                 bg=COLOR_PANEL, fg=COLOR_TEXTO).grid(row=6, column=0, sticky="w")
+                 bg=COLOR_PANEL, fg=COLOR_TEXTO).grid(row=10, column=0, sticky="w")
         self._color_infra = "#E74C3C"
         btn_frame = tk.Frame(f, bg=COLOR_PANEL)
-        btn_frame.grid(row=7, column=0, sticky="ew", pady=(2, 8))
+        btn_frame.grid(row=11, column=0, sticky="ew", pady=(2, 8))
         self._lbl_color = tk.Label(btn_frame, bg=self._color_infra,
                                     width=4, relief="solid", bd=1)
         self._lbl_color.pack(side="left", padx=(0, 6))
@@ -74,16 +116,16 @@ class PanelConfig:
 
         # ── Calidad PDF ──
         tk.Label(f, text="Calidad PDF:", font=FONT_BOLD,
-                 bg=COLOR_PANEL, fg=COLOR_TEXTO).grid(row=8, column=0, sticky="w")
+                 bg=COLOR_PANEL, fg=COLOR_TEXTO).grid(row=12, column=0, sticky="w")
         self._calidad_pdf = tk.StringVar(value="Alta (400 DPI)")
         ttk.Combobox(f, textvariable=self._calidad_pdf,
                      values=list(CALIDADES_PDF.keys()),
                      state="readonly", font=FONT_LABEL).grid(
-                     row=9, column=0, sticky="ew", pady=(2, 8))
+                     row=13, column=0, sticky="ew", pady=(2, 8))
 
         # ── Nombre de archivo ──
         tk.Label(f, text="Nombre de archivo:", font=FONT_BOLD,
-                 bg=COLOR_PANEL, fg=COLOR_TEXTO).grid(row=10, column=0, sticky="w")
+                 bg=COLOR_PANEL, fg=COLOR_TEXTO).grid(row=14, column=0, sticky="w")
 
         # Presets
         self._presets_nombre = {
@@ -98,30 +140,30 @@ class PanelConfig:
             values=list(self._presets_nombre.values()),
             state="readonly", font=FONT_SMALL,
         )
-        cb_preset.grid(row=11, column=0, sticky="ew", pady=(2, 2))
+        cb_preset.grid(row=15, column=0, sticky="ew", pady=(2, 2))
         cb_preset.bind("<<ComboboxSelected>>", self._on_preset_nombre)
 
         self.patron_nombre = tk.StringVar(value="plano_{num}_{nombre}")
         tk.Entry(f, textvariable=self.patron_nombre, font=FONT_SMALL,
                  bg=COLOR_ENTRY, fg=COLOR_TEXTO, insertbackground="white",
-                 relief="flat").grid(row=12, column=0, sticky="ew", pady=(2, 0))
+                 relief="flat").grid(row=16, column=0, sticky="ew", pady=(2, 0))
 
         # Preview
         self._lbl_preview_nombre = tk.Label(
             f, text="Ej: plano_0001_CortafuegosNorte.pdf",
             font=("Helvetica", 8), bg=COLOR_PANEL, fg=COLOR_TEXTO_GRIS)
-        self._lbl_preview_nombre.grid(row=13, column=0, sticky="w", pady=(0, 8))
+        self._lbl_preview_nombre.grid(row=17, column=0, sticky="w", pady=(0, 8))
         self.patron_nombre.trace_add("write", self._actualizar_preview_nombre)
 
         # ── Carpeta de salida ──
         tk.Label(f, text="Carpeta de salida:", font=FONT_BOLD,
-                 bg=COLOR_PANEL, fg=COLOR_TEXTO).grid(row=14, column=0, sticky="w")
+                 bg=COLOR_PANEL, fg=COLOR_TEXTO).grid(row=18, column=0, sticky="w")
         self.salida = tk.StringVar(value=str(Path.home() / "Planos_Forestales"))
         tk.Label(f, textvariable=self.salida, font=FONT_SMALL,
                  bg=COLOR_PANEL, fg=COLOR_TEXTO_GRIS,
-                 wraplength=240, justify="left").grid(row=15, column=0, sticky="w")
+                 wraplength=240, justify="left").grid(row=19, column=0, sticky="w")
         crear_boton(f, "Seleccionar carpeta", self._elegir_carpeta,
-                    icono="\U0001f4c1").grid(row=16, column=0, sticky="ew", pady=(4, 4))
+                    icono="\U0001f4c1").grid(row=20, column=0, sticky="ew", pady=(4, 4))
 
         f.columnconfigure(0, weight=1)
 
@@ -195,3 +237,53 @@ class PanelConfig:
             os.system(f'open "{carpeta}"')
         else:
             os.system(f'xdg-open "{carpeta}"')
+
+    # ── Ráster local ──────────────────────────────────────────────────
+
+    _RASTER_FILETYPES = [
+        ("Ráster georreferenciado", "*.tif *.tiff *.ecw *.jp2 *.img *.vrt"),
+        ("GeoTIFF", "*.tif *.tiff"),
+        ("ECW", "*.ecw"),
+        ("JPEG2000", "*.jp2"),
+        ("Todos", "*.*"),
+    ]
+
+    def _on_proveedor_changed(self, event=None):
+        if self.proveedor.get() == "── Ráster local ──":
+            self._frame_raster.grid()
+        else:
+            self._frame_raster.grid_remove()
+
+    def _on_prov_loc_changed(self, event=None):
+        if self._prov_localizacion.get() == "── Ráster local ──":
+            self._frame_raster_loc.grid()
+        else:
+            self._frame_raster_loc.grid_remove()
+
+    def _elegir_raster_general(self):
+        ruta = filedialog.askopenfilename(
+            title="Seleccionar ráster para mapa general",
+            filetypes=self._RASTER_FILETYPES)
+        if ruta:
+            self._ruta_raster.set(ruta)
+            self._lbl_raster.configure(text=Path(ruta).name)
+
+    def _elegir_raster_localizacion(self):
+        ruta = filedialog.askopenfilename(
+            title="Seleccionar ráster para mapa de localización",
+            filetypes=self._RASTER_FILETYPES)
+        if ruta:
+            self._ruta_raster_loc.set(ruta)
+            self._lbl_raster_loc.configure(text=Path(ruta).name)
+
+    @property
+    def ruta_raster_general(self) -> str:
+        if self.proveedor.get() == "── Ráster local ──":
+            return self._ruta_raster.get()
+        return ""
+
+    @property
+    def ruta_raster_localizacion(self) -> str:
+        if self._prov_localizacion.get() == "── Ráster local ──":
+            return self._ruta_raster_loc.get()
+        return ""

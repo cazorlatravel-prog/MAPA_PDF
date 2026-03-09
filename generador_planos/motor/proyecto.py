@@ -31,6 +31,9 @@ class Proyecto:
         # Configuración de generación
         self.formato = "A3 Horizontal"
         self.proveedor = "OpenStreetMap"
+        self.ruta_raster_general = ""       # Ráster local para fondo de mapa
+        self.ruta_raster_localizacion = ""  # Ráster local para mapa de localización
+        self.prov_localizacion = "WMS IGN (online)"
         self.escala_manual = None  # None = automática
         self.transparencia_montes = 0.5
         self.color_infra = "#E74C3C"
@@ -92,6 +95,9 @@ class Proyecto:
             "ruta_montes": self.ruta_montes,
             "formato": self.formato,
             "proveedor": self.proveedor,
+            "ruta_raster_general": self.ruta_raster_general,
+            "ruta_raster_localizacion": self.ruta_raster_localizacion,
+            "prov_localizacion": self.prov_localizacion,
             "escala_manual": self.escala_manual,
             "transparencia_montes": self.transparencia_montes,
             "color_infra": self.color_infra,
@@ -121,6 +127,7 @@ class Proyecto:
         for key in [
             "nombre", "fecha_creacion", "fecha_modificacion",
             "ruta_infra", "ruta_montes", "formato", "proveedor",
+            "ruta_raster_general", "ruta_raster_localizacion", "prov_localizacion",
             "escala_manual", "transparencia_montes", "color_infra",
             "campos_visibles", "campo_mapeo", "carpeta_salida", "patron_nombre",
             "layout_key",

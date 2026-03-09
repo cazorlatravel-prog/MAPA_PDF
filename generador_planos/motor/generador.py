@@ -20,7 +20,7 @@ class GeneracionCancelada(Exception):
     pass
 
 from .escala import seleccionar_escala, FORMATOS, MARGENES_MM
-from .cartografia import añadir_fondo_cartografico
+from .cartografia import añadir_fondo_cartografico, añadir_fondo_raster_local
 from .maquetacion import MaquetadorPlano, ETIQUETAS_CAMPOS, crear_portada, crear_indice
 from .capas_extra import GestorCapasExtra
 from .simbologia import GestorSimbologia
@@ -96,6 +96,8 @@ class GeneradorPlanos:
         self.layout_key = "Plantilla 1 (Clásica)"
         self.dpi_figura = None   # None = default (400)
         self.dpi_guardado = None  # None = same as dpi_figura
+        self.ruta_raster_general = ""       # Ráster local para fondo de mapa
+        self.ruta_raster_localizacion = ""  # Ráster local para mapa de localización
         self._cancelar = threading.Event()
 
     def cancelar_generacion(self):
@@ -194,6 +196,18 @@ class GeneradorPlanos:
         return list(self.gdf_infra.index[mask])
 
     # ── Helpers internos ─────────────────────────────────────────────────
+
+    def _añadir_fondo(self, ax_map, gdf_view, proveedor, xmin, xmax, ymin, ymax):
+        """Añade fondo cartográfico usando ráster local o WMS/tiles."""
+        if self.ruta_raster_general and os.path.isfile(self.ruta_raster_general):
+            try:
+                añadir_fondo_raster_local(ax_map, self.ruta_raster_general,
+                                           xmin, xmax, ymin, ymax)
+                return
+            except Exception:
+                pass  # Fallback a WMS
+        añadir_fondo_cartografico(ax_map, gdf_view, proveedor,
+                                  xmin=xmin, xmax=xmax, ymin=ymin, ymax=ymax)
 
     def _ensure_agg(self):
         if threading.current_thread() is not threading.main_thread():
@@ -462,8 +476,7 @@ class GeneradorPlanos:
         maq.configurar_mapa_principal(xmin, xmax, ymin, ymax)
 
         gdf_view = self.gdf_infra.iloc[[idx_fila]]
-        añadir_fondo_cartografico(ax_map, gdf_view, proveedor,
-                                  xmin=xmin, xmax=xmax, ymin=ymin, ymax=ymax)
+        self._añadir_fondo(ax_map, gdf_view, proveedor, xmin, xmax, ymin, ymax)
         ax_map.set_xlim(xmin, xmax)
         ax_map.set_ylim(ymin, ymax)
 
@@ -494,7 +507,7 @@ class GeneradorPlanos:
 
         if maq.es_lateral:
             # Plantilla 2: localización + tabla datos + leyenda + cajetín
-            maq.dibujar_mapa_posicion(cx, cy)
+            maq.dibujar_mapa_posicion(cx, cy, ruta_raster_loc=self.ruta_raster_localizacion)
             maq.dibujar_tabla_infra([row], campos_visibles,
                                      campo_mapeo=self._campo_mapeo)
             items_inf, items_mon = self._construir_items_leyenda_separados(
@@ -512,7 +525,7 @@ class GeneradorPlanos:
             maq.dibujar_panel_atributos(row, campos_visibles,
                                          campo_mapeo=self._campo_mapeo,
                                          campo_encabezado=campo_encabezado)
-            maq.dibujar_mapa_posicion(cx, cy)
+            maq.dibujar_mapa_posicion(cx, cy, ruta_raster_loc=self.ruta_raster_localizacion)
             items_cat = self._construir_items_categoria(gdf_sel,
                                                          xmin, xmax, ymin, ymax)
             maq.dibujar_barra_escala(proveedor, cx_utm=cx, cy_utm=cy,
@@ -573,8 +586,7 @@ class GeneradorPlanos:
         xmin, xmax, ymin, ymax = maq.calcular_extension_mapa(geom_union)
         maq.configurar_mapa_principal(xmin, xmax, ymin, ymax)
 
-        añadir_fondo_cartografico(ax_map, gdf_grupo, proveedor,
-                                  xmin=xmin, xmax=xmax, ymin=ymin, ymax=ymax)
+        self._añadir_fondo(ax_map, gdf_grupo, proveedor, xmin, xmax, ymin, ymax)
         ax_map.set_xlim(xmin, xmax)
         ax_map.set_ylim(ymin, ymax)
 
@@ -603,7 +615,7 @@ class GeneradorPlanos:
         cx, cy = geom_union.centroid.x, geom_union.centroid.y
 
         if maq.es_lateral:
-            maq.dibujar_mapa_posicion(cx, cy)
+            maq.dibujar_mapa_posicion(cx, cy, ruta_raster_loc=self.ruta_raster_localizacion)
             maq.dibujar_tabla_infra(rows, campos_visibles,
                                      campo_mapeo=self._campo_mapeo)
             items_inf, items_mon = self._construir_items_leyenda_separados(
@@ -622,7 +634,7 @@ class GeneradorPlanos:
             maq.dibujar_panel_atributos_multi(rows, campos_visibles,
                                                campo_mapeo=self._campo_mapeo,
                                                campo_encabezado=campo_encabezado)
-            maq.dibujar_mapa_posicion(cx, cy)
+            maq.dibujar_mapa_posicion(cx, cy, ruta_raster_loc=self.ruta_raster_localizacion)
             items_cat = self._construir_items_categoria(gdf_grupo,
                                                          xmin, xmax, ymin, ymax)
             maq.dibujar_barra_escala(proveedor, cx_utm=cx, cy_utm=cy,
@@ -810,9 +822,8 @@ class GeneradorPlanos:
                     maq.configurar_mapa_principal(xmin, xmax, ymin, ymax)
 
                     gdf_view = self.gdf_infra.iloc[[idx]]
-                    añadir_fondo_cartografico(ax_map, gdf_view, proveedor,
-                                              xmin=xmin, xmax=xmax,
-                                              ymin=ymin, ymax=ymax)
+                    self._añadir_fondo(ax_map, gdf_view, proveedor,
+                                       xmin, xmax, ymin, ymax)
                     ax_map.set_xlim(xmin, xmax)
                     ax_map.set_ylim(ymin, ymax)
 
@@ -843,7 +854,7 @@ class GeneradorPlanos:
                     cx, cy = geom.centroid.x, geom.centroid.y
 
                     if maq.es_lateral:
-                        maq.dibujar_mapa_posicion(cx, cy)
+                        maq.dibujar_mapa_posicion(cx, cy, ruta_raster_loc=self.ruta_raster_localizacion)
                         maq.dibujar_tabla_infra([row], campos,
                                                  campo_mapeo=self._campo_mapeo)
                         items_inf, items_mon = self._construir_items_leyenda_separados(
@@ -859,7 +870,7 @@ class GeneradorPlanos:
                         maq.dibujar_panel_atributos(row, campos,
                                                      campo_mapeo=self._campo_mapeo,
                                                      campo_encabezado=campo_encabezado)
-                        maq.dibujar_mapa_posicion(cx, cy)
+                        maq.dibujar_mapa_posicion(cx, cy, ruta_raster_loc=self.ruta_raster_localizacion)
                         items_cat = self._construir_items_categoria(gdf_sel)
                         maq.dibujar_barra_escala(proveedor, cx_utm=cx, cy_utm=cy,
                                                   cajetin=self._cajetin,
