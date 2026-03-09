@@ -49,15 +49,14 @@ class PanelConfig:
         self._ruta_raster = tk.StringVar(value="")
         self._frame_raster = tk.Frame(f, bg=COLOR_PANEL)
         self._frame_raster.grid(row=4, column=0, sticky="ew", pady=(0, 4))
-        self._lbl_raster = tk.Label(self._frame_raster, text="Sin ráster",
+        crear_boton(self._frame_raster, "Seleccionar ráster...",
+                    self._elegir_raster_general,
+                    icono="\U0001f5fa").pack(side="top", fill="x")
+        self._lbl_raster = tk.Label(self._frame_raster, text="Sin ráster seleccionado",
                                      font=FONT_SMALL, bg=COLOR_PANEL,
                                      fg=COLOR_TEXTO_GRIS, anchor="w",
-                                     wraplength=220)
-        self._lbl_raster.pack(side="left", fill="x", expand=True)
-        tk.Button(self._frame_raster, text="...", width=3,
-                  command=self._elegir_raster_general,
-                  font=FONT_SMALL, bg=COLOR_BORDE, fg=COLOR_TEXTO,
-                  relief="flat", cursor="hand2").pack(side="right")
+                                     wraplength=240)
+        self._lbl_raster.pack(side="top", fill="x", pady=(2, 0))
         self._frame_raster.grid_remove()  # Oculto por defecto
 
         # Ráster local para mapa de localización
@@ -74,15 +73,15 @@ class PanelConfig:
         self._ruta_raster_loc = tk.StringVar(value="")
         self._frame_raster_loc = tk.Frame(f, bg=COLOR_PANEL)
         self._frame_raster_loc.grid(row=7, column=0, sticky="ew", pady=(0, 8))
-        self._lbl_raster_loc = tk.Label(self._frame_raster_loc, text="Sin ráster",
+        crear_boton(self._frame_raster_loc, "Seleccionar ráster...",
+                    self._elegir_raster_localizacion,
+                    icono="\U0001f5fa").pack(side="top", fill="x")
+        self._lbl_raster_loc = tk.Label(self._frame_raster_loc,
+                                         text="Sin ráster seleccionado",
                                          font=FONT_SMALL, bg=COLOR_PANEL,
                                          fg=COLOR_TEXTO_GRIS, anchor="w",
-                                         wraplength=220)
-        self._lbl_raster_loc.pack(side="left", fill="x", expand=True)
-        tk.Button(self._frame_raster_loc, text="...", width=3,
-                  command=self._elegir_raster_localizacion,
-                  font=FONT_SMALL, bg=COLOR_BORDE, fg=COLOR_TEXTO,
-                  relief="flat", cursor="hand2").pack(side="right")
+                                         wraplength=240)
+        self._lbl_raster_loc.pack(side="top", fill="x", pady=(2, 0))
         self._frame_raster_loc.grid_remove()  # Oculto por defecto
 
         # ── Escala manual ──
