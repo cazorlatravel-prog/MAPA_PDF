@@ -494,7 +494,8 @@ class GeneradorPlanos:
             maq.dibujar_leyenda_lateral(items_inf, items_mon)
             maq.dibujar_cajetin_lateral(row, cajetin=self._cajetin,
                                          plantilla=self._plantilla,
-                                         proveedor=proveedor)
+                                         proveedor=proveedor,
+                                         campo_mapeo=self._campo_mapeo)
         else:
             # Plantilla 1: layout clásico
             items_ley = self._construir_items_leyenda(gdf_sel, color_infra,
@@ -594,7 +595,8 @@ class GeneradorPlanos:
             maq.dibujar_cajetin_lateral(rows[0], cajetin=self._cajetin,
                                          plantilla=self._plantilla,
                                          num_plano=num_plano,
-                                         proveedor=proveedor)
+                                         proveedor=proveedor,
+                                         campo_mapeo=self._campo_mapeo)
         else:
             items_ley = self._construir_items_leyenda(gdf_grupo, color_infra,
                                                        xmin, xmax, ymin, ymax)
@@ -823,7 +825,8 @@ class GeneradorPlanos:
                         maq.dibujar_leyenda_lateral(items_inf, items_mon)
                         maq.dibujar_cajetin_lateral(row, cajetin=self._cajetin,
                                                      plantilla=self._plantilla,
-                                                     proveedor=proveedor)
+                                                     proveedor=proveedor,
+                                                     campo_mapeo=self._campo_mapeo)
                     else:
                         items_ley = self._construir_items_leyenda(gdf_sel, color_infra)
                         maq.dibujar_leyenda(items_ley)

@@ -1110,7 +1110,8 @@ class MaquetadorPlano:
     # ── Cajetín lateral (Plantilla 2: ax_esc) ────────────────────────
 
     def dibujar_cajetin_lateral(self, row, cajetin=None, plantilla=None,
-                                 num_plano=None, proveedor=""):
+                                 num_plano=None, proveedor="",
+                                 campo_mapeo=None):
         """Dibuja el cajetín completo estilo Junta de Andalucía.
 
         Estructura idéntica al plano de referencia (de arriba a abajo):
@@ -1226,14 +1227,23 @@ class MaquetadorPlano:
         monte_txt = ""
         tm_txt = ""
         if row is not None:
-            for candidato in ["Monte", "MONTE", "Nombre_Monte", "NOMBRE_MONTE",
-                              "MP", "M.P.", "monte"]:
+            # Resolver nombres de campo reales usando campo_mapeo
+            _map = campo_mapeo or {}
+            candidatos_monte = ["Monte", "MONTE", "Nombre_Monte", "NOMBRE_MONTE",
+                                "MP", "M.P.", "monte"]
+            candidatos_muni = ["Municipio", "MUNICIPIO", "TM", "T.M.",
+                               "municipio", "TERMINO_MUNICIPAL"]
+            # Anteponer campos mapeados (ej: "Monte" -> "NOM_MONTE")
+            if "Monte" in _map:
+                candidatos_monte.insert(0, _map["Monte"])
+            if "Municipio" in _map:
+                candidatos_muni.insert(0, _map["Municipio"])
+            for candidato in candidatos_monte:
                 val = str(row.get(candidato, ""))
                 if val and val != "nan":
                     monte_txt = f"M.P. {val}"
                     break
-            for candidato in ["Municipio", "MUNICIPIO", "TM", "T.M.",
-                              "municipio", "TERMINO_MUNICIPAL"]:
+            for candidato in candidatos_muni:
                 val = str(row.get(candidato, ""))
                 if val and val != "nan":
                     tm_txt = f"T.M. {val}"
