@@ -109,7 +109,7 @@ class PanelConfig:
         # Preview
         self._lbl_preview_nombre = tk.Label(
             f, text="Ej: plano_0001_CortafuegosNorte.pdf",
-            font=("Noto Sans HK", 8), bg=COLOR_PANEL, fg=COLOR_TEXTO_GRIS)
+            font=("Helvetica", 8), bg=COLOR_PANEL, fg=COLOR_TEXTO_GRIS)
         self._lbl_preview_nombre.grid(row=13, column=0, sticky="w", pady=(0, 8))
         self.patron_nombre.trace_add("write", self._actualizar_preview_nombre)
 

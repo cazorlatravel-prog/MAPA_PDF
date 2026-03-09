@@ -20,10 +20,10 @@ COLOR_ADVERTENCIA = "#F39C12"
 COLOR_EXITO      = "#368f3f"
 
 # ── Fuentes ─────────────────────────────────────────────────────────────
-FONT_TITULO = ("Noto Sans HK", 22, "bold")
-FONT_LABEL  = ("Noto Sans HK", 10)
-FONT_SMALL  = ("Noto Sans HK", 9)
-FONT_BOLD   = ("Noto Sans HK", 10, "bold")
+FONT_TITULO = ("Helvetica", 22, "bold")
+FONT_LABEL  = ("Helvetica", 10)
+FONT_SMALL  = ("Helvetica", 9)
+FONT_BOLD   = ("Helvetica", 10, "bold")
 FONT_MONO   = ("Courier", 9)
 
 
@@ -95,7 +95,7 @@ def aplicar_estilos(root: tk.Tk):
         "TNotebook.Tab",
         background=COLOR_BORDE,
         foreground=COLOR_TEXTO,
-        font=("Noto Sans HK", 9, "bold"),
+        font=("Helvetica", 9, "bold"),
         padding=[12, 4],
     )
     style.map(
@@ -135,7 +135,7 @@ def crear_frame_seccion(parent, titulo: str) -> tk.Frame:
     outer.pack(fill="x", padx=6, pady=(8, 0))
 
     tk.Label(
-        outer, text=titulo, font=("Noto Sans HK", 9, "bold"),
+        outer, text=titulo, font=("Helvetica", 9, "bold"),
         bg=COLOR_PANEL, fg=COLOR_ACENTO,
     ).pack(anchor="w", pady=(0, 2))
 
