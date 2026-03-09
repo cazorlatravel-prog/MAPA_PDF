@@ -566,7 +566,7 @@ class MaquetadorPlano:
             panel_w_mm = ancho_util * 0.30 * 0.95   # col 2 ratio, menos wspace
             panel_h_mm = alto_util * (1 - RATIO_MAPA_ALTO) * 0.90  # menos hspace
 
-        # Extensión real a 1:25.000
+        # Extensión real a 1:250.000
         semi_x = (panel_w_mm / 1000.0) * escala_loc / 2
         semi_y = (panel_h_mm / 1000.0) * escala_loc / 2
 
