@@ -62,6 +62,7 @@ def _fmt_valor(valor_raw):
 # Presets de calidad: (DPI figura, DPI guardado)
 CALIDADES_PDF = {
     "Alta (400 DPI)": (400, 300),
+    "Media (300 DPI)": (300, 300),
     "Media (200 DPI)": (200, 150),
     "Baja (100 DPI)": (100, 100),
 }
