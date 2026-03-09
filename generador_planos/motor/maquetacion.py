@@ -1165,7 +1165,7 @@ class MaquetadorPlano:
         # ── Alturas de cada fila (de arriba a abajo) ──
         org_h = 0.22
         proy_h = 0.18
-        monte_h = 0.18
+        monte_h = 0.14
         aut_h = 0.14
         total_h = org_h + proy_h + monte_h + aut_h  # 0.72
 
@@ -1321,7 +1321,8 @@ class MaquetadorPlano:
                     fontweight="bold", zorder=3)
         if tm_txt:
             ax.text(0.03, monte_y + monte_h * 0.30, tm_txt,
-                    ha="left", va="center", fontsize=4.5, color=C_TXT, zorder=3)
+                    ha="left", va="center", fontsize=4.5, color=C_TXT,
+                    fontweight="bold", zorder=3)
 
         # Nº de plano
         num_inicio = caj.get("num_plano_inicio", 1)
