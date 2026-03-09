@@ -75,7 +75,7 @@ class PanelSimbologia:
         self._alpha_infra = tk.DoubleVar(value=0.35)
         self._alpha_infra.trace_add("write", lambda *_: self._lbl_alpha.configure(
             text=f"{self._alpha_infra.get():.2f}"))
-        ttk.Scale(f, from_=0.1, to=2.0, variable=self._alpha_infra,
+        ttk.Scale(f, from_=0.1, to=1.0, variable=self._alpha_infra,
                   orient="horizontal").grid(row=7, column=0, sticky="ew", pady=(2, 6))
 
         tk.Label(f, text="Trazo l\u00ednea infra:", font=FONT_SMALL,
@@ -110,19 +110,46 @@ class PanelSimbologia:
                   font=FONT_SMALL, bg=COLOR_BORDE, fg=COLOR_TEXTO,
                   relief="flat", cursor="hand2").pack(side="left")
 
+        # ── Categorización de montes por campo ──
+        ttk.Separator(f, orient="horizontal").grid(
+            row=14, column=0, sticky="ew", pady=(2, 4))
+
+        tk.Label(f, text="Colorear montes por campo:", font=FONT_BOLD,
+                 bg=COLOR_PANEL, fg=COLOR_TEXTO).grid(
+                 row=15, column=0, sticky="w")
+
+        cat_montes_f = tk.Frame(f, bg=COLOR_PANEL)
+        cat_montes_f.grid(row=16, column=0, sticky="ew", pady=(2, 2))
+
+        self._campo_cat_montes = tk.StringVar(value="(ninguno)")
+        self._cb_campo_cat_montes = ttk.Combobox(
+            cat_montes_f, textvariable=self._campo_cat_montes,
+            values=["(ninguno)"], state="readonly", font=FONT_SMALL, width=20,
+        )
+        self._cb_campo_cat_montes.pack(side="left", fill="x", expand=True)
+        self._cb_campo_cat_montes.bind("<<ComboboxSelected>>",
+                                        self._on_campo_cat_montes_changed)
+
+        self._frame_cat_montes = tk.Frame(f, bg=COLOR_PANEL)
+        self._frame_cat_montes.grid(row=17, column=0, sticky="ew", pady=(2, 6))
+        self._widgets_cat_montes = []  # [(valor, color_var, lbl_color), ...]
+
         # ── Capas extra ──
+        ttk.Separator(f, orient="horizontal").grid(
+            row=18, column=0, sticky="ew", pady=(2, 4))
+
         tk.Label(f, text="Capas adicionales:", font=FONT_BOLD,
                  bg=COLOR_PANEL, fg=COLOR_TEXTO_GRIS).grid(
-                 row=14, column=0, sticky="w", pady=(6, 0))
+                 row=19, column=0, sticky="w", pady=(2, 0))
 
         self._frame_capas = tk.Frame(f, bg=COLOR_PANEL)
-        self._frame_capas.grid(row=15, column=0, sticky="ew", pady=(2, 4))
+        self._frame_capas.grid(row=20, column=0, sticky="ew", pady=(2, 4))
 
         # ── Botón aplicar ──
         tk.Button(f, text="Aplicar simbolog\u00eda", command=self._aplicar,
                   font=FONT_SMALL, bg=COLOR_ACENTO, fg="#1A1A2E",
                   relief="flat", cursor="hand2", pady=3).grid(
-                  row=16, column=0, sticky="ew", pady=(4, 4))
+                  row=21, column=0, sticky="ew", pady=(4, 4))
 
         f.columnconfigure(0, weight=1)
 
@@ -218,6 +245,72 @@ class PanelSimbologia:
         self.callback_log(
             f"Categor\u00eda por '{campo}': {len(valores)} valores \u00fanicos.", "info")
 
+    def _on_campo_cat_montes_changed(self, event=None):
+        """Cuando cambia el campo de categorización de montes, genera colores por valor."""
+        self._widgets_cat_montes.clear()
+        for w in self._frame_cat_montes.winfo_children():
+            w.destroy()
+
+        campo = self._campo_cat_montes.get()
+        if campo == "(ninguno)" or self.motor.gdf_montes is None:
+            return
+
+        if campo not in self.motor.gdf_montes.columns:
+            tk.Label(self._frame_cat_montes, text="(campo no encontrado)",
+                     font=FONT_SMALL, bg=COLOR_PANEL,
+                     fg=COLOR_TEXTO_GRIS).pack(anchor="w")
+            return
+
+        valores = sorted(self.motor.gdf_montes[campo].dropna().astype(str).unique().tolist())
+        if not valores:
+            tk.Label(self._frame_cat_montes, text="(sin valores)",
+                     font=FONT_SMALL, bg=COLOR_PANEL,
+                     fg=COLOR_TEXTO_GRIS).pack(anchor="w")
+            return
+
+        # Generar simbología automática
+        self.motor.gestor_simbologia.generar_por_categoria_montes(campo, valores)
+
+        # Paleta de montes (misma que en simbologia.py)
+        paleta_montes = [
+            "#1a5c10", "#2E7D32", "#388E3C", "#43A047", "#4CAF50",
+            "#66BB6A", "#81C784", "#A5D6A7", "#558B2F", "#33691E",
+            "#827717", "#9E9D24", "#AFB42B", "#C0CA33", "#D4E157",
+        ]
+
+        for i, valor in enumerate(valores[:20]):
+            color = paleta_montes[i % len(paleta_montes)]
+            row_f = tk.Frame(self._frame_cat_montes, bg=COLOR_PANEL)
+            row_f.pack(fill="x", pady=1)
+
+            color_var = {"color": color}
+            lbl_color = tk.Label(row_f, bg=color, width=3,
+                                  relief="solid", bd=1)
+            lbl_color.pack(side="left", padx=(0, 4))
+
+            def _elegir_cat(lbl=lbl_color, cv=color_var):
+                c = colorchooser.askcolor(color=cv["color"],
+                                          title="Color de categor\u00eda monte")[1]
+                if c:
+                    cv["color"] = c
+                    lbl.configure(bg=c)
+
+            tk.Button(row_f, text=str(valor)[:30], command=_elegir_cat,
+                      font=FONT_SMALL, bg=COLOR_BORDE, fg=COLOR_TEXTO,
+                      relief="flat", cursor="hand2", anchor="w").pack(
+                      side="left", fill="x", expand=True)
+
+            self._widgets_cat_montes.append((str(valor), color_var, lbl_color))
+
+        if len(valores) > 20:
+            tk.Label(self._frame_cat_montes,
+                     text=f"... +{len(valores) - 20} valores m\u00e1s (colores auto)",
+                     font=FONT_SMALL, bg=COLOR_PANEL,
+                     fg=COLOR_TEXTO_GRIS).pack(anchor="w")
+
+        self.callback_log(
+            f"Categor\u00eda montes por '{campo}': {len(valores)} valores \u00fanicos.", "info")
+
     def actualizar_campo_categoria(self):
         """Actualiza las opciones del combobox de categorización con columnas del shapefile."""
         campos = ["(ninguno)"]
@@ -225,6 +318,14 @@ class PanelSimbologia:
             campos += [c for c in self.motor.gdf_infra.columns
                        if c.lower() != "geometry"]
         self._cb_campo_cat.configure(values=campos)
+
+    def actualizar_campo_categoria_montes(self):
+        """Actualiza las opciones del combobox de categorización de montes."""
+        campos = ["(ninguno)"]
+        if self.motor.gdf_montes is not None:
+            campos += [c for c in self.motor.gdf_montes.columns
+                       if c.lower() != "geometry"]
+        self._cb_campo_cat_montes.configure(values=campos)
 
     def _elegir_color_montes(self):
         c = colorchooser.askcolor(color=self._color_montes,
@@ -259,6 +360,16 @@ class PanelSimbologia:
                     simb.color = color_var["color"]
                     simb.facecolor = color_var["color"] + "55"
 
+        # Categorización de montes por campo
+        campo_cat_montes = self._campo_cat_montes.get()
+        if campo_cat_montes != "(ninguno)" and self._widgets_cat_montes:
+            for valor, color_var, _ in self._widgets_cat_montes:
+                if (campo_cat_montes in gs.categorias_montes and
+                        valor in gs.categorias_montes[campo_cat_montes]):
+                    simb = gs.categorias_montes[campo_cat_montes][valor]
+                    simb.color = color_var["color"]
+                    simb.facecolor = color_var["color"] + "66"
+
         # Configuración infraestructuras (grosor, transparencia, trazo, marcador)
         self.motor.config_infra = self.obtener_config_infra()
 
@@ -267,10 +378,12 @@ class PanelSimbologia:
     def obtener_config_infra(self) -> dict:
         """Devuelve configuración de simbología de infraestructuras."""
         campo_cat = self._campo_categoria.get()
+        campo_cat_montes = self._campo_cat_montes.get()
         return {
             "linewidth": self._grosor_infra.get(),
             "alpha": self._alpha_infra.get(),
             "linestyle": TIPOS_TRAZO.get(self._trazo_infra.get(), "-"),
             "marker": MARCADORES.get(self._marcador.get(), "o"),
             "campo_categoria": campo_cat if campo_cat != "(ninguno)" else None,
+            "campo_categoria_montes": campo_cat_montes if campo_cat_montes != "(ninguno)" else None,
         }

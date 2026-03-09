@@ -551,6 +551,7 @@ class PanelGeneracion:
         multipagina = self._multipagina.get()
         incluir_portada = self._incluir_portada.get()
         escala_manual = cfg.get("escala_manual")
+        patron_nombre = cfg.get("patron_nombre", "").strip() or None
 
         if modo == "agrupado":
             valores_sel = [v for v, var in self._check_valores.items() if var.get()]
@@ -589,6 +590,7 @@ class PanelGeneracion:
                         callback_progreso=self._actualizar_progreso,
                         indices_filtro=indices_filtro,
                         campo_encabezado=campo_encabezado,
+                        patron_nombre=patron_nombre,
                     )
 
                     self._parent_window.after(0, self._fin_generacion)
@@ -614,7 +616,12 @@ class PanelGeneracion:
                         "info")
 
                     if multipagina:
-                        ruta_pdf = os.path.join(carpeta, "planos_forestales_completo.pdf")
+                        nombre_multi = (patron_nombre or "planos_forestales_completo")
+                        # Para multipágina no aplican variables, pero sanear nombre
+                        nombre_multi = nombre_multi.replace("{num}", "").replace("{nombre}", "").replace("{campo}", "")
+                        nombre_multi = "".join(c for c in nombre_multi if c.isalnum() or c in "_ -.")[:80]
+                        nombre_multi = nombre_multi.strip("_- ") or "planos_forestales_completo"
+                        ruta_pdf = os.path.join(carpeta, f"{nombre_multi}.pdf")
                         self.motor.generar_pdf_multipagina(
                             indices=indices,
                             formato_key=cfg["formato"],
@@ -628,6 +635,7 @@ class PanelGeneracion:
                             callback_log=self.callback_log,
                             callback_progreso=self._actualizar_progreso,
                             campo_encabezado=campo_encabezado,
+                            patron_nombre=patron_nombre,
                         )
                     else:
                         self.motor.generar_serie(
@@ -642,6 +650,7 @@ class PanelGeneracion:
                             callback_log=self.callback_log,
                             callback_progreso=self._actualizar_progreso,
                             campo_encabezado=campo_encabezado,
+                            patron_nombre=patron_nombre,
                         )
 
                     self._parent_window.after(0, self._fin_generacion)

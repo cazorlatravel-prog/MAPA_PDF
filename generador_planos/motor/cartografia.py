@@ -74,6 +74,29 @@ CAPAS_BASE = {
     "Stamen Terrain": "https://stamen-tiles.a.ssl.fastly.net/terrain/{z}/{x}/{y}.png",
 }
 
+# Proveedores WMS directos (imagen completa, no tiles).
+# Se usan con _descargar_wms() en lugar de tiles.
+CAPAS_WMS = {
+    "IGN MTN25 (WMS 1:25.000)": {
+        "url": (
+            "https://www.ign.es/wms-inspire/mapa-raster?"
+            "SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0"
+            "&LAYERS=mtn_rasterizado&STYLES="
+            "&CRS=EPSG:25830&FORMAT=image/png"
+        ),
+        "attribution": "© IGN España – MTN25",
+    },
+    "IGN MTN50 (WMS 1:50.000)": {
+        "url": (
+            "https://www.ign.es/wms-inspire/mapa-raster?"
+            "SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0"
+            "&LAYERS=mtn_rasterizado&STYLES="
+            "&CRS=EPSG:25830&FORMAT=image/png"
+        ),
+        "attribution": "© IGN España – MTN50",
+    },
+}
+
 # PROVIDERS_CTX se construye siempre para que el desplegable de la GUI
 # muestre todos los proveedores disponibles, con o sin contextily.
 _PROV_META = {
@@ -83,6 +106,8 @@ _PROV_META = {
     "IGN Base": {"max_zoom": 18, "attribution": "© IGN España"},
     "PNOA Máxima Actualidad": {"max_zoom": 20, "attribution": "© IGN España"},
     "Stamen Terrain": {"max_zoom": 18, "attribution": "Stamen Design"},
+    "IGN MTN25 (WMS 1:25.000)": {"max_zoom": 18, "attribution": "© IGN España – MTN25"},
+    "IGN MTN50 (WMS 1:50.000)": {"max_zoom": 18, "attribution": "© IGN España – MTN50"},
 }
 
 if ctx is not None:
@@ -104,6 +129,15 @@ else:
     PROVIDERS_CTX = {
         name: {"url": url, **_PROV_META.get(name, {})}
         for name, url in CAPAS_BASE.items()
+    }
+
+# Añadir proveedores WMS al diccionario de proveedores para la GUI
+for _wms_name, _wms_info in CAPAS_WMS.items():
+    PROVIDERS_CTX[_wms_name] = {
+        "url": _wms_info["url"],
+        "max_zoom": 18,
+        "attribution": _wms_info.get("attribution", ""),
+        "wms": True,
     }
 
 
@@ -220,18 +254,132 @@ def _descargar_teselas_manual(ax, url_template, xmin, xmax, ymin, ymax, crs_epsg
     return True
 
 
+def _descargar_wms(ax, wms_url, xmin, xmax, ymin, ymax, crs_epsg=25830):
+    """Descarga una imagen WMS GetMap completa para el bbox y la dibuja en el eje.
+
+    A diferencia de tiles, solicita una sola imagen que cubre todo el extent,
+    lo que da mejor calidad a escalas cartográficas específicas (1:25.000, etc.).
+    """
+    # Calcular tamaño de imagen proporcional al extent del eje
+    extent_x = xmax - xmin
+    extent_y = ymax - ymin
+    aspect = extent_x / max(extent_y, 1)
+
+    # Resolución: ~2 m/pixel para buena calidad impresa (máx 4096 px por lado)
+    height = min(4096, max(512, int(extent_y / 2)))
+    width = min(4096, max(512, int(height * aspect)))
+
+    # BBOX: en WMS 1.3.0 con EPSG:25830 el orden es (minx,miny,maxx,maxy)
+    bbox_str = f"{xmin},{ymin},{xmax},{ymax}"
+    url = f"{wms_url}&WIDTH={width}&HEIGHT={height}&BBOX={bbox_str}"
+
+    # Caché
+    cache_key = hashlib.md5(url.encode()).hexdigest()
+    cache_path = _TILE_CACHE_DIR / f"wms_{cache_key}.png"
+
+    if cache_path.exists():
+        try:
+            img = Image.open(cache_path).copy()
+        except Exception:
+            cache_path.unlink(missing_ok=True)
+            img = None
+    else:
+        img = None
+
+    if img is None:
+        headers = {
+            "User-Agent": "GeneradorPlanosForestales/1.0",
+            "Referer": "https://www.ign.es/",
+        }
+        resp = requests.get(url, headers=headers, timeout=60)
+        resp.raise_for_status()
+        img = Image.open(io.BytesIO(resp.content))
+
+        try:
+            _TILE_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+            img.save(cache_path, "PNG")
+        except Exception:
+            pass
+
+    ax.imshow(
+        np.array(img),
+        extent=[xmin, xmax, ymin, ymax],
+        aspect="auto",
+        zorder=0,
+        interpolation="bilinear",
+    )
+    return True
+
+
+def añadir_fondo_raster_local(ax, ruta_raster: str, xmin, xmax, ymin, ymax):
+    """Carga un ráster local (GeoTIFF, ECW, JP2…) y lo dibuja como fondo del mapa.
+
+    Lee solo la ventana necesaria (el extent del plano) para no cargar
+    todo el archivo en memoria.
+    """
+    try:
+        import rasterio
+        from rasterio.windows import from_bounds
+    except ImportError:
+        raise ImportError(
+            "Se necesita la librería 'rasterio' para cargar rásters locales.\n"
+            "Instálala con: pip install rasterio")
+
+    with rasterio.open(ruta_raster) as src:
+        # Recortar al extent del plano
+        window = from_bounds(xmin, ymin, xmax, ymax, src.transform)
+        # Leer bandas visibles (máx 3 para RGB)
+        n_bands = min(src.count, 3)
+        data = src.read(list(range(1, n_bands + 1)), window=window)
+
+        # Calcular extent real de la ventana leída
+        win_transform = src.window_transform(window)
+        h, w = data.shape[1], data.shape[2]
+        rx_min = win_transform.c
+        ry_max = win_transform.f
+        rx_max = rx_min + w * win_transform.a
+        ry_min = ry_max + h * win_transform.e  # e es negativo
+
+        if n_bands == 1:
+            img = data[0]
+        else:
+            img = np.moveaxis(data, 0, -1)  # (bands, h, w) → (h, w, bands)
+
+    ax.imshow(
+        img, extent=[rx_min, rx_max, ry_min, ry_max],
+        aspect="auto", zorder=0, interpolation="bilinear",
+    )
+    return True
+
+
 def añadir_fondo_cartografico(ax, gdf_view, proveedor_key: str, xmin=None, xmax=None,
                                ymin=None, ymax=None):
-    """Añade capa base de teselas al eje matplotlib.
+    """Añade capa base de teselas o WMS al eje matplotlib.
 
     Intenta contextily primero; si falla (especialmente con URLs IGN),
     hace fallback a descarga manual de teselas.
+    Para proveedores WMS, descarga una imagen GetMap completa.
     """
+    # ── Proveedor WMS directo ──
+    if proveedor_key in CAPAS_WMS:
+        if xmin is not None:
+            try:
+                wms_url = CAPAS_WMS[proveedor_key]["url"]
+                _descargar_wms(ax, wms_url, xmin, xmax, ymin, ymax)
+                return
+            except Exception:
+                ax.set_facecolor("#E8E8E0")
+                return
+        ax.set_facecolor("#E8E8E0")
+        return
+
+    # ── Proveedor de tiles (WMTS / XYZ) ──
     exito_ctx = False
 
     if ctx is not None:
         proveedor = PROVIDERS_CTX.get(proveedor_key)
-        if proveedor is not None:
+        if proveedor is not None and not isinstance(proveedor, dict) or (
+                isinstance(proveedor, dict) and not proveedor.get("wms")):
             try:
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore")

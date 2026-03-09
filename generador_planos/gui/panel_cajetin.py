@@ -14,6 +14,7 @@ from .estilos import (
     COLOR_ACENTO, FONT_BOLD, FONT_SMALL,
     crear_frame_seccion,
 )
+from ..motor.plantillas_layout import PLANTILLAS_DISPONIBLES
 
 
 class PanelCajetin:
@@ -25,16 +26,29 @@ class PanelCajetin:
 
         f = crear_frame_seccion(parent, "\U0001f4cb  CAJETÍN / PLANTILLA")
 
+        # ── Selector de plantilla de layout ──
+        tk.Label(f, text="Plantilla de layout:", font=FONT_BOLD,
+                 bg=COLOR_PANEL, fg=COLOR_ACENTO).grid(
+                 row=0, column=0, sticky="w")
+        self._layout_key = tk.StringVar(value=PLANTILLAS_DISPONIBLES[0])
+        ttk.Combobox(f, textvariable=self._layout_key,
+                     values=PLANTILLAS_DISPONIBLES,
+                     state="readonly", font=FONT_SMALL).grid(
+                     row=1, column=0, sticky="ew", pady=(2, 8))
+
         # ── Campos del cajetín ──
         campos = [
             ("Autor:", "autor"),
+            ("Cargo autor:", "cargo_autor"),
             ("Proyecto:", "proyecto"),
             ("Nº Proyecto:", "num_proyecto"),
-            ("Revisión:", "revision"),
-            ("Firma:", "firma"),
+            ("Firma (Vº.Bº):", "firma"),
+            ("Cargo firma:", "cargo_firma"),
+            ("Revisión/Director:", "revision"),
+            ("Cargo revisión:", "cargo_revision"),
         ]
         self._vars = {}
-        row_idx = 0
+        row_idx = 2  # starts after layout selector
         for label, key in campos:
             tk.Label(f, text=label, font=FONT_SMALL, bg=COLOR_PANEL,
                      fg=COLOR_TEXTO).grid(row=row_idx, column=0, sticky="w")
@@ -46,7 +60,7 @@ class PanelCajetin:
             self._vars[key] = var
             row_idx += 2
 
-        self._vars["revision"].set("0")
+        self._vars["revision"].set("")
 
         # ── Organización ──
         tk.Label(f, text="Organización:", font=FONT_SMALL, bg=COLOR_PANEL,
@@ -138,6 +152,21 @@ class PanelCajetin:
         self._cb_campo_etiq.current(1)
         row_idx += 2
 
+        # ── Etiquetas de montes en el mapa ──
+        tk.Label(f, text="Etiqueta montes (campo):", font=FONT_SMALL,
+                 bg=COLOR_PANEL, fg=COLOR_TEXTO).grid(
+                 row=row_idx, column=0, sticky="w")
+        self._campo_etiqueta_montes = tk.StringVar(value="(sin etiqueta)")
+        self._cb_campo_etiq_montes = ttk.Combobox(
+            f, textvariable=self._campo_etiqueta_montes,
+            values=["(sin etiqueta)"], state="readonly",
+            font=FONT_SMALL,
+        )
+        self._cb_campo_etiq_montes.grid(row=row_idx + 1, column=0,
+                                         sticky="ew", pady=(2, 6))
+        self._cb_campo_etiq_montes.current(0)
+        row_idx += 2
+
         # ── Colores de plantilla ──
         tk.Label(f, text="Colores plantilla:", font=FONT_BOLD,
                  bg=COLOR_PANEL, fg=COLOR_TEXTO_GRIS).grid(
@@ -147,9 +176,9 @@ class PanelCajetin:
         self._colores = {
             "color_cabecera_fondo": "#1C2333",
             "color_cabecera_texto": "#FFFFFF",
-            "color_cabecera_acento": "#2ECC71",
+            "color_cabecera_acento": "#007932",
             "color_marco_exterior": "#1C2333",
-            "color_marco_interior": "#2ECC71",
+            "color_marco_interior": "#007932",
         }
         self._lbl_colores = {}
 
@@ -228,6 +257,14 @@ class PanelCajetin:
             else:
                 self._cb_campo_etiq.current(0)
 
+    def actualizar_campos_montes(self, columnas: list):
+        """Actualiza el combobox de etiquetas de montes con las columnas del shapefile."""
+        cols = [c for c in columnas if c.lower() != "geometry"]
+        valores = ["(sin etiqueta)"] + cols
+        self._cb_campo_etiq_montes.configure(values=valores)
+        if self._campo_etiqueta_montes.get() not in valores:
+            self._cb_campo_etiq_montes.current(0)
+
     def _aplicar(self):
         cajetin = self.obtener_cajetin()
         plantilla = self.obtener_plantilla()
@@ -246,10 +283,13 @@ class PanelCajetin:
             num_inicio = 1
         return {
             "autor": self._vars["autor"].get(),
+            "cargo_autor": self._vars["cargo_autor"].get(),
             "proyecto": self._vars["proyecto"].get(),
             "num_proyecto": self._vars["num_proyecto"].get(),
             "revision": self._vars["revision"].get(),
+            "cargo_revision": self._vars["cargo_revision"].get(),
             "firma": self._vars["firma"].get(),
+            "cargo_firma": self._vars["cargo_firma"].get(),
             "organizacion": org,
             "titulo_mapa": self._titulo_mapa.get(),
             "subtitulo": self._subtitulo.get(),
@@ -259,10 +299,16 @@ class PanelCajetin:
             "campo_etiqueta": (self._campo_etiqueta.get()
                                if self._campo_etiqueta.get() != "(sin etiqueta)"
                                else ""),
+            "campo_etiqueta_montes": (self._campo_etiqueta_montes.get()
+                                      if self._campo_etiqueta_montes.get() != "(sin etiqueta)"
+                                      else ""),
         }
 
     def obtener_plantilla(self) -> dict:
         return dict(self._colores)
+
+    def obtener_layout_key(self) -> str:
+        return self._layout_key.get()
 
     def cargar_desde_proyecto(self, cajetin: dict, plantilla: dict):
         """Carga valores desde un proyecto guardado."""
@@ -284,6 +330,9 @@ class PanelCajetin:
                 self._campo_subtitulo.set(campo_sub)
             self._num_plano_inicio.set(
                 str(cajetin.get("num_plano_inicio", 1)))
+            campo_etiq = cajetin.get("campo_etiqueta", "")
+            if campo_etiq:
+                self._campo_etiqueta.set(campo_etiq)
 
         if plantilla:
             for key, color in plantilla.items():

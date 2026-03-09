@@ -26,9 +26,9 @@ MARCADORES = {
 
 # Paleta de colores predefinida para categorías
 PALETA_CATEGORIAS = [
-    "#E74C3C", "#3498DB", "#2ECC71", "#F39C12", "#9B59B6",
+    "#E74C3C", "#3498DB", "#007932", "#F39C12", "#9B59B6",
     "#1ABC9C", "#E67E22", "#34495E", "#C0392B", "#2980B9",
-    "#27AE60", "#D35400", "#8E44AD", "#16A085", "#F1C40F",
+    "#368f3f", "#D35400", "#8E44AD", "#16A085", "#F1C40F",
 ]
 
 # Simbología por defecto para capas extra
@@ -58,11 +58,11 @@ SIMBOLOGIA_CAPAS_EXTRA = {
         "label": "Parcelas catastrales",
     },
     "Zonas protegidas": {
-        "color": "#27AE60",
+        "color": "#368f3f",
         "linewidth": 1.0,
         "linestyle": "-.",
         "alpha": 0.5,
-        "facecolor": "#27AE6033",
+        "facecolor": "#368f3f33",
         "label": "Zonas protegidas",
     },
 }
@@ -113,6 +113,8 @@ class GestorSimbologia:
             color="#1a5c10", linewidth=0.8, facecolor="#22992244",
             alpha=0.5, label="Montes",
         )
+        # Simbología por categoría de montes (campo -> {valor: ConfigSimbologia})
+        self.categorias_montes = {}
         # Simbología por defecto de infraestructuras
         self.infra_fondo = ConfigSimbologia(
             color="#999999", linewidth=0.6, alpha=0.25, label="Otras infraestructuras",
@@ -127,6 +129,28 @@ class GestorSimbologia:
                 color=color, linewidth=2.0, facecolor=color + "55",
                 label=str(valor),
             )
+
+    def generar_por_categoria_montes(self, campo: str, valores: list):
+        """Genera simbología automática por categoría para montes."""
+        # Usar una paleta diferente (más verde/terrosa) para montes
+        paleta_montes = [
+            "#1a5c10", "#2E7D32", "#388E3C", "#43A047", "#4CAF50",
+            "#66BB6A", "#81C784", "#A5D6A7", "#558B2F", "#33691E",
+            "#827717", "#9E9D24", "#AFB42B", "#C0CA33", "#D4E157",
+        ]
+        self.categorias_montes[campo] = {}
+        for i, valor in enumerate(valores):
+            color = paleta_montes[i % len(paleta_montes)]
+            self.categorias_montes[campo][str(valor)] = ConfigSimbologia(
+                color=color, linewidth=0.8, facecolor=color + "66",
+                alpha=0.7, label=str(valor),
+            )
+
+    def obtener_simbologia_monte(self, campo_cat: str, valor: str) -> ConfigSimbologia:
+        """Obtiene la simbología para un monte según su categoría."""
+        if campo_cat in self.categorias_montes and str(valor) in self.categorias_montes[campo_cat]:
+            return self.categorias_montes[campo_cat][str(valor)]
+        return self.montes
 
     def obtener_simbologia_infra(self, campo_cat: str, valor: str) -> ConfigSimbologia:
         """Obtiene la simbología para una infraestructura según su categoría."""
@@ -152,6 +176,10 @@ class GestorSimbologia:
                 campo: {v: s.to_dict() for v, s in vals.items()}
                 for campo, vals in self.categorias.items()
             },
+            "categorias_montes": {
+                campo: {v: s.to_dict() for v, s in vals.items()}
+                for campo, vals in self.categorias_montes.items()
+            },
             "capas_extra": {n: s.to_dict() for n, s in self.capas_extra.items()},
             "montes": self.montes.to_dict(),
             "infra_fondo": self.infra_fondo.to_dict(),
@@ -162,6 +190,10 @@ class GestorSimbologia:
         g = cls()
         for campo, vals in d.get("categorias", {}).items():
             g.categorias[campo] = {
+                v: ConfigSimbologia.from_dict(s) for v, s in vals.items()
+            }
+        for campo, vals in d.get("categorias_montes", {}).items():
+            g.categorias_montes[campo] = {
                 v: ConfigSimbologia.from_dict(s) for v, s in vals.items()
             }
         for nombre, s in d.get("capas_extra", {}).items():

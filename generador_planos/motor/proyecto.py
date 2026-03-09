@@ -31,20 +31,41 @@ class Proyecto:
         # Configuración de generación
         self.formato = "A3 Horizontal"
         self.proveedor = "OpenStreetMap"
+        self.ruta_raster_general = ""       # Ráster local para fondo de mapa
+        self.ruta_raster_localizacion = ""  # Ráster local para mapa de localización
+        self.prov_localizacion = "WMS IGN (online)"
         self.escala_manual = None  # None = automática
         self.transparencia_montes = 0.5
         self.color_infra = "#E74C3C"
         self.campos_visibles = []
         self.campo_mapeo = {}
         self.carpeta_salida = ""
+        self.patron_nombre = "plano_{num}_{nombre}"
+        self.layout_key = "Plantilla 1 (Clásica)"
+
+        # Campos adicionales
+        self.transparencia_infra = 0.35
+        self.calidad_pdf = "Alta (400 DPI)"
+        self.campo_encabezado = ""
+
+        # Generación
+        self.modo_gen = "todos"
+        self.rango_desde = 1
+        self.rango_hasta = 10
+        self.campo_agrupacion = "Monte"
+        self.multipagina = False
+        self.incluir_portada = False
 
         # Cajetín
         self.cajetin = {
             "autor": "",
+            "cargo_autor": "",
             "proyecto": "",
             "num_proyecto": "",
-            "revision": "0",
+            "revision": "",
+            "cargo_revision": "",
             "firma": "",
+            "cargo_firma": "",
             "organizacion": "",
             "subtitulo": "PLANO DE INFRAESTRUCTURA FORESTAL",
         }
@@ -53,9 +74,9 @@ class Proyecto:
         self.plantilla = {
             "color_cabecera_fondo": "#1C2333",
             "color_cabecera_texto": "#FFFFFF",
-            "color_cabecera_acento": "#2ECC71",
+            "color_cabecera_acento": "#007932",
             "color_marco_exterior": "#1C2333",
-            "color_marco_interior": "#2ECC71",
+            "color_marco_interior": "#007932",
         }
 
         # Capas extra (se serializan como lista de dicts)
@@ -74,12 +95,26 @@ class Proyecto:
             "ruta_montes": self.ruta_montes,
             "formato": self.formato,
             "proveedor": self.proveedor,
+            "ruta_raster_general": self.ruta_raster_general,
+            "ruta_raster_localizacion": self.ruta_raster_localizacion,
+            "prov_localizacion": self.prov_localizacion,
             "escala_manual": self.escala_manual,
             "transparencia_montes": self.transparencia_montes,
             "color_infra": self.color_infra,
             "campos_visibles": self.campos_visibles,
             "campo_mapeo": self.campo_mapeo,
             "carpeta_salida": self.carpeta_salida,
+            "patron_nombre": self.patron_nombre,
+            "layout_key": self.layout_key,
+            "transparencia_infra": self.transparencia_infra,
+            "calidad_pdf": self.calidad_pdf,
+            "campo_encabezado": self.campo_encabezado,
+            "modo_gen": self.modo_gen,
+            "rango_desde": self.rango_desde,
+            "rango_hasta": self.rango_hasta,
+            "campo_agrupacion": self.campo_agrupacion,
+            "multipagina": self.multipagina,
+            "incluir_portada": self.incluir_portada,
             "cajetin": self.cajetin,
             "plantilla": self.plantilla,
             "capas_extra": self.capas_extra,
@@ -92,8 +127,13 @@ class Proyecto:
         for key in [
             "nombre", "fecha_creacion", "fecha_modificacion",
             "ruta_infra", "ruta_montes", "formato", "proveedor",
+            "ruta_raster_general", "ruta_raster_localizacion", "prov_localizacion",
             "escala_manual", "transparencia_montes", "color_infra",
-            "campos_visibles", "campo_mapeo", "carpeta_salida",
+            "campos_visibles", "campo_mapeo", "carpeta_salida", "patron_nombre",
+            "layout_key",
+            "transparencia_infra", "calidad_pdf", "campo_encabezado",
+            "modo_gen", "rango_desde", "rango_hasta", "campo_agrupacion",
+            "multipagina", "incluir_portada",
             "cajetin", "plantilla", "capas_extra", "simbologia",
         ]:
             if key in d:

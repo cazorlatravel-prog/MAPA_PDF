@@ -88,6 +88,7 @@ class App(tk.Tk):
             izq, self.motor,
             callback_log=self._escribir_log,
             callback_tabla=self._on_tabla_cargada,
+            callback_montes_cargados=self._on_montes_cargados,
         )
 
         # 2. Filtrado de datos
@@ -210,7 +211,7 @@ class App(tk.Tk):
 
         # Tags de color
         self._log.tag_config("error", foreground="#E74C3C")
-        self._log.tag_config("ok", foreground="#2ECC71")
+        self._log.tag_config("ok", foreground="#007932")
         self._log.tag_config("warn", foreground="#F39C12")
         self._log.tag_config("info", foreground="#85C1E9")
 
@@ -267,33 +268,61 @@ class App(tk.Tk):
         self.panel_filtros.actualizar_campos()
         self.panel_simbologia.actualizar_capas_extra()
         self.panel_simbologia.actualizar_campo_categoria()
+        self.panel_simbologia.actualizar_campo_categoria_montes()
         # Actualizar checkboxes de campos con las columnas reales del shapefile
         self.panel_campos.actualizar_campos(columnas)
         self.panel_cajetin.actualizar_campos_subtitulo(columnas)
+
+        # Restaurar campos visibles del proyecto si se acaba de cargar uno
+        if hasattr(self, "_campos_visibles_proyecto") and self._campos_visibles_proyecto:
+            campos_proy = self._campos_visibles_proyecto
+            for campo, var in self.panel_campos._check_campos.items():
+                var.set(campo in campos_proy)
+            self.panel_campos._actualizar_count()
+            self._campos_visibles_proyecto = []
+
+    def _on_montes_cargados(self):
+        """Actualiza comboboxes de categorización y etiquetas de montes."""
+        self.panel_simbologia.actualizar_campo_categoria_montes()
+        if self.motor.gdf_montes is not None:
+            cols = [c for c in self.motor.gdf_montes.columns
+                    if c.lower() != "geometry"]
+            self.panel_cajetin.actualizar_campos_montes(cols)
 
     def _on_filtro_aplicado(self, indices: list):
         self._poblar_tabla(indices)
 
     def _auto_aplicar_todo(self):
-        """Aplica cajetín, plantilla y simbología al motor antes de generar."""
+        """Aplica cajetín, plantilla, layout y simbología al motor antes de generar."""
         cajetin = self.panel_cajetin.obtener_cajetin()
         plantilla = self.panel_cajetin.obtener_plantilla()
         self.motor.set_cajetin(cajetin)
         self.motor.set_plantilla(plantilla)
+        # Plantilla de layout
+        self.motor.layout_key = self.panel_cajetin.obtener_layout_key()
+        # Calidad PDF (DPI)
+        self.motor.dpi_figura = self.panel_config.dpi_figura
+        self.motor.dpi_guardado = self.panel_config.dpi_guardado
         # Primero aplicar simbología (colores de categorías, montes, capas extra)
         self.panel_simbologia._aplicar()
         # Después sobreescribir alpha con el valor del panel Capas (tiene prioridad)
         self.motor.config_infra["alpha"] = self.panel_capas.transparencia_infra.get()
+        # Rutas de ráster local
+        self.motor.ruta_raster_general = self.panel_config.ruta_raster_general
+        self.motor.ruta_raster_localizacion = self.panel_config.ruta_raster_localizacion
 
     def _get_config(self) -> dict:
         return {
             "formato": self.panel_config.formato.get(),
             "proveedor": self.panel_config.proveedor.get(),
+            "ruta_raster_general": self.panel_config.ruta_raster_general,
+            "ruta_raster_localizacion": self.panel_config.ruta_raster_localizacion,
             "transparencia": self.panel_capas.transparencia.get(),
             "campos": self.panel_campos.obtener_campos_activos(),
             "campo_encabezado": self.panel_campos.obtener_campo_encabezado(),
             "color_infra": self.panel_config.color_infra,
             "salida": self.panel_config.salida.get(),
+            "patron_nombre": self.panel_config.patron_nombre.get(),
             "escala_manual": self.panel_config.escala_manual,
             "tabla": self._tabla,
         }
@@ -313,15 +342,37 @@ class App(tk.Tk):
         p.nombre = os.path.splitext(os.path.basename(ruta))[0]
         p.formato = self.panel_config.formato.get()
         p.proveedor = self.panel_config.proveedor.get()
+        p.ruta_raster_general = self.panel_config.ruta_raster_general
+        p.ruta_raster_localizacion = self.panel_config.ruta_raster_localizacion
+        p.prov_localizacion = self.panel_config._prov_localizacion.get()
         p.escala_manual = self.panel_config.escala_manual
         p.transparencia_montes = self.panel_capas.transparencia.get()
+        p.transparencia_infra = self.panel_capas.transparencia_infra.get()
         p.color_infra = self.panel_config.color_infra
+        p.calidad_pdf = self.panel_config.calidad_pdf
         p.campos_visibles = self.panel_campos.obtener_campos_activos()
+        p.campo_encabezado = self.panel_campos.obtener_campo_encabezado() or ""
         p.carpeta_salida = self.panel_config.salida.get()
+        p.patron_nombre = self.panel_config.patron_nombre.get()
+        p.layout_key = self.panel_cajetin.obtener_layout_key()
         p.cajetin = self.panel_cajetin.obtener_cajetin()
         p.plantilla = self.panel_cajetin.obtener_plantilla()
         p.simbologia = self.motor.gestor_simbologia.to_dict()
         p.capas_extra = self.motor.gestor_capas.to_dict()
+
+        # Generación
+        p.modo_gen = self.panel_gen._modo_gen.get()
+        try:
+            p.rango_desde = int(self.panel_gen._rango_desde.get())
+        except ValueError:
+            p.rango_desde = 1
+        try:
+            p.rango_hasta = int(self.panel_gen._rango_hasta.get())
+        except ValueError:
+            p.rango_hasta = 10
+        p.campo_agrupacion = self.panel_gen._campo_agrupacion.get()
+        p.multipagina = self.panel_gen._multipagina.get()
+        p.incluir_portada = self.panel_gen._incluir_portada.get()
 
         try:
             p.guardar(ruta)
@@ -340,20 +391,88 @@ class App(tk.Tk):
 
         try:
             p = Proyecto.cargar(ruta)
+
+            # ── Configuración general ──
             self.panel_config.formato.set(p.formato)
             self.panel_config.proveedor.set(p.proveedor)
-            self.panel_capas.transparencia.set(p.transparencia_montes)
+            # Ráster local
+            if p.ruta_raster_general:
+                self.panel_config._ruta_raster.set(p.ruta_raster_general)
+                self.panel_config._lbl_raster.configure(
+                    text=os.path.basename(p.ruta_raster_general))
+            if p.ruta_raster_localizacion:
+                self.panel_config._ruta_raster_loc.set(p.ruta_raster_localizacion)
+                self.panel_config._lbl_raster_loc.configure(
+                    text=os.path.basename(p.ruta_raster_localizacion))
+            if hasattr(p, "prov_localizacion") and p.prov_localizacion:
+                self.panel_config._prov_localizacion.set(p.prov_localizacion)
+            # Mostrar/ocultar frames de ráster según proveedor
+            self.panel_config._on_proveedor_changed()
+            self.panel_config._on_prov_loc_changed()
             self.panel_config.salida.set(p.carpeta_salida)
+            if p.patron_nombre:
+                self.panel_config.patron_nombre.set(p.patron_nombre)
+
+            # Escala manual
+            if p.escala_manual:
+                self.panel_config._escala_manual.set(f"{p.escala_manual:,}")
+            else:
+                self.panel_config._escala_manual.set("0 (auto)")
+
+            # Color infraestructura
+            if p.color_infra:
+                self.panel_config._color_infra = p.color_infra
+                self.panel_config._lbl_color.configure(bg=p.color_infra)
+
+            # Calidad PDF
+            if hasattr(p, "calidad_pdf") and p.calidad_pdf:
+                self.panel_config._calidad_pdf.set(p.calidad_pdf)
+
+            # ── Transparencias ──
+            self.panel_capas.transparencia.set(p.transparencia_montes)
+            if hasattr(p, "transparencia_infra"):
+                self.panel_capas.transparencia_infra.set(p.transparencia_infra)
+
+            # ── Campos ──
+            if hasattr(p, "campo_encabezado") and p.campo_encabezado:
+                self.panel_campos._combo_encabezado.set(p.campo_encabezado)
+
+            # campos_visibles se restauran después de cargar el SHP
+            # (se guardan para restaurar cuando se recargue la capa)
+
+            # ── Layout y cajetín ──
+            if p.layout_key:
+                self.panel_cajetin._layout_key.set(p.layout_key)
+                self.motor.layout_key = p.layout_key
             self.panel_cajetin.cargar_desde_proyecto(p.cajetin, p.plantilla)
 
             # Aplicar cajetín y plantilla al motor
             self.motor.set_cajetin(p.cajetin)
             self.motor.set_plantilla(p.plantilla)
 
-            # Simbología
+            # ── Simbología ──
             if p.simbologia:
                 from ..motor.simbologia import GestorSimbologia
                 self.motor.gestor_simbologia = GestorSimbologia.from_dict(p.simbologia)
+
+            # ── Generación ──
+            if hasattr(p, "modo_gen") and p.modo_gen:
+                self.panel_gen._modo_gen.set(p.modo_gen)
+            if hasattr(p, "rango_desde"):
+                self.panel_gen._rango_desde.delete(0, "end")
+                self.panel_gen._rango_desde.insert(0, str(p.rango_desde))
+            if hasattr(p, "rango_hasta"):
+                self.panel_gen._rango_hasta.delete(0, "end")
+                self.panel_gen._rango_hasta.insert(0, str(p.rango_hasta))
+            if hasattr(p, "campo_agrupacion") and p.campo_agrupacion:
+                self.panel_gen._campo_agrupacion.set(p.campo_agrupacion)
+            if hasattr(p, "multipagina"):
+                self.panel_gen._multipagina.set(p.multipagina)
+            if hasattr(p, "incluir_portada"):
+                self.panel_gen._incluir_portada.set(p.incluir_portada)
+
+            # Guardar campos visibles para restaurar tras cargar SHP
+            self._campos_visibles_proyecto = p.campos_visibles or []
 
             self._escribir_log(f"Proyecto cargado: {p.nombre}", "ok")
         except Exception as e:

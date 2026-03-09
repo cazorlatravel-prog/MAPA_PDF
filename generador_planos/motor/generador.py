@@ -20,7 +20,7 @@ class GeneracionCancelada(Exception):
     pass
 
 from .escala import seleccionar_escala, FORMATOS, MARGENES_MM
-from .cartografia import añadir_fondo_cartografico
+from .cartografia import añadir_fondo_cartografico, añadir_fondo_raster_local
 from .maquetacion import MaquetadorPlano, ETIQUETAS_CAMPOS, crear_portada, crear_indice
 from .capas_extra import GestorCapasExtra
 from .simbologia import GestorSimbologia
@@ -93,6 +93,11 @@ class GeneradorPlanos:
         self._cajetin = {}
         self._plantilla = {}
         self.config_infra = {}  # linewidth, alpha, linestyle, marker
+        self.layout_key = "Plantilla 1 (Clásica)"
+        self.dpi_figura = None   # None = default (400)
+        self.dpi_guardado = None  # None = same as dpi_figura
+        self.ruta_raster_general = ""       # Ráster local para fondo de mapa
+        self.ruta_raster_localizacion = ""  # Ráster local para mapa de localización
         self._cancelar = threading.Event()
 
     def cancelar_generacion(self):
@@ -192,6 +197,18 @@ class GeneradorPlanos:
 
     # ── Helpers internos ─────────────────────────────────────────────────
 
+    def _añadir_fondo(self, ax_map, gdf_view, proveedor, xmin, xmax, ymin, ymax):
+        """Añade fondo cartográfico usando ráster local o WMS/tiles."""
+        if self.ruta_raster_general and os.path.isfile(self.ruta_raster_general):
+            try:
+                añadir_fondo_raster_local(ax_map, self.ruta_raster_general,
+                                           xmin, xmax, ymin, ymax)
+                return
+            except Exception:
+                pass  # Fallback a WMS
+        añadir_fondo_cartografico(ax_map, gdf_view, proveedor,
+                                  xmin=xmin, xmax=xmax, ymin=ymin, ymax=ymax)
+
     def _ensure_agg(self):
         if threading.current_thread() is not threading.main_thread():
             matplotlib.use("Agg")
@@ -204,11 +221,29 @@ class GeneradorPlanos:
             montes_clip = self.gdf_montes.cx[xmin:xmax, ymin:ymax]
             if not montes_clip.empty:
                 alpha = transparencia
-                green = int(34 * alpha)
-                montes_clip.plot(
-                    ax=ax_map, facecolor=f"#{green:02x}9922",
-                    edgecolor="#1a5c10", linewidth=0.8, alpha=alpha,
-                )
+                campo_cat_montes = self.config_infra.get("campo_categoria_montes")
+                if campo_cat_montes and campo_cat_montes in montes_clip.columns:
+                    # Colorear por categoría
+                    valores_unicos = montes_clip[campo_cat_montes].astype(str).unique()
+                    for valor in valores_unicos:
+                        simb = self.gestor_simbologia.obtener_simbologia_monte(
+                            campo_cat_montes, valor)
+                        mask = montes_clip[campo_cat_montes].astype(str) == valor
+                        gdf_cat = montes_clip[mask]
+                        if gdf_cat.empty:
+                            continue
+                        gdf_cat.plot(
+                            ax=ax_map, facecolor=simb.facecolor,
+                            edgecolor=simb.color, linewidth=simb.linewidth,
+                            alpha=alpha, zorder=1,
+                        )
+                else:
+                    # Color fijo
+                    green = int(34 * alpha)
+                    montes_clip.plot(
+                        ax=ax_map, facecolor=f"#{green:02x}9922",
+                        edgecolor="#1a5c10", linewidth=0.8, alpha=alpha,
+                    )
 
         # Capas extra
         self.gestor_capas.dibujar_en_mapa(
@@ -225,7 +260,7 @@ class GeneradorPlanos:
         # Infraestructuras seleccionadas (resaltadas)
         ci = self.config_infra
         lw = ci.get("linewidth", 2.5)
-        alpha_infra = ci.get("alpha", 0.35)
+        alpha_infra = max(0.0, min(1.0, ci.get("alpha", 0.35)))
         campo_cat = ci.get("campo_categoria")
 
         geom_type = ""
@@ -308,12 +343,23 @@ class GeneradorPlanos:
 
         # Montes (solo si hay montes visibles en el extent)
         if self.gdf_montes is not None:
+            campo_cat_montes = self.config_infra.get("campo_categoria_montes")
             if xmin is not None:
                 montes_vis = self.gdf_montes.cx[xmin:xmax, ymin:ymax]
-                if not montes_vis.empty:
-                    items.append(("Montes", "#1a5c10", "polygon", "-", None, "#22992244"))
             else:
-                items.append(("Montes", "#1a5c10", "polygon", "-", None, "#22992244"))
+                montes_vis = self.gdf_montes
+            if not montes_vis.empty:
+                if campo_cat_montes and campo_cat_montes in montes_vis.columns:
+                    # Leyenda por categoría de montes
+                    valores_visibles = sorted(montes_vis[campo_cat_montes].astype(str).unique())
+                    for valor in valores_visibles:
+                        simb = self.gestor_simbologia.obtener_simbologia_monte(
+                            campo_cat_montes, valor)
+                        label = str(valor)[:25]
+                        items.append((label, simb.color, "polygon", "-",
+                                      None, simb.facecolor))
+                else:
+                    items.append(("Montes", "#1a5c10", "polygon", "-", None, "#22992244"))
 
         # Capas extra
         items.extend(self.gestor_capas.obtener_items_leyenda(self.gestor_simbologia))
@@ -348,13 +394,69 @@ class GeneradorPlanos:
                           simb.marker, simb.facecolor))
         return items if items else None
 
+    def _construir_items_leyenda_separados(self, gdf_sel, color_infra,
+                                              xmin=None, xmax=None,
+                                              ymin=None, ymax=None):
+        """Construye items de leyenda separados: infraestructuras y montes.
+
+        Usado por Plantilla 2 (panel lateral) donde se muestran en 2 columnas.
+        """
+        items_infra = []
+        items_montes = []
+
+        geom_type = ""
+        for g in gdf_sel.geometry:
+            if g is not None:
+                geom_type = str(g.geom_type).lower()
+                break
+
+        campo_cat = self.config_infra.get("campo_categoria")
+        if campo_cat and campo_cat in gdf_sel.columns:
+            campo_real = campo_cat
+            if self._campo_mapeo and campo_cat in self._campo_mapeo:
+                campo_real = self._campo_mapeo[campo_cat]
+            valores_unicos = sorted(gdf_sel[campo_real].astype(str).unique())
+            for valor in valores_unicos:
+                simb = self.gestor_simbologia.obtener_simbologia_infra(
+                    campo_cat, valor)
+                label = str(valor)[:25]
+                items_infra.append((label, simb.color, geom_type, simb.linestyle,
+                                    simb.marker, simb.facecolor))
+        else:
+            items_infra.append(("Infraestructuras", color_infra, geom_type,
+                                "-", "o", color_infra + "55"))
+
+        # Montes
+        if self.gdf_montes is not None:
+            campo_cat_montes = self.config_infra.get("campo_categoria_montes")
+            if xmin is not None:
+                montes_vis = self.gdf_montes.cx[xmin:xmax, ymin:ymax]
+            else:
+                montes_vis = self.gdf_montes
+            if not montes_vis.empty:
+                if campo_cat_montes and campo_cat_montes in montes_vis.columns:
+                    valores_visibles = sorted(
+                        montes_vis[campo_cat_montes].astype(str).unique())
+                    for valor in valores_visibles:
+                        simb = self.gestor_simbologia.obtener_simbologia_monte(
+                            campo_cat_montes, valor)
+                        label = str(valor)[:25]
+                        items_montes.append((label, simb.color, "polygon", "-",
+                                             None, simb.facecolor))
+                else:
+                    items_montes.append(("Montes", "#1a5c10", "polygon", "-",
+                                         None, "#22992244"))
+
+        return items_infra, items_montes
+
     # ── Generación de plano individual ───────────────────────────────────
 
     def generar_plano(self, idx_fila: int, formato_key: str,
                       proveedor: str, transparencia_montes: float,
                       campos_visibles: list, color_infra: str,
                       salida_dir: str, escala_manual: int = None,
-                      callback_log=None, campo_encabezado: str = None) -> str:
+                      callback_log=None, campo_encabezado: str = None,
+                      patron_nombre: str = None) -> str:
         self._ensure_agg()
 
         def log(msg):
@@ -367,15 +469,14 @@ class GeneradorPlanos:
         escala = seleccionar_escala(geom, formato_key, escala_manual)
         log(f"  Escala elegida: 1:{escala:,}")
 
-        maq = MaquetadorPlano(formato_key, escala)
+        maq = MaquetadorPlano(formato_key, escala, layout_key=self.layout_key, dpi=self.dpi_figura)
         fig, ax_map, ax_info, ax_mini, ax_esc = maq.crear_figura()
 
         xmin, xmax, ymin, ymax = maq.calcular_extension_mapa(geom)
         maq.configurar_mapa_principal(xmin, xmax, ymin, ymax)
 
         gdf_view = self.gdf_infra.iloc[[idx_fila]]
-        añadir_fondo_cartografico(ax_map, gdf_view, proveedor,
-                                  xmin=xmin, xmax=xmax, ymin=ymin, ymax=ymax)
+        self._añadir_fondo(ax_map, gdf_view, proveedor, xmin, xmax, ymin, ymax)
         ax_map.set_xlim(xmin, xmax)
         ax_map.set_ylim(ymin, ymax)
 
@@ -387,40 +488,71 @@ class GeneradorPlanos:
         ax_map.set_xlim(xmin, xmax)
         ax_map.set_ylim(ymin, ymax)
 
-        # Etiquetas
+        # Etiquetas infraestructuras
         campo_etiq = self._cajetin.get("campo_etiqueta", "Nombre_Infra")
         if campo_etiq:
             maq.dibujar_etiquetas_infra(gdf_sel, campo_etiqueta=campo_etiq,
                                          campo_mapeo=self._campo_mapeo)
+        # Etiquetas montes
+        campo_etiq_m = self._cajetin.get("campo_etiqueta_montes", "")
+        if campo_etiq_m and self.gdf_montes is not None:
+            montes_vis = self.gdf_montes.cx[xmin:xmax, ymin:ymax]
+            if not montes_vis.empty:
+                maq.dibujar_etiquetas_montes(montes_vis,
+                                              campo_etiqueta=campo_etiq_m,
+                                              campo_mapeo=self._campo_mapeo)
 
-        # Leyenda (solo infraestructuras visibles en el extent)
-        items_ley = self._construir_items_leyenda(gdf_sel, color_infra,
-                                                   xmin, xmax, ymin, ymax)
-        maq.dibujar_leyenda(items_ley)
+        # Leyenda y paneles según plantilla
+        cx, cy = geom.centroid.x, geom.centroid.y
+
+        if maq.es_lateral:
+            # Plantilla 2: localización + tabla datos + leyenda + cajetín
+            maq.dibujar_mapa_posicion(cx, cy, ruta_raster_loc=self.ruta_raster_localizacion)
+            maq.dibujar_tabla_infra([row], campos_visibles,
+                                     campo_mapeo=self._campo_mapeo)
+            items_inf, items_mon = self._construir_items_leyenda_separados(
+                gdf_sel, color_infra, xmin, xmax, ymin, ymax)
+            maq.dibujar_leyenda_lateral(items_inf, items_mon)
+            maq.dibujar_cajetin_lateral(row, cajetin=self._cajetin,
+                                         plantilla=self._plantilla,
+                                         proveedor=proveedor,
+                                         campo_mapeo=self._campo_mapeo)
+        else:
+            # Plantilla 1: layout clásico
+            items_ley = self._construir_items_leyenda(gdf_sel, color_infra,
+                                                       xmin, xmax, ymin, ymax)
+            maq.dibujar_leyenda(items_ley)
+            maq.dibujar_panel_atributos(row, campos_visibles,
+                                         campo_mapeo=self._campo_mapeo,
+                                         campo_encabezado=campo_encabezado)
+            maq.dibujar_mapa_posicion(cx, cy, ruta_raster_loc=self.ruta_raster_localizacion)
+            items_cat = self._construir_items_categoria(gdf_sel,
+                                                         xmin, xmax, ymin, ymax)
+            maq.dibujar_barra_escala(proveedor, cx_utm=cx, cy_utm=cy,
+                                      cajetin=self._cajetin,
+                                      items_categoria=items_cat)
+            maq.dibujar_cajetin(self._cajetin)
 
         maq.dibujar_grid_utm(xmin, xmax, ymin, ymax)
-        maq.dibujar_panel_atributos(row, campos_visibles,
-                                     campo_mapeo=self._campo_mapeo,
-                                     campo_encabezado=campo_encabezado)
-
-        cx, cy = geom.centroid.x, geom.centroid.y
-        maq.dibujar_mapa_posicion(cx, cy)
-        items_cat = self._construir_items_categoria(gdf_sel,
-                                                     xmin, xmax, ymin, ymax)
-        maq.dibujar_barra_escala(proveedor, cx_utm=cx, cy_utm=cy,
-                                  cajetin=self._cajetin,
-                                  items_categoria=items_cat)
+        maq.dibujar_escala_grafica_mapa()
         maq.dibujar_norte_en_mapa()
         maq.dibujar_cabecera(row, cajetin=self._cajetin, plantilla=self._plantilla)
-        maq.dibujar_cajetin(self._cajetin)
         maq.dibujar_marcos(plantilla=self._plantilla, cajetin=self._cajetin)
 
         nombre_infra = str(row.get("Nombre_Infra", f"infra_{idx_fila:04d}"))
-        nombre_infra = "".join(c for c in nombre_infra if c.isalnum() or c in "_ -")[:40]
-        nombre_arch = f"plano_{idx_fila:04d}_{nombre_infra}.pdf"
+        nombre_infra_safe = "".join(c for c in nombre_infra if c.isalnum() or c in "_ -")[:40]
+
+        if patron_nombre:
+            nombre_base = patron_nombre.format(
+                num=f"{idx_fila:04d}", nombre=nombre_infra_safe,
+                campo=nombre_infra_safe)
+            nombre_base = "".join(c for c in nombre_base if c.isalnum() or c in "_ -.")[:80]
+        else:
+            nombre_base = f"plano_{idx_fila:04d}_{nombre_infra_safe}"
+        nombre_arch = f"{nombre_base}.pdf"
         ruta_out = os.path.join(salida_dir, nombre_arch)
 
-        maq.guardar(ruta_out)
+        maq.guardar(ruta_out, dpi_save=self.dpi_guardado)
         log(f"  \u2713 Guardado: {nombre_arch}")
         return ruta_out
 
@@ -433,7 +565,8 @@ class GeneradorPlanos:
                                 salida_dir: str, num_plano: int = 1,
                                 escala_manual: int = None,
                                 callback_log=None,
-                                campo_encabezado: str = None) -> str:
+                                campo_encabezado: str = None,
+                                patron_nombre: str = None) -> str:
         self._ensure_agg()
 
         def log(msg):
@@ -447,14 +580,13 @@ class GeneradorPlanos:
         escala = seleccionar_escala(geom_union, formato_key, escala_manual)
         log(f"  Escala elegida: 1:{escala:,} ({len(indices)} infraestructuras)")
 
-        maq = MaquetadorPlano(formato_key, escala)
+        maq = MaquetadorPlano(formato_key, escala, layout_key=self.layout_key, dpi=self.dpi_figura)
         fig, ax_map, ax_info, ax_mini, ax_esc = maq.crear_figura()
 
         xmin, xmax, ymin, ymax = maq.calcular_extension_mapa(geom_union)
         maq.configurar_mapa_principal(xmin, xmax, ymin, ymax)
 
-        añadir_fondo_cartografico(ax_map, gdf_grupo, proveedor,
-                                  xmin=xmin, xmax=xmax, ymin=ymin, ymax=ymax)
+        self._añadir_fondo(ax_map, gdf_grupo, proveedor, xmin, xmax, ymin, ymax)
         ax_map.set_xlim(xmin, xmax)
         ax_map.set_ylim(ymin, ymax)
 
@@ -465,31 +597,53 @@ class GeneradorPlanos:
         ax_map.set_xlim(xmin, xmax)
         ax_map.set_ylim(ymin, ymax)
 
-        # Etiquetas
+        # Etiquetas infraestructuras
         campo_etiq = self._cajetin.get("campo_etiqueta", "Nombre_Infra")
         if campo_etiq:
             maq.dibujar_etiquetas_infra(gdf_grupo, campo_etiqueta=campo_etiq,
                                          campo_mapeo=self._campo_mapeo)
+        # Etiquetas montes
+        campo_etiq_m = self._cajetin.get("campo_etiqueta_montes", "")
+        if campo_etiq_m and self.gdf_montes is not None:
+            montes_vis = self.gdf_montes.cx[xmin:xmax, ymin:ymax]
+            if not montes_vis.empty:
+                maq.dibujar_etiquetas_montes(montes_vis,
+                                              campo_etiqueta=campo_etiq_m,
+                                              campo_mapeo=self._campo_mapeo)
 
-        # Leyenda con estadísticas (solo infraestructuras visibles en el extent)
-        items_ley = self._construir_items_leyenda(gdf_grupo, color_infra,
-                                                   xmin, xmax, ymin, ymax)
-        stats = _calcular_stats_grupo(gdf_grupo)
-        maq.dibujar_leyenda(items_ley, stats_resumen=stats)
+        # Leyenda y paneles según plantilla
+        cx, cy = geom_union.centroid.x, geom_union.centroid.y
+
+        if maq.es_lateral:
+            maq.dibujar_mapa_posicion(cx, cy, ruta_raster_loc=self.ruta_raster_localizacion)
+            maq.dibujar_tabla_infra(rows, campos_visibles,
+                                     campo_mapeo=self._campo_mapeo)
+            items_inf, items_mon = self._construir_items_leyenda_separados(
+                gdf_grupo, color_infra, xmin, xmax, ymin, ymax)
+            maq.dibujar_leyenda_lateral(items_inf, items_mon)
+            maq.dibujar_cajetin_lateral(rows[0], cajetin=self._cajetin,
+                                         plantilla=self._plantilla,
+                                         num_plano=num_plano,
+                                         proveedor=proveedor,
+                                         campo_mapeo=self._campo_mapeo)
+        else:
+            items_ley = self._construir_items_leyenda(gdf_grupo, color_infra,
+                                                       xmin, xmax, ymin, ymax)
+            stats = _calcular_stats_grupo(gdf_grupo)
+            maq.dibujar_leyenda(items_ley, stats_resumen=stats)
+            maq.dibujar_panel_atributos_multi(rows, campos_visibles,
+                                               campo_mapeo=self._campo_mapeo,
+                                               campo_encabezado=campo_encabezado)
+            maq.dibujar_mapa_posicion(cx, cy, ruta_raster_loc=self.ruta_raster_localizacion)
+            items_cat = self._construir_items_categoria(gdf_grupo,
+                                                         xmin, xmax, ymin, ymax)
+            maq.dibujar_barra_escala(proveedor, cx_utm=cx, cy_utm=cy,
+                                      cajetin=self._cajetin,
+                                      items_categoria=items_cat)
+            maq.dibujar_cajetin(self._cajetin)
 
         maq.dibujar_grid_utm(xmin, xmax, ymin, ymax)
-
-        maq.dibujar_panel_atributos_multi(rows, campos_visibles,
-                                           campo_mapeo=self._campo_mapeo,
-                                           campo_encabezado=campo_encabezado)
-
-        cx, cy = geom_union.centroid.x, geom_union.centroid.y
-        maq.dibujar_mapa_posicion(cx, cy)
-        items_cat = self._construir_items_categoria(gdf_grupo,
-                                                     xmin, xmax, ymin, ymax)
-        maq.dibujar_barra_escala(proveedor, cx_utm=cx, cy_utm=cy,
-                                  cajetin=self._cajetin,
-                                  items_categoria=items_cat)
+        maq.dibujar_escala_grafica_mapa()
         maq.dibujar_norte_en_mapa()
 
         etiq_campo = ETIQUETAS_CAMPOS.get(campo_grupo, campo_grupo)
@@ -497,15 +651,20 @@ class GeneradorPlanos:
         maq.dibujar_cabecera(rows[0], titulo_grupo=titulo_grupo,
                               num_plano_override=num_plano,
                               cajetin=self._cajetin, plantilla=self._plantilla)
-
-        maq.dibujar_cajetin(self._cajetin)
         maq.dibujar_marcos(plantilla=self._plantilla, cajetin=self._cajetin)
 
         nombre_safe = "".join(c for c in valor_grupo if c.isalnum() or c in "_ -")[:40]
-        nombre_arch = f"plano_grupo_{num_plano:04d}_{nombre_safe}.pdf"
+        if patron_nombre:
+            nombre_base = patron_nombre.format(
+                num=f"{num_plano:04d}", nombre=nombre_safe,
+                campo=nombre_safe)
+            nombre_base = "".join(c for c in nombre_base if c.isalnum() or c in "_ -.")[:80]
+        else:
+            nombre_base = f"plano_grupo_{num_plano:04d}_{nombre_safe}"
+        nombre_arch = f"{nombre_base}.pdf"
         ruta_out = os.path.join(salida_dir, nombre_arch)
 
-        maq.guardar(ruta_out)
+        maq.guardar(ruta_out, dpi_save=self.dpi_guardado)
         log(f"  \u2713 Guardado: {nombre_arch}")
         return ruta_out
 
@@ -515,7 +674,8 @@ class GeneradorPlanos:
                       transparencia: float, campos: list, color_infra: str,
                       salida_dir: str, escala_manual: int = None,
                       callback_log=None, callback_progreso=None,
-                      campo_encabezado: str = None) -> list:
+                      campo_encabezado: str = None,
+                      patron_nombre: str = None) -> list:
         rutas = []
         total = len(indices)
         for i, idx in enumerate(indices):
@@ -531,6 +691,7 @@ class GeneradorPlanos:
                     salida_dir=salida_dir, escala_manual=escala_manual,
                     callback_log=callback_log,
                     campo_encabezado=campo_encabezado,
+                    patron_nombre=patron_nombre,
                 )
                 rutas.append(ruta)
             except GeneracionCancelada:
@@ -552,7 +713,8 @@ class GeneradorPlanos:
                                 callback_log=None,
                                 callback_progreso=None,
                                 indices_filtro: dict = None,
-                                campo_encabezado: str = None) -> list:
+                                campo_encabezado: str = None,
+                                patron_nombre: str = None) -> list:
         rutas = []
         total = len(valores)
         for i, valor in enumerate(valores):
@@ -580,6 +742,7 @@ class GeneradorPlanos:
                     escala_manual=escala_manual,
                     callback_log=callback_log,
                     campo_encabezado=campo_encabezado,
+                    patron_nombre=patron_nombre,
                 )
                 rutas.append(ruta)
             except GeneracionCancelada:
@@ -600,7 +763,8 @@ class GeneradorPlanos:
                                  incluir_portada: bool = False,
                                  callback_log=None,
                                  callback_progreso=None,
-                                 campo_encabezado: str = None) -> str:
+                                 campo_encabezado: str = None,
+                                 patron_nombre: str = None) -> str:
         from matplotlib.backends.backend_pdf import PdfPages
 
         self._ensure_agg()
@@ -622,7 +786,7 @@ class GeneradorPlanos:
                     datos_extra=datos,
                     cajetin=self._cajetin, plantilla=self._plantilla,
                 )
-                pdf.savefig(fig_portada, dpi=300, facecolor="white")
+                pdf.savefig(fig_portada, dpi=self.dpi_guardado or 300, facecolor="white")
                 plt.close(fig_portada)
                 if callback_log:
                     callback_log("  \u2713 Portada a\u00f1adida")
@@ -635,7 +799,7 @@ class GeneradorPlanos:
                     items_idx.append((i + 1, nombre, ""))
                 fig_indice = crear_indice(formato_key, items_idx,
                                            plantilla=self._plantilla)
-                pdf.savefig(fig_indice, dpi=300, facecolor="white")
+                pdf.savefig(fig_indice, dpi=self.dpi_guardado or 300, facecolor="white")
                 plt.close(fig_indice)
                 if callback_log:
                     callback_log("  \u2713 \u00cdndice a\u00f1adido")
@@ -651,16 +815,15 @@ class GeneradorPlanos:
                     geom = row.geometry
 
                     escala = seleccionar_escala(geom, formato_key, escala_manual)
-                    maq = MaquetadorPlano(formato_key, escala)
+                    maq = MaquetadorPlano(formato_key, escala, layout_key=self.layout_key, dpi=self.dpi_figura)
                     fig, ax_map, ax_info, ax_mini, ax_esc = maq.crear_figura()
 
                     xmin, xmax, ymin, ymax = maq.calcular_extension_mapa(geom)
                     maq.configurar_mapa_principal(xmin, xmax, ymin, ymax)
 
                     gdf_view = self.gdf_infra.iloc[[idx]]
-                    añadir_fondo_cartografico(ax_map, gdf_view, proveedor,
-                                              xmin=xmin, xmax=xmax,
-                                              ymin=ymin, ymax=ymax)
+                    self._añadir_fondo(ax_map, gdf_view, proveedor,
+                                       xmin, xmax, ymin, ymax)
                     ax_map.set_xlim(xmin, xmax)
                     ax_map.set_ylim(ymin, ymax)
 
@@ -672,35 +835,56 @@ class GeneradorPlanos:
                     ax_map.set_xlim(xmin, xmax)
                     ax_map.set_ylim(ymin, ymax)
 
-                    # Etiquetas
+                    # Etiquetas infraestructuras
                     campo_etiq = self._cajetin.get("campo_etiqueta", "Nombre_Infra")
                     if campo_etiq:
                         maq.dibujar_etiquetas_infra(
                             gdf_sel, campo_etiqueta=campo_etiq,
                             campo_mapeo=self._campo_mapeo)
+                    # Etiquetas montes
+                    campo_etiq_m = self._cajetin.get("campo_etiqueta_montes", "")
+                    if campo_etiq_m and self.gdf_montes is not None:
+                        montes_vis = self.gdf_montes.cx[xmin:xmax, ymin:ymax]
+                        if not montes_vis.empty:
+                            maq.dibujar_etiquetas_montes(
+                                montes_vis, campo_etiqueta=campo_etiq_m,
+                                campo_mapeo=self._campo_mapeo)
 
-                    # Leyenda
-                    items_ley = self._construir_items_leyenda(gdf_sel, color_infra)
-                    maq.dibujar_leyenda(items_ley)
+                    # Leyenda y paneles según plantilla
+                    cx, cy = geom.centroid.x, geom.centroid.y
+
+                    if maq.es_lateral:
+                        maq.dibujar_mapa_posicion(cx, cy, ruta_raster_loc=self.ruta_raster_localizacion)
+                        maq.dibujar_tabla_infra([row], campos,
+                                                 campo_mapeo=self._campo_mapeo)
+                        items_inf, items_mon = self._construir_items_leyenda_separados(
+                            gdf_sel, color_infra, xmin, xmax, ymin, ymax)
+                        maq.dibujar_leyenda_lateral(items_inf, items_mon)
+                        maq.dibujar_cajetin_lateral(row, cajetin=self._cajetin,
+                                                     plantilla=self._plantilla,
+                                                     proveedor=proveedor,
+                                                     campo_mapeo=self._campo_mapeo)
+                    else:
+                        items_ley = self._construir_items_leyenda(gdf_sel, color_infra)
+                        maq.dibujar_leyenda(items_ley)
+                        maq.dibujar_panel_atributos(row, campos,
+                                                     campo_mapeo=self._campo_mapeo,
+                                                     campo_encabezado=campo_encabezado)
+                        maq.dibujar_mapa_posicion(cx, cy, ruta_raster_loc=self.ruta_raster_localizacion)
+                        items_cat = self._construir_items_categoria(gdf_sel)
+                        maq.dibujar_barra_escala(proveedor, cx_utm=cx, cy_utm=cy,
+                                                  cajetin=self._cajetin,
+                                                  items_categoria=items_cat)
+                        maq.dibujar_cajetin(self._cajetin)
 
                     maq.dibujar_grid_utm(xmin, xmax, ymin, ymax)
-                    maq.dibujar_panel_atributos(row, campos,
-                                                 campo_mapeo=self._campo_mapeo,
-                                                 campo_encabezado=campo_encabezado)
-
-                    cx, cy = geom.centroid.x, geom.centroid.y
-                    maq.dibujar_mapa_posicion(cx, cy)
-                    items_cat = self._construir_items_categoria(gdf_sel)
-                    maq.dibujar_barra_escala(proveedor, cx_utm=cx, cy_utm=cy,
-                                              cajetin=self._cajetin,
-                                              items_categoria=items_cat)
+                    maq.dibujar_escala_grafica_mapa()
                     maq.dibujar_norte_en_mapa()
                     maq.dibujar_cabecera(row, cajetin=self._cajetin,
                                           plantilla=self._plantilla)
-                    maq.dibujar_cajetin(self._cajetin)
                     maq.dibujar_marcos(plantilla=self._plantilla, cajetin=self._cajetin)
 
-                    pdf.savefig(fig, dpi=300, facecolor="white")
+                    pdf.savefig(fig, dpi=self.dpi_guardado or 300, facecolor="white")
                     plt.close(fig)
 
                     if callback_log:

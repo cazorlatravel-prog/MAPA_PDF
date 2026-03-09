@@ -8,16 +8,16 @@ from tkinter import ttk
 # ── Paleta de colores ───────────────────────────────────────────────────
 COLOR_FONDO_APP  = "#1C2333"
 COLOR_PANEL      = "#242D40"
-COLOR_ACENTO     = "#2ECC71"
-COLOR_ACENTO2    = "#27AE60"
+COLOR_ACENTO     = "#007932"
+COLOR_ACENTO2    = "#368f3f"
 COLOR_TEXTO      = "#ECF0F1"
 COLOR_TEXTO_GRIS = "#95A5A6"
 COLOR_BORDE      = "#2C3E50"
 COLOR_ENTRY      = "#1A2636"   # fondo campos de texto (más oscuro → más contraste)
-COLOR_HOVER      = "#2ECC7120"
+COLOR_HOVER      = "#00793220"
 COLOR_ERROR      = "#E74C3C"
 COLOR_ADVERTENCIA = "#F39C12"
-COLOR_EXITO      = "#27AE60"
+COLOR_EXITO      = "#368f3f"
 
 # ── Fuentes ─────────────────────────────────────────────────────────────
 FONT_TITULO = ("Helvetica", 22, "bold")

@@ -16,8 +16,22 @@ import math
 from datetime import date
 
 import numpy as np
+import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
+import matplotlib.font_manager as fm
+
+# ── Tipografía corporativa para PDFs: Noto Sans HK ──
+_FONT_CORP = "Noto Sans HK"
+for _fpath in ["/root/.fonts/NotoSansHK-Variable.ttf",
+               "/usr/share/fonts/truetype/noto/NotoSansHK-Regular.ttf"]:
+    try:
+        fm.fontManager.addfont(_fpath)
+    except Exception:
+        pass
+if any(f.name == _FONT_CORP for f in fm.fontManager.ttflist):
+    matplotlib.rcParams["font.family"] = "sans-serif"
+    matplotlib.rcParams["font.sans-serif"] = [_FONT_CORP, "DejaVu Sans"]
 from matplotlib.patches import FancyBboxPatch, Rectangle
 from matplotlib.lines import Line2D
 from .escala import (
@@ -41,7 +55,31 @@ ETIQUETAS_CAMPOS = {
     "Tipo_Trabajos": "Tipo de Trabajos",
 }
 
-DPI = 400  # calidad de impresión alta
+DPI_DEFAULT = 400  # calidad de impresión alta
+
+
+def _fmt_valor(valor_raw):
+    """Formatea un valor para mostrar: floats a 2 decimales."""
+    if valor_raw is None:
+        return "\u2014"
+    try:
+        f = float(valor_raw)
+        if f != f:  # NaN
+            return "\u2014"
+        if f == int(f) and abs(f) < 1e9:
+            return str(int(f))
+        return f"{f:.2f}"
+    except (ValueError, TypeError):
+        s = str(valor_raw)
+        return "\u2014" if s == "nan" else s
+
+# Presets de calidad: (DPI figura, DPI guardado)
+CALIDADES_PDF = {
+    "Alta (400 DPI)": (400, 300),
+    "Media (300 DPI)": (300, 300),
+    "Media (200 DPI)": (200, 150),
+    "Baja (100 DPI)": (100, 100),
+}
 _CABECERA_MM = 8
 
 def _etiqueta_campo(campo):
@@ -56,22 +94,35 @@ def _etiqueta_campo(campo):
 class MaquetadorPlano:
     """Crea la maquetación completa del plano cartográfico (layout v4)."""
 
-    def __init__(self, formato_key: str, escala: int):
+    def __init__(self, formato_key: str, escala: int, layout_key: str = None,
+                 dpi: int = None):
         self.formato_key = formato_key
         self.fmt_mm = FORMATOS[formato_key]
         self.escala = escala
+        self.layout_key = layout_key or "Plantilla 1 (Clásica)"
+        self.dpi = dpi or DPI_DEFAULT
         self.fig = None
         self.ax_map = None
-        self.ax_info = None   # datos infraestructura (centro)
+        self.ax_info = None   # datos infraestructura (centro) / leyenda (lateral)
         self.ax_mini = None   # mapa localización (derecha)
         self.ax_esc = None    # cajetín proyecto + escala + norte (izquierda)
+        self.ax_tabla = None  # tabla de datos infraestructura (lateral)
+
+    @property
+    def es_lateral(self):
+        return self.layout_key == "Plantilla 2 (Panel lateral)"
 
     # ── Creación de la figura ──────────────────────────────────────────
 
     def crear_figura(self):
+        if self.es_lateral:
+            return self._crear_figura_lateral()
+        return self._crear_figura_clasica()
+
+    def _crear_figura_clasica(self):
         fig_w = self.fmt_mm[0] / 25.4
         fig_h = self.fmt_mm[1] / 25.4
-        self.fig = plt.figure(figsize=(fig_w, fig_h), dpi=DPI,
+        self.fig = plt.figure(figsize=(fig_w, fig_h), dpi=self.dpi,
                               facecolor="white")
 
         izq = MARGENES_MM["izq"] / self.fmt_mm[0]
@@ -101,14 +152,68 @@ class MaquetadorPlano:
 
         return self.fig, self.ax_map, self.ax_info, self.ax_mini, self.ax_esc
 
+    def _crear_figura_lateral(self):
+        """Plantilla 2: Mapa a la izquierda, panel lateral derecho.
+
+        Panel lateral (de arriba a abajo):
+          1. Mapa de localización
+          2. Tabla de datos de infraestructuras
+          3. Leyenda (Tipo Infraestructura + Montes Públicos)
+          4. Cajetín (organización, proyecto, escala, autores, fecha)
+        """
+        fig_w = self.fmt_mm[0] / 25.4
+        fig_h = self.fmt_mm[1] / 25.4
+        self.fig = plt.figure(figsize=(fig_w, fig_h), dpi=self.dpi,
+                              facecolor="white")
+
+        izq = MARGENES_MM["izq"] / self.fmt_mm[0]
+        der = MARGENES_MM["der"] / self.fmt_mm[0]
+        sup = MARGENES_MM["sup"] / self.fmt_mm[1]
+        inf = MARGENES_MM["inf"] / self.fmt_mm[1]
+        h_cab = _CABECERA_MM / self.fmt_mm[1]
+
+        gs_top = 1 - sup - h_cab - 0.005
+
+        # Grid principal: 1 fila x 2 columnas
+        gs = gridspec.GridSpec(
+            1, 2, figure=self.fig,
+            left=izq, right=1 - der,
+            top=gs_top, bottom=inf,
+            width_ratios=[0.72, 0.28],
+            hspace=0.02, wspace=0.008,
+        )
+
+        # Mapa principal: columna izquierda
+        self.ax_map = self.fig.add_subplot(gs[0, 0])
+
+        # Panel lateral derecho: subdividido en 4 filas
+        # Minimapa (grande) | Tabla datos (compacta) | Leyenda | Cajetín
+        gs_lateral = gridspec.GridSpecFromSubplotSpec(
+            4, 1, subplot_spec=gs[0, 1],
+            height_ratios=[0.40, 0.06, 0.16, 0.38],
+            hspace=0.01,
+        )
+
+        self.ax_mini = self.fig.add_subplot(gs_lateral[0, 0])    # minimapa
+        self.ax_tabla = self.fig.add_subplot(gs_lateral[1, 0])   # tabla datos
+        self.ax_info = self.fig.add_subplot(gs_lateral[2, 0])    # leyenda
+        self.ax_esc = self.fig.add_subplot(gs_lateral[3, 0])     # cajetín
+
+        return self.fig, self.ax_map, self.ax_info, self.ax_mini, self.ax_esc
+
     # ── Extensión del mapa ─────────────────────────────────────────────
 
     def calcular_extension_mapa(self, geom):
         cx, cy = geom.centroid.x, geom.centroid.y
         ancho_util = self.fmt_mm[0] - MARGENES_MM["izq"] - MARGENES_MM["der"]
         alto_util = self.fmt_mm[1] - MARGENES_MM["sup"] - MARGENES_MM["inf"]
-        ancho_mm = ancho_util * RATIO_MAPA_ANCHO
-        alto_mm = (alto_util - _CABECERA_MM) * RATIO_MAPA_ALTO
+        if self.es_lateral:
+            # Plantilla 2: mapa ocupa 72% del ancho y toda la altura
+            ancho_mm = ancho_util * 0.72
+            alto_mm = (alto_util - _CABECERA_MM)
+        else:
+            ancho_mm = ancho_util * RATIO_MAPA_ANCHO
+            alto_mm = (alto_util - _CABECERA_MM) * RATIO_MAPA_ALTO
         semi_x = (ancho_mm / 1000.0) * self.escala / 2
         semi_y = (alto_mm / 1000.0) * self.escala / 2
         return cx - semi_x, cx + semi_x, cy - semi_y, cy + semi_y
@@ -126,6 +231,14 @@ class MaquetadorPlano:
             sp.set_color("#2C3E50")
 
     # ── Grid UTM ──────────────────────────────────────────────────────
+
+    @staticmethod
+    def _formato_coord(valor):
+        """Formatea coordenada UTM con punto como separador de miles (convención española).
+        Ej: 508000 → '508.000', 4217500 → '4.217.500'
+        """
+        s = f"{int(valor):,}".replace(",", ".")
+        return s
 
     def dibujar_grid_utm(self, xmin, xmax, ymin, ymax):
         intervalo = INTERVALOS_GRID.get(self.escala, 1000)
@@ -148,32 +261,26 @@ class MaquetadorPlano:
         xs_filt = [x for x in xs if x > xmin + margen_x and x < xmax - margen_x]
         ys_filt = [y for y in ys if y > ymin + margen_y and y < ymax - margen_y]
 
+        # Formato español con punto de miles: 508.000, 4.217.500
         ax.set_xticks(xs_filt)
         ax.set_yticks(ys_filt)
-        ax.set_xticklabels([f"{int(x)}" for x in xs_filt], fontsize=4,
-                           color="#2C3E50", rotation=30, ha="left")
-        ax.set_yticklabels([f"{int(y)}" for y in ys_filt], fontsize=4.5,
-                           color="#2C3E50")
-        # Etiquetas en los cuatro lados del mapa
+        ax.set_xticklabels([self._formato_coord(x) for x in xs_filt],
+                           fontsize=4.5, color="#2C3E50", rotation=0, ha="center")
+        ax.set_yticklabels([self._formato_coord(y) for y in ys_filt],
+                           fontsize=4.5, color="#2C3E50")
+
+        # Etiquetas en los cuatro lados del mapa, fuera del marco
         ax.tick_params(which="major", length=4, width=0.6, color="#2C3E50",
                        direction="out", labelbottom=True, labeltop=True,
-                       labelleft=True, labelright=True, pad=1)
-        # Etiquetas inferiores sin rotación y tamaño reducido para no solapar cajetines
-        ax.tick_params(axis="x", which="major", labelsize=3.5)
+                       labelleft=True, labelright=True, pad=2)
 
-        # Líneas de cuadrícula completas (estilo cartográfico profesional)
+        # Líneas de cuadrícula continuas (estilo cartográfico profesional)
         for x in xs:
-            ax.axvline(x, color="#2C3E50", linewidth=0.15, alpha=0.4,
-                        linestyle=(0, (8, 6)), zorder=3)
+            ax.axvline(x, color="#2C3E50", linewidth=0.25, alpha=0.45,
+                       zorder=3)
         for y in ys:
-            ax.axhline(y, color="#2C3E50", linewidth=0.15, alpha=0.4,
-                        linestyle=(0, (8, 6)), zorder=3)
-
-        # Cruces de intersección reforzadas
-        for x in xs:
-            for y in ys:
-                ax.plot(x, y, "+", color="#2C3E50", markersize=4,
-                        markeredgewidth=0.5, alpha=0.5, zorder=4)
+            ax.axhline(y, color="#2C3E50", linewidth=0.25, alpha=0.45,
+                       zorder=3)
 
         # Indicación del sistema de referencia (esquina inferior derecha del mapa)
         ax.text(0.995, 0.005, "ETRS89 / UTM zona 30N · EPSG:25830",
@@ -181,6 +288,60 @@ class MaquetadorPlano:
                 transform=ax.transAxes, zorder=12,
                 bbox=dict(boxstyle="round,pad=0.12", facecolor="white",
                           edgecolor="#BDC3C7", linewidth=0.3, alpha=0.85))
+
+    # ── Escala gráfica sobre el mapa ─────────────────────────────────
+
+    def dibujar_escala_grafica_mapa(self):
+        """Dibuja una barra de escala discreta en la esquina inferior izquierda del mapa."""
+        ax = self.ax_map
+        barra_m = BARRA_ESCALA_M.get(self.escala, 1000)
+
+        xlim = ax.get_xlim()
+        ylim = ax.get_ylim()
+        rango_x = xlim[1] - xlim[0]
+        rango_y = ylim[1] - ylim[0]
+
+        # Posición: esquina inferior izquierda con margen
+        x0 = xlim[0] + rango_x * 0.02
+        y0 = ylim[0] + rango_y * 0.025
+        bar_h = rango_y * 0.006  # altura de la barra
+
+        n_seg = 4
+        seg_m = barra_m / n_seg
+        colores = ["#1C2333", "white"]
+
+        # Segmentos alternados
+        for i in range(n_seg):
+            x_seg = x0 + i * seg_m
+            rect = Rectangle((x_seg, y0), seg_m, bar_h,
+                              facecolor=colores[i % 2], edgecolor="#1C2333",
+                              linewidth=0.4, zorder=11)
+            ax.add_patch(rect)
+
+        # Etiqueta: "0" al inicio y distancia total al final
+        fsz = 3.5
+        y_txt = y0 + bar_h + rango_y * 0.004
+        _txt_bbox = dict(boxstyle="round,pad=0.08", facecolor="white",
+                         edgecolor="none", alpha=0.6)
+        ax.text(x0, y_txt, "0", ha="center", va="bottom",
+                fontsize=fsz, color="#1C2333", zorder=12, bbox=_txt_bbox)
+
+        # Etiqueta final con unidad
+        if barra_m >= 1000:
+            label_fin = f"{barra_m // 1000} km"
+        else:
+            label_fin = f"{barra_m} m"
+        ax.text(x0 + barra_m, y_txt, label_fin, ha="center", va="bottom",
+                fontsize=fsz, color="#1C2333", zorder=12, bbox=_txt_bbox)
+
+        # Marca intermedia
+        mid_m = barra_m // 2
+        if mid_m >= 1000:
+            label_mid = f"{mid_m // 1000}"
+        else:
+            label_mid = str(mid_m)
+        ax.text(x0 + mid_m, y_txt, label_mid, ha="center", va="bottom",
+                fontsize=fsz, color="#1C2333", zorder=12, bbox=_txt_bbox)
 
     # ── Etiquetas ──────────────────────────────────────────────────────
 
@@ -195,6 +356,7 @@ class MaquetadorPlano:
         offset_y = (ylim[1] - ylim[0]) * 0.012
 
         textos_anotados = []  # para adjustText
+        etiquetas_vistas = set()  # evitar duplicados
 
         for _, row in gdf_sel.iterrows():
             geom = row.geometry
@@ -205,6 +367,11 @@ class MaquetadorPlano:
                 continue
             if len(texto) > 25:
                 texto = texto[:24] + "\u2026"
+
+            # Saltar si ya se dibujó una etiqueta con este mismo texto
+            if texto in etiquetas_vistas:
+                continue
+            etiquetas_vistas.add(texto)
 
             # Para líneas: punto medio real de la línea
             gt = str(geom.geom_type).lower()
@@ -232,13 +399,58 @@ class MaquetadorPlano:
                 from adjustText import adjust_text
                 adjust_text(textos_anotados, ax=self.ax_map,
                             arrowprops=dict(arrowstyle="-", color="#999999",
-                                            lw=0.4),
-                            expand=(1.2, 1.4),
-                            force_text=(0.5, 0.8),
-                            only_move={"text": "xy"},
-                            ensure_inside_axes=True)
-            except ImportError:
-                pass  # Si adjustText no está instalado, se queda sin ajustar
+                                            lw=0.4))
+            except Exception:
+                pass  # Si adjustText falla o no está instalado, continuar
+
+    # ── Etiquetas de montes ─────────────────────────────────────────────
+
+    def dibujar_etiquetas_montes(self, gdf_montes, campo_etiqueta="Monte",
+                                  campo_mapeo=None):
+        """Etiquetas para la capa de montes: rosa oscuro, grande, negrita."""
+        campo_real = campo_etiqueta
+        if campo_mapeo and campo_etiqueta in campo_mapeo:
+            campo_real = campo_mapeo[campo_etiqueta]
+
+        ylim = self.ax_map.get_ylim()
+        offset_y = (ylim[1] - ylim[0]) * 0.015
+
+        textos_anotados = []
+        etiquetas_vistas = set()
+
+        for _, row in gdf_montes.iterrows():
+            geom = row.geometry
+            if geom is None:
+                continue
+            texto = str(row.get(campo_real, ""))
+            if not texto or texto == "nan":
+                continue
+            if len(texto) > 30:
+                texto = texto[:29] + "\u2026"
+
+            if texto in etiquetas_vistas:
+                continue
+            etiquetas_vistas.add(texto)
+
+            cx, cy = geom.centroid.x, geom.centroid.y
+
+            txt = self.ax_map.annotate(
+                texto, xy=(cx, cy + offset_y), fontsize=6.5,
+                fontweight="bold", fontstyle="italic",
+                color="#C2185B", ha="center", va="bottom", zorder=7,
+                bbox=dict(boxstyle="round,pad=0.2", facecolor="white",
+                          edgecolor="#C2185B", linewidth=0.5, alpha=0.9),
+            )
+            textos_anotados.append(txt)
+
+        if len(textos_anotados) > 1:
+            try:
+                from adjustText import adjust_text
+                adjust_text(textos_anotados, ax=self.ax_map,
+                            arrowprops=dict(arrowstyle="-", color="#C2185B",
+                                            lw=0.4))
+            except Exception:
+                pass
 
     # ── Vértices ───────────────────────────────────────────────────────
 
@@ -434,9 +646,7 @@ class MaquetadorPlano:
                 for fi, campo in enumerate(campos_mostrar):
                     fy = fields_top - fi * field_h
                     campo_real = _resolver_campo(campo)
-                    valor = str(r.get(campo_real, "\u2014"))
-                    if valor == "nan":
-                        valor = "\u2014"
+                    valor = _fmt_valor(r.get(campo_real, None))
                     etiq = _etiqueta_campo(campo)
                     if len(etiq) > max_label:
                         etiq = etiq[:max_label - 1] + "."
@@ -480,9 +690,106 @@ class MaquetadorPlano:
                     ha="center", va="bottom", fontsize=3.5, color="#555",
                     style="italic", transform=ax.transAxes)
 
+    # ── Tabla de datos de infraestructuras (panel lateral) ──────────────
+
+    def dibujar_tabla_infra(self, rows, campos_visibles, campo_mapeo=None):
+        """Dibuja tabla compacta de infraestructuras pegada al minimapa.
+
+        Estilo plano de referencia Junta de Andalucía: fondo blanco,
+        bordes negros finos, cabecera bold, texto muy pequeño.
+        La tabla ocupa solo la parte superior del axes y se pega al minimapa.
+        """
+        ax = self.ax_tabla
+        if ax is None:
+            return
+        ax.set_xlim(0, 1)
+        ax.set_ylim(0, 1)
+        ax.axis("off")
+
+        C_BORDER = "#2C2C2C"
+        C_BORDER_LIGHT = "#AAAAAA"
+        C_TXT = "#1A1A2E"
+        C_TXT_LIGHT = "#4A4A5A"
+        C_HDR_BG = "#007932"       # Verde institucional para cabecera
+        C_HDR_TXT = "#FFFFFF"       # Texto blanco en cabecera
+        C_ROW_EVEN = "#FFFFFF"      # Filas pares: blanco
+        C_ROW_ODD = "#F5F8F5"       # Filas impares: verde muy tenue (zebra)
+
+        def _resolver(campo):
+            if campo_mapeo and campo in campo_mapeo:
+                return campo_mapeo[campo]
+            return campo
+
+        campos = list(campos_visibles) if campos_visibles else []
+        n_cols = len(campos)
+        n_rows_data = len(rows)
+
+        if n_cols == 0 or n_rows_data == 0:
+            return
+
+        # Anchos proporcionales al contenido
+        pesos = []
+        for campo in campos:
+            etiq = _etiqueta_campo(campo)
+            max_len = len(etiq)
+            for r in rows[:5]:
+                campo_real = _resolver(campo)
+                val = _fmt_valor(r.get(campo_real, None))
+                if val and val != "\u2014":
+                    max_len = max(max_len, len(val))
+            pesos.append(max(max_len, 3))
+        total_peso = sum(pesos)
+        col_widths = [p / total_peso for p in pesos]
+
+        # Acumular posiciones X
+        col_x = [0.0]
+        for w in col_widths:
+            col_x.append(col_x[-1] + w)
+
+        # La tabla se ancla arriba del axes (y=1.0 hacia abajo)
+        total_rows = n_rows_data + 1  # +1 cabecera
+        row_h = 1.0 / max(total_rows, 1)
+
+        lw_h = 0.8   # linewidth cabecera
+        lw_d = 0.4   # linewidth datos (más fino)
+        fsz_h = 2.5  # fontsize cabecera
+        fsz_d = 2.0  # fontsize datos
+
+        # ── Cabecera (fondo verde institucional, texto blanco) ──
+        for ci, campo in enumerate(campos):
+            x0 = col_x[ci]
+            cw = col_widths[ci]
+            ax.add_patch(Rectangle((x0, 1 - row_h), cw, row_h,
+                                    facecolor=C_HDR_BG, edgecolor=C_BORDER,
+                                    linewidth=lw_h, zorder=1))
+            etiq = _etiqueta_campo(campo)
+            if len(etiq) > 12:
+                etiq = etiq[:11] + "."
+            ax.text(x0 + cw / 2, 1 - row_h / 2, etiq.upper(),
+                    ha="center", va="center", fontsize=fsz_h,
+                    fontweight="bold", color=C_HDR_TXT, zorder=2)
+
+        # ── Filas de datos (zebra: alternas blanco / verde tenue) ──
+        for ri, r in enumerate(rows):
+            y = 1 - (ri + 2) * row_h
+            bg = C_ROW_ODD if ri % 2 == 1 else C_ROW_EVEN
+            for ci, campo in enumerate(campos):
+                x0 = col_x[ci]
+                cw = col_widths[ci]
+                ax.add_patch(Rectangle((x0, y), cw, row_h,
+                                        facecolor=bg, edgecolor=C_BORDER_LIGHT,
+                                        linewidth=lw_d, zorder=1))
+                campo_real = _resolver(campo)
+                valor = _fmt_valor(r.get(campo_real, None))
+                if len(valor) > 20:
+                    valor = valor[:19] + "\u2026"
+                ax.text(x0 + cw / 2, y + row_h / 2, valor,
+                        ha="center", va="center", fontsize=fsz_d,
+                        color=C_TXT_LIGHT, zorder=2)
+
     # ── Mapa de localización (panel inferior derecho) ──────────────────
 
-    def dibujar_mapa_posicion(self, cx, cy):
+    def dibujar_mapa_posicion(self, cx, cy, ruta_raster_loc=""):
         ax = self.ax_mini
 
         # ── Escala fija 1:250.000 ──
@@ -492,10 +799,15 @@ class MaquetadorPlano:
         ancho_util = self.fmt_mm[0] - MARGENES_MM["izq"] - MARGENES_MM["der"]
         alto_util = (self.fmt_mm[1] - MARGENES_MM["sup"] - MARGENES_MM["inf"]
                      - _CABECERA_MM)
-        panel_w_mm = ancho_util * 0.30 * 0.95   # col 2 ratio, menos wspace
-        panel_h_mm = alto_util * (1 - RATIO_MAPA_ALTO) * 0.90  # menos hspace
+        if self.es_lateral:
+            # Panel lateral: 28% del ancho, ~38% del alto (minimapa grande)
+            panel_w_mm = ancho_util * 0.28 * 0.90
+            panel_h_mm = alto_util * 0.38 * 0.90
+        else:
+            panel_w_mm = ancho_util * 0.30 * 0.95   # col 2 ratio, menos wspace
+            panel_h_mm = alto_util * (1 - RATIO_MAPA_ALTO) * 0.90  # menos hspace
 
-        # Extensión real a 1:25.000
+        # Extensión real a 1:250.000
         semi_x = (panel_w_mm / 1000.0) * escala_loc / 2
         semi_y = (panel_h_mm / 1000.0) * escala_loc / 2
 
@@ -513,17 +825,34 @@ class MaquetadorPlano:
         ax.tick_params(labelbottom=False, labelleft=False,
                        bottom=False, left=False)
 
-        # Fondo topográfico IGN
-        try:
-            from .cartografia import _descargar_teselas_manual, CAPAS_BASE
-            url = CAPAS_BASE.get("IGN Topográfico")
-            if url:
-                _descargar_teselas_manual(ax, url, xmin_m, xmax_m,
-                                          ymin_m, ymax_m)
+        # Fondo: ráster local o WMS IGN
+        _fondo_ok = False
+        if ruta_raster_loc:
+            try:
+                import os
+                if os.path.isfile(ruta_raster_loc):
+                    from .cartografia import añadir_fondo_raster_local
+                    añadir_fondo_raster_local(ax, ruta_raster_loc,
+                                               xmin_m, xmax_m, ymin_m, ymax_m)
+                    ax.set_xlim(xmin_m, xmax_m)
+                    ax.set_ylim(ymin_m, ymax_m)
+                    _fondo_ok = True
+            except Exception:
+                pass
+        if not _fondo_ok:
+            try:
+                from .cartografia import _descargar_wms
+                wms_url = (
+                    "https://www.ign.es/wms-inspire/mapa-raster?"
+                    "SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0"
+                    "&LAYERS=mtn_rasterizado&STYLES="
+                    "&CRS=EPSG:25830&FORMAT=image/png"
+                )
+                _descargar_wms(ax, wms_url, xmin_m, xmax_m, ymin_m, ymax_m)
                 ax.set_xlim(xmin_m, xmax_m)
                 ax.set_ylim(ymin_m, ymax_m)
-        except Exception:
-            pass
+            except Exception:
+                pass
 
         # Punto de localización
         ax.plot(cx, cy, "o", color="white", markersize=7, zorder=5)
@@ -843,74 +1172,512 @@ class MaquetadorPlano:
                 ha="center", va="bottom", fontsize=3.0, color="#888",
                 style="italic", zorder=3)
 
+    # ── Leyenda lateral (Plantilla 2: ax_info) ──────────────────────────
+
+    def dibujar_leyenda_lateral(self, items_leyenda_infra, items_leyenda_montes):
+        """Dibuja la leyenda estilo plano de referencia.
+
+        Formato:
+        - Título LEYENDA centrado con subrayado
+        - Izquierda: TIPO INFRAESTRUCTURA (2 sub-columnas de items)
+        - Derecha: MONTES PÚBLICOS (1 columna de items)
+        """
+        ax = self.ax_info
+        ax.set_xlim(0, 1)
+        ax.set_ylim(0, 1)
+        ax.axis("off")
+
+        C_BORDER = "#2C2C2C"
+        C_TXT = "#1A1A2E"
+        C_GREEN = "#007932"
+        C_GREEN_DARK = "#368f3f"
+        C_LABEL = "#007932"
+        C_BG_LEYENDA = "#FAFCFA"     # Fondo general leyenda
+        C_DIVIDER = "#CCCCCC"         # Líneas divisorias internas
+
+        # ── Calcular altura real del contenido ──
+        items_inf = items_leyenda_infra or []
+        items_mon = items_leyenda_montes or []
+        n_inf = min(len(items_inf), 12)
+        n_mon = min(len(items_mon), 8)
+        mid = (n_inf + 1) // 2  # filas en sub-columna más larga
+
+        # Cada fila de items mide row_h; calcular cuántas filas máx
+        n_rows_max = max(mid, n_mon, 1)
+        row_h = min(0.10, 0.65 / max(n_rows_max, 1))
+
+        # Altura usada: título(0.08) + subtítulo(0.06) + filas*row_h + margen(0.04)
+        content_h = 0.08 + 0.06 + n_rows_max * row_h + 0.04
+        content_h = min(content_h, 1.0)
+
+        # y_top: borde superior del recuadro (contenido pegado arriba)
+        y_top = 1.0
+        y_bot = y_top - content_h
+
+        # Borde del panel ajustado al contenido
+        ax.add_patch(Rectangle((0, y_bot), 1, content_h, facecolor=C_BG_LEYENDA,
+                                edgecolor=C_BORDER, linewidth=1.0, zorder=0))
+
+        # Barra de título LEYENDA (fondo verde, texto blanco)
+        title_h = 0.07
+        ax.add_patch(Rectangle((0, y_top - title_h), 1, title_h,
+                                facecolor=C_GREEN, edgecolor=C_BORDER,
+                                linewidth=1.0, zorder=1))
+        t_y = y_top - title_h / 2
+        ax.text(0.5, t_y, "LEYENDA", ha="center", va="center",
+                fontsize=7, fontweight="bold", color="white",
+                transform=ax.transAxes, zorder=2)
+
+        # Línea divisoria vertical entre infraestructura y montes
+        ax.plot([0.65, 0.65], [y_top - title_h, y_bot],
+                color=C_DIVIDER, linewidth=0.5,
+                transform=ax.transAxes, zorder=1)
+
+        # ── helper para dibujar un símbolo + texto ──
+        def _dibujar_item(x_sym0, x_sym1, x_txt, y, item, rh):
+            label, color, geom_type, linestyle, marker, facecolor = item
+            if "point" in geom_type:
+                ax.plot((x_sym0 + x_sym1) / 2, y, marker=marker or "o",
+                        color=color, markersize=3.5, markeredgecolor="white",
+                        markeredgewidth=0.2, transform=ax.transAxes, zorder=3)
+            elif "line" in geom_type or "string" in geom_type:
+                ax.plot([x_sym0, x_sym1], [y, y], color=color,
+                        linewidth=2.0, linestyle=linestyle or "-",
+                        transform=ax.transAxes, zorder=3, solid_capstyle="round")
+            else:
+                rect_w = x_sym1 - x_sym0
+                rect_h = rh * 0.50
+                ax.add_patch(Rectangle(
+                    (x_sym0, y - rect_h / 2), rect_w, rect_h,
+                    facecolor=facecolor or (color + "55"),
+                    edgecolor=color, linewidth=0.6,
+                    transform=ax.transAxes, zorder=3))
+            ax.text(x_txt, y, str(label)[:22], ha="left", va="center",
+                    fontsize=3.5, color="#3A3A4A", transform=ax.transAxes, zorder=3)
+
+        # ── Posición Y del subtítulo y primer item ──
+        sub_y = t_y - 0.09   # subtítulos de sección
+        first_y = sub_y - 0.06  # primer item
+
+        # ── Sección izquierda: TIPO INFRAESTRUCTURA (2 sub-columnas) ──
+        ax.text(0.02, sub_y, "TIPO INFRAESTRUCTURA", ha="left", va="center",
+                fontsize=4, fontweight="bold", color=C_GREEN_DARK, zorder=2)
+        # Subrayado del subtítulo
+        ax.plot([0.02, 0.40], [sub_y - 0.02, sub_y - 0.02],
+                color=C_GREEN, linewidth=0.5, transform=ax.transAxes, zorder=2)
+
+        col_left = items_inf[:mid]
+        col_right = items_inf[mid:n_inf]
+
+        # Sub-columna izquierda (x: 0.02-0.35)
+        for i, item in enumerate(col_left):
+            y = first_y - i * row_h
+            _dibujar_item(0.02, 0.09, 0.10, y, item, row_h)
+
+        # Sub-columna derecha (x: 0.35-0.65)
+        for i, item in enumerate(col_right):
+            y = first_y - i * row_h
+            _dibujar_item(0.35, 0.42, 0.43, y, item, row_h)
+
+        # ── Sección derecha: MONTES PÚBLICOS ──
+        ax.text(0.80, sub_y, "MONTES PÚBLICOS", ha="center", va="center",
+                fontsize=4, fontweight="bold", color=C_GREEN_DARK, zorder=2)
+        # Subrayado del subtítulo
+        ax.plot([0.68, 0.92], [sub_y - 0.02, sub_y - 0.02],
+                color=C_GREEN, linewidth=0.5, transform=ax.transAxes, zorder=2)
+
+        row_h_m = row_h  # misma altura de fila para alinear
+
+        for i, item in enumerate(items_mon[:n_mon]):
+            y = first_y - i * row_h_m
+            _dibujar_item(0.67, 0.74, 0.75, y, item, row_h_m)
+
+    # ── Cajetín lateral (Plantilla 2: ax_esc) ────────────────────────
+
+    def dibujar_cajetin_lateral(self, row, cajetin=None, plantilla=None,
+                                 num_plano=None, proveedor="",
+                                 campo_mapeo=None):
+        """Dibuja el cajetín completo estilo Junta de Andalucía.
+
+        Estructura idéntica al plano de referencia (de arriba a abajo):
+        1. Barra organización: fondo BLANCO, logos + texto verde
+        2. Título del proyecto (recuadro centrado, bold)
+        3. Monte/T.M. (izq 65%) | Nº DE PLANO (der 35%)
+        4. AUTORES (izq, 2 técnicos) | Vº.Bº (centro) | ESCALA (der 50%)
+           con sub-fila inferior: Firmas de los 2 autores juntas | Firma Vº.Bº | FECHA
+        """
+        ax = self.ax_esc
+        ax.set_xlim(0, 1)
+        ax.set_ylim(0, 1)
+        ax.axis("off")
+
+        caj = cajetin or {}
+        pl = plantilla or {}
+
+        C_BORDER = "#2C2C2C"        # Borde gris oscuro (más suave que negro)
+        C_BORDER_LIGHT = "#888888"  # Borde interno sutil
+        C_TXT = "#1A1A2E"           # Texto principal oscuro
+        C_TXT_LIGHT = "#4A4A5A"     # Texto secundario
+        C_GREEN = "#007932"          # Verde Junta de Andalucía
+        C_GREEN_DARK = "#368f3f"     # Verde oscuro para fondos
+        C_BG_ORG = "#007932"         # Fondo barra organización
+        C_BG_PROY = "#F0F4F0"        # Fondo proyecto (verde muy tenue)
+        C_BG_MONTE = "#FAFAFA"       # Fondo monte (gris casi blanco)
+        C_BG_NUM = "#F5F7F5"         # Fondo nº de plano
+        C_BG_AUT = "#FFFFFF"          # Fondo autores
+        C_BG_ESCALA = "#F0F4F0"       # Fondo escala/fecha
+        C_LABEL = "#007932"           # Color etiquetas (verde)
+        LW = 0.8  # linewidth de celdas
+
+        # ── Alturas de cada fila (de arriba a abajo) ──
+        # Compactas: ajustadas al contenido de texto
+        org_h = 0.16
+        proy_h = 0.12
+        monte_h = 0.12
+        aut_h = 0.12
+        total_h = org_h + proy_h + monte_h + aut_h  # 0.52
+
+        # Posiciones calculadas desde la parte inferior (y=0)
+        aut_y = 0.0
+        monte_y = aut_y + aut_h
+        proy_y = monte_y + monte_h
+        org_y = proy_y + proy_h
+
+        # ═══════════════════════════════════════════════════════════════
+        # 1. BARRA ORGANIZACIÓN (fondo VERDE institucional, texto BLANCO)
+        # ═══════════════════════════════════════════════════════════════
+
+        ax.add_patch(Rectangle((0, org_y), 1, org_h,
+                                facecolor=C_BG_ORG, edgecolor=C_GREEN_DARK,
+                                linewidth=1.2, zorder=1))
+
+        org = caj.get("organizacion", "")
+        logo_path = caj.get("logo_path", "")
+
+        x_txt = 0.02
+        if logo_path:
+            try:
+                from PIL import Image as PILImage
+                img = PILImage.open(logo_path)
+                iw, ih = img.size
+                aspect_img = iw / max(ih, 1)
+                logo_h_frac = org_h * 0.80
+                logo_w_frac = min(0.35, logo_h_frac * aspect_img * 0.7)
+                logo_ax = ax.inset_axes(
+                    [0.02, org_y + org_h * 0.10, logo_w_frac, logo_h_frac],
+                    transform=ax.transAxes)
+                logo_ax.imshow(img, aspect="equal")
+                logo_ax.axis("off")
+                x_txt = 0.02 + logo_w_frac + 0.02
+            except Exception:
+                pass
+
+        if org:
+            lineas = org.split("\n")
+            # Espacio disponible para texto (desde después del logo hasta el borde)
+            x_centro = x_txt + (1.0 - x_txt) / 2
+
+            if len(lineas) >= 2:
+                # 2 líneas explícitas del usuario
+                linea1 = lineas[0].upper()
+                linea2 = lineas[1]
+                # Reducir fuente si la línea 1 es muy larga
+                fsz1 = 8 if len(linea1) <= 30 else (6.5 if len(linea1) <= 45 else 5.5)
+                ax.text(x_centro, org_y + org_h * 0.62,
+                        linea1, ha="center", va="center",
+                        fontsize=fsz1, fontweight="bold", color="white", zorder=3)
+                ax.text(x_centro, org_y + org_h * 0.28,
+                        linea2, ha="center", va="center",
+                        fontsize=4.5, color="#E0F0E0", zorder=3)
+            else:
+                texto = org.upper()
+                # Si cabe en 1 línea (~30 chars), ponerlo en una sola
+                if len(texto) <= 30:
+                    ax.text(x_centro, org_y + org_h * 0.50, texto,
+                            ha="center", va="center",
+                            fontsize=7, fontweight="bold", color="white", zorder=3)
+                else:
+                    # Partir en 2 líneas por el espacio más cercano al centro
+                    mid = len(texto) // 2
+                    pos = texto.rfind(" ", 0, mid + 8)
+                    if pos < 5:
+                        pos = texto.find(" ", mid)
+                    if pos > 0:
+                        linea1 = texto[:pos]
+                        linea2 = texto[pos + 1:]
+                    else:
+                        linea1 = texto
+                        linea2 = ""
+                    fsz = 7 if len(linea1) <= 35 else (6 if len(linea1) <= 45 else 5)
+                    ax.text(x_centro, org_y + org_h * 0.62,
+                            linea1, ha="center", va="center",
+                            fontsize=fsz, fontweight="bold", color="white", zorder=3)
+                    if linea2:
+                        ax.text(x_centro, org_y + org_h * 0.28,
+                                linea2, ha="center", va="center",
+                                fontsize=fsz, fontweight="bold", color="white", zorder=3)
+
+        # ═══════════════════════════════════════════════════════════════
+        # 2. TÍTULO DEL PROYECTO
+        # ═══════════════════════════════════════════════════════════════
+
+        ax.add_patch(Rectangle((0, proy_y), 1, proy_h,
+                                facecolor=C_BG_PROY, edgecolor=C_BORDER,
+                                linewidth=LW, zorder=1))
+        # Líneas decorativas superior e inferior del proyecto
+        ax.plot([0.08, 0.92], [proy_y + proy_h * 0.92, proy_y + proy_h * 0.92],
+                color=C_GREEN, linewidth=0.5, zorder=2)
+        ax.plot([0.08, 0.92], [proy_y + proy_h * 0.08, proy_y + proy_h * 0.08],
+                color=C_GREEN, linewidth=0.5, zorder=2)
+
+        titulo_proy = caj.get("proyecto", "")
+        subtitulo = caj.get("subtitulo", "")
+        campo_sub = caj.get("campo_subtitulo", "")
+        if campo_sub and row is not None:
+            val = str(row.get(campo_sub, ""))
+            if val and val != "nan":
+                subtitulo = val
+
+        texto_proy = titulo_proy or subtitulo or "PROYECTO"
+        if len(texto_proy) > 50:
+            mid = len(texto_proy) // 2
+            space_pos = texto_proy.rfind(" ", 0, mid + 10)
+            if space_pos > 10:
+                texto_proy = texto_proy[:space_pos] + "\n" + texto_proy[space_pos + 1:]
+
+        fsz_proy = 8 if len(texto_proy) <= 40 else 6.5
+        ax.text(0.5, proy_y + proy_h * 0.50, texto_proy.upper(),
+                ha="center", va="center", fontsize=fsz_proy, fontweight="bold",
+                color=C_GREEN_DARK, zorder=3, linespacing=1.4)
+
+        # ═══════════════════════════════════════════════════════════════
+        # 3. MONTE / T.M. (izq 66%) + Nº DE PLANO (der 34%)
+        # ═══════════════════════════════════════════════════════════════
+        col_r = 0.66  # alineado con c2 de cabeceras/firmas
+
+        # Celda izquierda: Monte + T.M.
+        ax.add_patch(Rectangle((0, monte_y), col_r, monte_h,
+                                facecolor=C_BG_MONTE, edgecolor=C_BORDER,
+                                linewidth=LW, zorder=1))
+        # Celda derecha: Nº de plano
+        ax.add_patch(Rectangle((col_r, monte_y), 1 - col_r, monte_h,
+                                facecolor=C_BG_NUM, edgecolor=C_BORDER,
+                                linewidth=LW, zorder=1))
+
+        monte_txt = ""
+        tm_txt = ""
+        if row is not None:
+            # Resolver nombres de campo reales usando campo_mapeo
+            _map = campo_mapeo or {}
+            candidatos_monte = ["Monte", "MONTE", "Nombre_Monte", "NOMBRE_MONTE",
+                                "MP", "M.P.", "monte"]
+            candidatos_muni = ["Municipio", "MUNICIPIO", "TM", "T.M.",
+                               "municipio", "TERMINO_MUNICIPAL"]
+            # Anteponer campos mapeados (ej: "Monte" -> "NOM_MONTE")
+            if "Monte" in _map:
+                candidatos_monte.insert(0, _map["Monte"])
+            if "Municipio" in _map:
+                candidatos_muni.insert(0, _map["Municipio"])
+            for candidato in candidatos_monte:
+                val = str(row.get(candidato, ""))
+                if val and val != "nan":
+                    monte_txt = f"M.P. {val}"
+                    break
+            for candidato in candidatos_muni:
+                val = str(row.get(candidato, ""))
+                if val and val != "nan":
+                    tm_txt = f"T.M. {val}"
+                    break
+
+        if monte_txt:
+            ax.text(0.03, monte_y + monte_h * 0.65, monte_txt,
+                    ha="left", va="center", fontsize=6, color=C_TXT,
+                    fontweight="bold", zorder=3)
+        if tm_txt:
+            ax.text(0.03, monte_y + monte_h * 0.30, tm_txt,
+                    ha="left", va="center", fontsize=6, color=C_TXT,
+                    fontweight="bold", zorder=3)
+
+        # Nº de plano
+        num_inicio = caj.get("num_plano_inicio", 1)
+        if num_plano is not None:
+            n_plano = num_plano
+        else:
+            idx = (row.name if row is not None and hasattr(row, "name")
+                   and isinstance(row.name, int) else 0)
+            n_plano = idx + num_inicio
+
+        mid_r = col_r + (1 - col_r) / 2
+        # Escalar fuentes del Nº de plano según formato de papel
+        # Base: A4 (210mm ancho). Escalar proporcionalmente al ancho.
+        _ancho_mm = self.fmt_mm[0]
+        _factor = _ancho_mm / 210.0  # 1.0 para A4, ~1.41 para A3, ~2.0 para A2
+        fsz_label_np = 3.5 * _factor
+        fsz_num_np = 9 * _factor
+        ax.text(mid_r, monte_y + monte_h * 0.78,
+                "Nº DE PLANO:", ha="center", va="center",
+                fontsize=fsz_label_np, color=C_LABEL, fontweight="bold", zorder=3)
+        ax.text(mid_r, monte_y + monte_h * 0.45,
+                str(n_plano), ha="center", va="center",
+                fontsize=fsz_num_np, fontweight="bold", color=C_GREEN_DARK, zorder=3)
+        # Mostrar solo el tamaño de papel (p.ej. "A3") sin orientación
+        _formato_corto = self.formato_key.split()[0]  # "A3 Horizontal" -> "A3"
+        ax.text(mid_r, monte_y + monte_h * 0.15,
+                _formato_corto, ha="center", va="center",
+                fontsize=fsz_label_np * 0.85, color=C_LABEL, zorder=3)
+
+        # ═══════════════════════════════════════════════════════════════
+        # 4. AUTORES (un solo recuadro) | Vº.Bº | ESCALA / FECHA
+        #    "AUTORES:" título arriba-izq, 2 firmas lado a lado debajo
+        # ═══════════════════════════════════════════════════════════════
+        c1 = 0.33   # fin columna autores
+        c2 = 0.66   # fin columna Vº.Bº
+
+        autor = caj.get("autor", "")
+        cargo_autor = caj.get("cargo_autor", "")
+        firma_txt = caj.get("firma", "")
+        cargo_firma = caj.get("cargo_firma", "")
+        revision = caj.get("revision", "")
+        cargo_revision = caj.get("cargo_revision", "")
+
+        # ── Celda AUTORES (un solo rectángulo con título + 2 firmas) ──
+        ax.add_patch(Rectangle((0, aut_y), c1, aut_h,
+                                facecolor=C_BG_AUT, edgecolor=C_BORDER,
+                                linewidth=LW, zorder=1))
+        # Título "AUTORES:" arriba-izquierda (verde institucional)
+        ax.text(0.01, aut_y + aut_h * 0.92,
+                "AUTORES:", ha="left", va="top",
+                fontsize=3.0, fontweight="bold", color=C_LABEL, zorder=3)
+        # Firma autor 1 (mitad izquierda)
+        mid_a1 = c1 * 0.25  # centro de la mitad izq
+        if autor:
+            ax.text(mid_a1, aut_y + aut_h * 0.62,
+                    f"Fdo.: {autor}", ha="center", va="center",
+                    fontsize=2.8, color=C_TXT, fontweight="bold", zorder=3)
+        if cargo_autor:
+            ax.text(mid_a1, aut_y + aut_h * 0.38,
+                    cargo_autor, ha="center", va="center",
+                    fontsize=2.3, color=C_TXT_LIGHT, fontstyle="italic", zorder=3)
+        # Firma autor 2 (mitad derecha)
+        mid_a2 = c1 * 0.75  # centro de la mitad der
+        if firma_txt:
+            ax.text(mid_a2, aut_y + aut_h * 0.62,
+                    f"Fdo.: {firma_txt}", ha="center", va="center",
+                    fontsize=2.8, color=C_TXT, fontweight="bold", zorder=3)
+        if cargo_firma:
+            ax.text(mid_a2, aut_y + aut_h * 0.38,
+                    cargo_firma, ha="center", va="center",
+                    fontsize=2.3, color=C_TXT_LIGHT, fontstyle="italic", zorder=3)
+
+        # ── Celda Vº.Bº ──
+        ax.add_patch(Rectangle((c1, aut_y), c2 - c1, aut_h,
+                                facecolor=C_BG_AUT, edgecolor=C_BORDER,
+                                linewidth=LW, zorder=1))
+        ax.text(c1 + 0.01, aut_y + aut_h * 0.92,
+                "Vº.Bº", ha="left", va="top",
+                fontsize=3.0, fontweight="bold", color=C_LABEL, zorder=3)
+        if revision:
+            ax.text((c1 + c2) / 2, aut_y + aut_h * 0.62,
+                    f"Fdo.: {revision}", ha="center", va="center",
+                    fontsize=2.8, color=C_TXT, fontweight="bold", zorder=3)
+        if cargo_revision:
+            ax.text((c1 + c2) / 2, aut_y + aut_h * 0.38,
+                    cargo_revision, ha="center", va="center",
+                    fontsize=2.3, color=C_TXT_LIGHT, fontstyle="italic", zorder=3)
+
+        # ── Celda ESCALA + FECHA + SRC (apiladas en la misma columna) ──
+        ax.add_patch(Rectangle((c2, aut_y), 1 - c2, aut_h,
+                                facecolor=C_BG_ESCALA, edgecolor=C_BORDER,
+                                linewidth=LW, zorder=1))
+        mid_x = c2 + (1 - c2) * 0.50
+        # Separador escala / fecha
+        ax.plot([c2 + 0.01, 1 - 0.01],
+                [aut_y + aut_h * 0.60, aut_y + aut_h * 0.60],
+                color=C_BORDER_LIGHT, linewidth=0.3, zorder=2)
+        # Separador fecha / SRC
+        ax.plot([c2 + 0.01, 1 - 0.01],
+                [aut_y + aut_h * 0.28, aut_y + aut_h * 0.28],
+                color=C_BORDER_LIGHT, linewidth=0.3, zorder=2)
+        # Escala (tercio superior)
+        ax.text(mid_x, aut_y + aut_h * 0.88,
+                "ESCALA:", ha="center", va="center",
+                fontsize=3.0, color=C_LABEL, fontweight="bold", zorder=3)
+        escala_txt = f"1:{self.escala:,}".replace(",", ".")
+        ax.text(mid_x, aut_y + aut_h * 0.70,
+                escala_txt, ha="center", va="center",
+                fontsize=6, fontweight="bold", color=C_GREEN_DARK, zorder=3)
+        # Fecha (tercio medio)
+        ax.text(mid_x, aut_y + aut_h * 0.50,
+                "FECHA:", ha="center", va="center",
+                fontsize=3.0, color=C_LABEL, fontweight="bold", zorder=3)
+        _MESES_ES = {1: "ENERO", 2: "FEBRERO", 3: "MARZO", 4: "ABRIL",
+                     5: "MAYO", 6: "JUNIO", 7: "JULIO", 8: "AGOSTO",
+                     9: "SEPTIEMBRE", 10: "OCTUBRE", 11: "NOVIEMBRE",
+                     12: "DICIEMBRE"}
+        hoy = date.today()
+        fecha = f"{_MESES_ES[hoy.month]} {hoy.year}"
+        ax.text(mid_x, aut_y + aut_h * 0.36,
+                fecha, ha="center", va="center",
+                fontsize=3.5, fontweight="bold", color=C_GREEN_DARK, zorder=3)
+        # Sistema de coordenadas (tercio inferior)
+        ax.text(mid_x, aut_y + aut_h * 0.18,
+                "COORD:", ha="center", va="center",
+                fontsize=2.5, color=C_LABEL, fontweight="bold", zorder=3)
+        ax.text(mid_x, aut_y + aut_h * 0.06,
+                "ETRS89 UTM 30N", ha="center", va="center",
+                fontsize=2.8, fontweight="bold", color=C_GREEN_DARK, zorder=3)
+
+
     # ── Rosa de los vientos (dentro del mapa principal, arriba-izquierda) ──
 
     def dibujar_norte_en_mapa(self):
-        """Dibuja una rosa de los vientos profesional dentro del mapa (esquina sup-izq)."""
+        """Dibuja un indicador de norte minimalista y moderno en el mapa."""
         ax = self.ax_map
-        from matplotlib.patches import Polygon as MplPolygon
+        from matplotlib.patches import Polygon as MplPolygon, FancyBboxPatch
+        from matplotlib.path import Path
+        import matplotlib.patches as mpatches
 
-        # Centro y tamaño en coordenadas de ejes
-        cx, cy = 0.045, 0.91
-        r = 0.022  # radio de la rosa
+        # Posición (esquina superior izquierda) y tamaño
+        cx, cy = 0.045, 0.90
+        h = 0.055       # altura total de la flecha
+        w = 0.014        # ancho de la flecha
 
-        # Fondo circular semitransparente
-        circle_bg = plt.Circle((cx, cy - 0.005), r + 0.012,
-                                facecolor="white", edgecolor="#2C3E50",
-                                linewidth=0.5, alpha=0.90,
-                                transform=ax.transAxes, zorder=14)
-        ax.add_patch(circle_bg)
+        # Fondo: rectángulo redondeado sutil
+        bg_w, bg_h = 0.042, 0.095
+        bg = FancyBboxPatch(
+            (cx - bg_w / 2, cy - h * 0.45 - 0.006), bg_w, bg_h,
+            boxstyle="round,pad=0.005", facecolor="white", edgecolor="#AAAAAA",
+            linewidth=0.4, alpha=0.90,
+            transform=ax.transAxes, zorder=14)
+        ax.add_patch(bg)
 
-        # Triángulos de la rosa (N, S, E, W)
-        # Norte (punta arriba) — mitad oscura y mitad clara
-        tri_n_l = MplPolygon(
-            [(cx, cy + r * 1.1), (cx - r * 0.3, cy), (cx, cy)],
-            facecolor="#1A1A2E", edgecolor="#1A1A2E", linewidth=0.3,
-            transform=ax.transAxes, zorder=15)
-        tri_n_r = MplPolygon(
-            [(cx, cy + r * 1.1), (cx + r * 0.3, cy), (cx, cy)],
-            facecolor="#666666", edgecolor="#1A1A2E", linewidth=0.3,
-            transform=ax.transAxes, zorder=15)
-        # Sur
-        tri_s_l = MplPolygon(
-            [(cx, cy - r * 1.1), (cx - r * 0.3, cy), (cx, cy)],
-            facecolor="#AAAAAA", edgecolor="#1A1A2E", linewidth=0.3,
-            transform=ax.transAxes, zorder=15)
-        tri_s_r = MplPolygon(
-            [(cx, cy - r * 1.1), (cx + r * 0.3, cy), (cx, cy)],
-            facecolor="#DDDDDD", edgecolor="#1A1A2E", linewidth=0.3,
-            transform=ax.transAxes, zorder=15)
-        # Este
-        tri_e_l = MplPolygon(
-            [(cx + r * 1.1, cy), (cx, cy + r * 0.3), (cx, cy)],
-            facecolor="#888888", edgecolor="#1A1A2E", linewidth=0.3,
-            transform=ax.transAxes, zorder=15)
-        tri_e_r = MplPolygon(
-            [(cx + r * 1.1, cy), (cx, cy - r * 0.3), (cx, cy)],
-            facecolor="#CCCCCC", edgecolor="#1A1A2E", linewidth=0.3,
-            transform=ax.transAxes, zorder=15)
-        # Oeste
-        tri_w_l = MplPolygon(
-            [(cx - r * 1.1, cy), (cx, cy - r * 0.3), (cx, cy)],
-            facecolor="#888888", edgecolor="#1A1A2E", linewidth=0.3,
-            transform=ax.transAxes, zorder=15)
-        tri_w_r = MplPolygon(
-            [(cx - r * 1.1, cy), (cx, cy + r * 0.3), (cx, cy)],
-            facecolor="#CCCCCC", edgecolor="#1A1A2E", linewidth=0.3,
-            transform=ax.transAxes, zorder=15)
+        # Flecha norte: mitad izquierda oscura, mitad derecha clara
+        tri_left = MplPolygon(
+            [(cx, cy + h * 0.5),        # punta
+             (cx - w, cy - h * 0.35),   # base izquierda
+             (cx, cy - h * 0.1)],       # centro base
+            facecolor="#1C2333", edgecolor="#1C2333", linewidth=0.4,
+            transform=ax.transAxes, zorder=15, closed=True)
 
-        for tri in [tri_n_l, tri_n_r, tri_s_l, tri_s_r,
-                    tri_e_l, tri_e_r, tri_w_l, tri_w_r]:
-            ax.add_patch(tri)
+        tri_right = MplPolygon(
+            [(cx, cy + h * 0.5),        # punta
+             (cx + w, cy - h * 0.35),   # base derecha
+             (cx, cy - h * 0.1)],       # centro base
+            facecolor="#5A6377", edgecolor="#1C2333", linewidth=0.4,
+            transform=ax.transAxes, zorder=15, closed=True)
 
-        # Punto central
-        ax.plot(cx, cy, "o", color="#1A1A2E", markersize=1.5,
+        ax.add_patch(tri_left)
+        ax.add_patch(tri_right)
+
+        # Línea central fina (eje de la flecha)
+        ax.plot([cx, cx], [cy - h * 0.38, cy + h * 0.5],
+                color="#1C2333", linewidth=0.5,
                 transform=ax.transAxes, zorder=16)
 
-        # Letra "N" sobre el triángulo norte
-        ax.text(cx, cy + r * 1.1 + 0.008, "N",
-                ha="center", va="bottom", fontsize=4.5, fontweight="bold",
-                color="#1A1A2E", transform=ax.transAxes, zorder=16)
+        # Letra "N" — limpia, encima de la flecha
+        ax.text(cx, cy + h * 0.5 + 0.01, "N",
+                ha="center", va="bottom", fontsize=5.5, fontweight="bold",
+                color="#1C2333", transform=ax.transAxes, zorder=16)
 
     # ── Cajetín (integrado) ────────────────────────────────────────────
 
@@ -924,7 +1691,7 @@ class MaquetadorPlano:
         pl = plantilla or {}
         c_fondo = pl.get("color_cabecera_fondo", "#1C2333")
         c_texto = pl.get("color_cabecera_texto", "#FFFFFF")
-        c_acento = pl.get("color_cabecera_acento", "#2ECC71")
+        c_acento = pl.get("color_cabecera_acento", "#007932")
 
         org = ""
         subtit = "PLANO DE INFRAESTRUCTURA FORESTAL"
@@ -1023,7 +1790,7 @@ class MaquetadorPlano:
     def dibujar_marcos(self, plantilla=None, cajetin=None):
         pl = plantilla or {}
         c_ext = pl.get("color_marco_exterior", "#1C2333")
-        c_int = pl.get("color_marco_interior", "#2ECC71")
+        c_int = pl.get("color_marco_interior", "#007932")
 
         ax = self.fig.add_axes([0, 0, 1, 1], zorder=20)
         ax.set_xlim(0, self.fmt_mm[0])
@@ -1049,9 +1816,10 @@ class MaquetadorPlano:
             fontsize=3.5, color="#666666", alpha=0.7,
         )
 
-    def guardar(self, ruta_out: str):
+    def guardar(self, ruta_out: str, dpi_save: int = None):
         try:
-            self.fig.savefig(ruta_out, format="pdf", dpi=DPI,
+            self.fig.savefig(ruta_out, format="pdf",
+                              dpi=dpi_save or self.dpi,
                               facecolor="white")
         finally:
             plt.close(self.fig)
@@ -1066,11 +1834,11 @@ def crear_portada(formato_key: str, titulo_proyecto: str,
                    cajetin: dict = None, plantilla: dict = None) -> plt.Figure:
     pl = plantilla or {}
     c_fondo = pl.get("color_cabecera_fondo", "#1C2333")
-    c_acento = pl.get("color_cabecera_acento", "#2ECC71")
+    c_acento = pl.get("color_cabecera_acento", "#007932")
 
     fmt = FORMATOS[formato_key]
     fig = plt.figure(figsize=(fmt[0] / 25.4, fmt[1] / 25.4),
-                      dpi=DPI, facecolor="white")
+                      dpi=DPI_DEFAULT, facecolor="white")
     ax = fig.add_axes([0, 0, 1, 1])
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
@@ -1126,11 +1894,11 @@ def crear_indice(formato_key: str, items: list,
                   plantilla: dict = None) -> plt.Figure:
     pl = plantilla or {}
     c_fondo = pl.get("color_cabecera_fondo", "#1C2333")
-    c_acento = pl.get("color_cabecera_acento", "#2ECC71")
+    c_acento = pl.get("color_cabecera_acento", "#007932")
 
     fmt = FORMATOS[formato_key]
     fig = plt.figure(figsize=(fmt[0] / 25.4, fmt[1] / 25.4),
-                      dpi=DPI, facecolor="white")
+                      dpi=DPI_DEFAULT, facecolor="white")
     ax = fig.add_axes([0.08, 0.05, 0.84, 0.88])
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
