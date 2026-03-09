@@ -211,7 +211,7 @@ class App(tk.Tk):
 
         # Tags de color
         self._log.tag_config("error", foreground="#E74C3C")
-        self._log.tag_config("ok", foreground="#2ECC71")
+        self._log.tag_config("ok", foreground="#007932")
         self._log.tag_config("warn", foreground="#F39C12")
         self._log.tag_config("info", foreground="#85C1E9")
 

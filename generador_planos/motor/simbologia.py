@@ -26,9 +26,9 @@ MARCADORES = {
 
 # Paleta de colores predefinida para categorías
 PALETA_CATEGORIAS = [
-    "#E74C3C", "#3498DB", "#2ECC71", "#F39C12", "#9B59B6",
+    "#E74C3C", "#3498DB", "#007932", "#F39C12", "#9B59B6",
     "#1ABC9C", "#E67E22", "#34495E", "#C0392B", "#2980B9",
-    "#27AE60", "#D35400", "#8E44AD", "#16A085", "#F1C40F",
+    "#368f3f", "#D35400", "#8E44AD", "#16A085", "#F1C40F",
 ]
 
 # Simbología por defecto para capas extra
@@ -58,11 +58,11 @@ SIMBOLOGIA_CAPAS_EXTRA = {
         "label": "Parcelas catastrales",
     },
     "Zonas protegidas": {
-        "color": "#27AE60",
+        "color": "#368f3f",
         "linewidth": 1.0,
         "linestyle": "-.",
         "alpha": 0.5,
-        "facecolor": "#27AE6033",
+        "facecolor": "#368f3f33",
         "label": "Zonas protegidas",
     },
 }

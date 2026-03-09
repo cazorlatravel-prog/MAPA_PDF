@@ -71,9 +71,9 @@ class Proyecto:
         self.plantilla = {
             "color_cabecera_fondo": "#1C2333",
             "color_cabecera_texto": "#FFFFFF",
-            "color_cabecera_acento": "#2ECC71",
+            "color_cabecera_acento": "#007932",
             "color_marco_exterior": "#1C2333",
-            "color_marco_interior": "#2ECC71",
+            "color_marco_interior": "#007932",
         }
 
         # Capas extra (se serializan como lista de dicts)

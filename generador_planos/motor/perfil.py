@@ -87,7 +87,7 @@ def generar_elevaciones_sinteticas(distancias, z_base=500, variacion=50):
 
 
 def dibujar_perfil(ax, distancias, elevaciones, titulo="PERFIL LONGITUDINAL",
-                    color_relleno="#2ECC7144", color_linea="#27AE60"):
+                    color_relleno="#00793244", color_linea="#368f3f"):
     """Dibuja un perfil topográfico en un eje matplotlib.
 
     ax: eje matplotlib donde dibujar

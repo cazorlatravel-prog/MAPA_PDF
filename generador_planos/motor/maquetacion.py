@@ -642,7 +642,7 @@ class MaquetadorPlano:
         C_BORDER_LIGHT = "#AAAAAA"
         C_TXT = "#1A1A2E"
         C_TXT_LIGHT = "#4A4A5A"
-        C_HDR_BG = "#00953B"       # Verde institucional para cabecera
+        C_HDR_BG = "#007932"       # Verde institucional para cabecera
         C_HDR_TXT = "#FFFFFF"       # Texto blanco en cabecera
         C_ROW_EVEN = "#FFFFFF"      # Filas pares: blanco
         C_ROW_ODD = "#F5F8F5"       # Filas impares: verde muy tenue (zebra)
@@ -1107,9 +1107,9 @@ class MaquetadorPlano:
 
         C_BORDER = "#2C2C2C"
         C_TXT = "#1A1A2E"
-        C_GREEN = "#00953B"
-        C_GREEN_DARK = "#006B2B"
-        C_LABEL = "#00953B"
+        C_GREEN = "#007932"
+        C_GREEN_DARK = "#368f3f"
+        C_LABEL = "#007932"
         C_BG_LEYENDA = "#FAFCFA"     # Fondo general leyenda
         C_DIVIDER = "#CCCCCC"         # Líneas divisorias internas
 
@@ -1236,15 +1236,15 @@ class MaquetadorPlano:
         C_BORDER_LIGHT = "#888888"  # Borde interno sutil
         C_TXT = "#1A1A2E"           # Texto principal oscuro
         C_TXT_LIGHT = "#4A4A5A"     # Texto secundario
-        C_GREEN = "#00953B"          # Verde Junta de Andalucía
-        C_GREEN_DARK = "#006B2B"     # Verde oscuro para fondos
-        C_BG_ORG = "#00953B"         # Fondo barra organización
+        C_GREEN = "#007932"          # Verde Junta de Andalucía
+        C_GREEN_DARK = "#368f3f"     # Verde oscuro para fondos
+        C_BG_ORG = "#007932"         # Fondo barra organización
         C_BG_PROY = "#F0F4F0"        # Fondo proyecto (verde muy tenue)
         C_BG_MONTE = "#FAFAFA"       # Fondo monte (gris casi blanco)
         C_BG_NUM = "#F5F7F5"         # Fondo nº de plano
         C_BG_AUT = "#FFFFFF"          # Fondo autores
         C_BG_ESCALA = "#F0F4F0"       # Fondo escala/fecha
-        C_LABEL = "#00953B"           # Color etiquetas (verde)
+        C_LABEL = "#007932"           # Color etiquetas (verde)
         LW = 0.8  # linewidth de celdas
 
         # ── Alturas de cada fila (de arriba a abajo) ──
@@ -1627,7 +1627,7 @@ class MaquetadorPlano:
         pl = plantilla or {}
         c_fondo = pl.get("color_cabecera_fondo", "#1C2333")
         c_texto = pl.get("color_cabecera_texto", "#FFFFFF")
-        c_acento = pl.get("color_cabecera_acento", "#2ECC71")
+        c_acento = pl.get("color_cabecera_acento", "#007932")
 
         org = ""
         subtit = "PLANO DE INFRAESTRUCTURA FORESTAL"
@@ -1726,7 +1726,7 @@ class MaquetadorPlano:
     def dibujar_marcos(self, plantilla=None, cajetin=None):
         pl = plantilla or {}
         c_ext = pl.get("color_marco_exterior", "#1C2333")
-        c_int = pl.get("color_marco_interior", "#2ECC71")
+        c_int = pl.get("color_marco_interior", "#007932")
 
         ax = self.fig.add_axes([0, 0, 1, 1], zorder=20)
         ax.set_xlim(0, self.fmt_mm[0])
@@ -1770,7 +1770,7 @@ def crear_portada(formato_key: str, titulo_proyecto: str,
                    cajetin: dict = None, plantilla: dict = None) -> plt.Figure:
     pl = plantilla or {}
     c_fondo = pl.get("color_cabecera_fondo", "#1C2333")
-    c_acento = pl.get("color_cabecera_acento", "#2ECC71")
+    c_acento = pl.get("color_cabecera_acento", "#007932")
 
     fmt = FORMATOS[formato_key]
     fig = plt.figure(figsize=(fmt[0] / 25.4, fmt[1] / 25.4),
@@ -1830,7 +1830,7 @@ def crear_indice(formato_key: str, items: list,
                   plantilla: dict = None) -> plt.Figure:
     pl = plantilla or {}
     c_fondo = pl.get("color_cabecera_fondo", "#1C2333")
-    c_acento = pl.get("color_cabecera_acento", "#2ECC71")
+    c_acento = pl.get("color_cabecera_acento", "#007932")
 
     fmt = FORMATOS[formato_key]
     fig = plt.figure(figsize=(fmt[0] / 25.4, fmt[1] / 25.4),
