@@ -485,11 +485,13 @@ class GeneradorPlanos:
         cx, cy = geom.centroid.x, geom.centroid.y
 
         if maq.es_lateral:
-            # Plantilla 2: leyenda lateral + cajetín lateral
+            # Plantilla 2: localización + tabla datos + leyenda + cajetín
+            maq.dibujar_mapa_posicion(cx, cy)
+            maq.dibujar_tabla_infra([row], campos_visibles,
+                                     campo_mapeo=self._campo_mapeo)
             items_inf, items_mon = self._construir_items_leyenda_separados(
                 gdf_sel, color_infra, xmin, xmax, ymin, ymax)
             maq.dibujar_leyenda_lateral(items_inf, items_mon)
-            maq.dibujar_mapa_posicion(cx, cy)
             maq.dibujar_cajetin_lateral(row, cajetin=self._cajetin,
                                          plantilla=self._plantilla,
                                          proveedor=proveedor)
@@ -583,10 +585,12 @@ class GeneradorPlanos:
         cx, cy = geom_union.centroid.x, geom_union.centroid.y
 
         if maq.es_lateral:
+            maq.dibujar_mapa_posicion(cx, cy)
+            maq.dibujar_tabla_infra(rows, campos_visibles,
+                                     campo_mapeo=self._campo_mapeo)
             items_inf, items_mon = self._construir_items_leyenda_separados(
                 gdf_grupo, color_infra, xmin, xmax, ymin, ymax)
             maq.dibujar_leyenda_lateral(items_inf, items_mon)
-            maq.dibujar_mapa_posicion(cx, cy)
             maq.dibujar_cajetin_lateral(rows[0], cajetin=self._cajetin,
                                          plantilla=self._plantilla,
                                          num_plano=num_plano,
@@ -811,10 +815,12 @@ class GeneradorPlanos:
                     cx, cy = geom.centroid.x, geom.centroid.y
 
                     if maq.es_lateral:
+                        maq.dibujar_mapa_posicion(cx, cy)
+                        maq.dibujar_tabla_infra([row], campos,
+                                                 campo_mapeo=self._campo_mapeo)
                         items_inf, items_mon = self._construir_items_leyenda_separados(
                             gdf_sel, color_infra, xmin, xmax, ymin, ymax)
                         maq.dibujar_leyenda_lateral(items_inf, items_mon)
-                        maq.dibujar_mapa_posicion(cx, cy)
                         maq.dibujar_cajetin_lateral(row, cajetin=self._cajetin,
                                                      plantilla=self._plantilla,
                                                      proveedor=proveedor)

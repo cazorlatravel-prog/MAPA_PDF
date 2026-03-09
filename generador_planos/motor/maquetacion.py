@@ -72,9 +72,10 @@ class MaquetadorPlano:
         self.dpi = dpi or DPI_DEFAULT
         self.fig = None
         self.ax_map = None
-        self.ax_info = None   # datos infraestructura (centro)
+        self.ax_info = None   # datos infraestructura (centro) / leyenda (lateral)
         self.ax_mini = None   # mapa localización (derecha)
         self.ax_esc = None    # cajetín proyecto + escala + norte (izquierda)
+        self.ax_tabla = None  # tabla de datos infraestructura (lateral)
 
     @property
     def es_lateral(self):
@@ -121,7 +122,14 @@ class MaquetadorPlano:
         return self.fig, self.ax_map, self.ax_info, self.ax_mini, self.ax_esc
 
     def _crear_figura_lateral(self):
-        """Plantilla 2: Mapa a la izquierda, panel lateral derecho."""
+        """Plantilla 2: Mapa a la izquierda, panel lateral derecho.
+
+        Panel lateral (de arriba a abajo):
+          1. Mapa de localización
+          2. Tabla de datos de infraestructuras
+          3. Leyenda (Tipo Infraestructura + Montes Públicos)
+          4. Cajetín (organización, proyecto, escala, autores, fecha)
+        """
         fig_w = self.fmt_mm[0] / 25.4
         fig_h = self.fmt_mm[1] / 25.4
         self.fig = plt.figure(figsize=(fig_w, fig_h), dpi=self.dpi,
@@ -147,16 +155,17 @@ class MaquetadorPlano:
         # Mapa principal: columna izquierda
         self.ax_map = self.fig.add_subplot(gs[0, 0])
 
-        # Panel lateral derecho: subdividido en 3 filas
+        # Panel lateral derecho: subdividido en 4 filas
         gs_lateral = gridspec.GridSpecFromSubplotSpec(
-            3, 1, subplot_spec=gs[0, 1],
-            height_ratios=[0.20, 0.28, 0.52],
-            hspace=0.02,
+            4, 1, subplot_spec=gs[0, 1],
+            height_ratios=[0.25, 0.10, 0.20, 0.45],
+            hspace=0.008,
         )
 
-        self.ax_mini = self.fig.add_subplot(gs_lateral[0, 0])   # minimapa arriba
-        self.ax_info = self.fig.add_subplot(gs_lateral[1, 0])   # leyenda
-        self.ax_esc = self.fig.add_subplot(gs_lateral[2, 0])    # cajetín completo
+        self.ax_mini = self.fig.add_subplot(gs_lateral[0, 0])    # minimapa
+        self.ax_tabla = self.fig.add_subplot(gs_lateral[1, 0])   # tabla datos
+        self.ax_info = self.fig.add_subplot(gs_lateral[2, 0])    # leyenda
+        self.ax_esc = self.fig.add_subplot(gs_lateral[3, 0])     # cajetín
 
         return self.fig, self.ax_map, self.ax_info, self.ax_mini, self.ax_esc
 
@@ -547,6 +556,82 @@ class MaquetadorPlano:
             ax.text(0.5, 0.005, f"{n_rows} infraestructuras",
                     ha="center", va="bottom", fontsize=3.5, color="#555",
                     style="italic", transform=ax.transAxes)
+
+    # ── Tabla de datos de infraestructuras (panel lateral) ──────────────
+
+    def dibujar_tabla_infra(self, rows, campos_visibles, campo_mapeo=None):
+        """Dibuja tabla compacta de infraestructuras debajo del mapa de localización.
+
+        Estilo: tabla con cabecera oscura y filas alternas, similar al plano
+        de referencia de la Junta de Andalucía.
+        """
+        ax = self.ax_tabla
+        if ax is None:
+            return
+        ax.set_xlim(0, 1)
+        ax.set_ylim(0, 1)
+        ax.axis("off")
+
+        C_BORDER = "#000000"
+        C_HEADER = "#2C3E50"
+        C_TXT = "#1A1A2E"
+        C_ALT = "#E8F4F8"
+
+        # Borde exterior
+        ax.add_patch(Rectangle((0, 0), 1, 1, facecolor="white",
+                                edgecolor=C_BORDER, linewidth=0.8, zorder=0))
+
+        def _resolver(campo):
+            if campo_mapeo and campo in campo_mapeo:
+                return campo_mapeo[campo]
+            return campo
+
+        campos = list(campos_visibles) if campos_visibles else []
+        n_cols = len(campos)
+        n_rows_data = len(rows)
+
+        if n_cols == 0 or n_rows_data == 0:
+            ax.text(0.5, 0.5, "Sin datos", ha="center", va="center",
+                    fontsize=4, color="#999")
+            return
+
+        # Calcular anchos de columna proporcionales
+        col_w = 1.0 / n_cols
+        # Altura de filas
+        total_rows = n_rows_data + 1  # +1 cabecera
+        row_h = 1.0 / total_rows
+
+        # ── Cabecera ──
+        for ci, campo in enumerate(campos):
+            x0 = ci * col_w
+            ax.add_patch(Rectangle((x0, 1 - row_h), col_w, row_h,
+                                    facecolor=C_HEADER, edgecolor=C_BORDER,
+                                    linewidth=0.3, zorder=1))
+            etiq = _etiqueta_campo(campo)
+            if len(etiq) > 12:
+                etiq = etiq[:11] + "."
+            ax.text(x0 + col_w / 2, 1 - row_h / 2, etiq.upper(),
+                    ha="center", va="center", fontsize=2.5,
+                    fontweight="bold", color="white", zorder=2)
+
+        # ── Filas de datos ──
+        for ri, r in enumerate(rows):
+            y = 1 - (ri + 2) * row_h  # +2 porque fila 0 es cabecera
+            bg = C_ALT if ri % 2 == 0 else "white"
+            for ci, campo in enumerate(campos):
+                x0 = ci * col_w
+                ax.add_patch(Rectangle((x0, y), col_w, row_h,
+                                        facecolor=bg, edgecolor=C_BORDER,
+                                        linewidth=0.2, zorder=1))
+                campo_real = _resolver(campo)
+                valor = str(r.get(campo_real, "\u2014"))
+                if valor == "nan":
+                    valor = "\u2014"
+                if len(valor) > 14:
+                    valor = valor[:13] + "\u2026"
+                ax.text(x0 + col_w / 2, y + row_h / 2, valor,
+                        ha="center", va="center", fontsize=2.2,
+                        color=C_TXT, zorder=2)
 
     # ── Mapa de localización (panel inferior derecho) ──────────────────
 
