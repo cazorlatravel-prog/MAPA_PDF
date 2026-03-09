@@ -1206,17 +1206,48 @@ class MaquetadorPlano:
 
         if org:
             lineas = org.split("\n")
+            # Espacio disponible para texto (desde después del logo hasta el borde)
+            x_centro = x_txt + (1.0 - x_txt) / 2
+
             if len(lineas) >= 2:
-                ax.text(max(x_txt, 0.38), org_y + org_h * 0.62,
-                        lineas[0].upper(), ha="left", va="center",
-                        fontsize=8, fontweight="bold", color=C_GREEN, zorder=3)
-                ax.text(max(x_txt, 0.38), org_y + org_h * 0.28,
-                        lineas[1], ha="left", va="center",
+                # 2 líneas explícitas del usuario
+                linea1 = lineas[0].upper()
+                linea2 = lineas[1]
+                # Reducir fuente si la línea 1 es muy larga
+                fsz1 = 8 if len(linea1) <= 30 else (6.5 if len(linea1) <= 45 else 5.5)
+                ax.text(x_centro, org_y + org_h * 0.62,
+                        linea1, ha="center", va="center",
+                        fontsize=fsz1, fontweight="bold", color=C_GREEN, zorder=3)
+                ax.text(x_centro, org_y + org_h * 0.28,
+                        linea2, ha="center", va="center",
                         fontsize=4.5, color=C_TXT, zorder=3)
             else:
-                ax.text(0.5, org_y + org_h * 0.50, org.upper(),
-                        ha="center", va="center",
-                        fontsize=7, fontweight="bold", color=C_GREEN, zorder=3)
+                texto = org.upper()
+                # Si cabe en 1 línea (~30 chars), ponerlo en una sola
+                if len(texto) <= 30:
+                    ax.text(x_centro, org_y + org_h * 0.50, texto,
+                            ha="center", va="center",
+                            fontsize=7, fontweight="bold", color=C_GREEN, zorder=3)
+                else:
+                    # Partir en 2 líneas por el espacio más cercano al centro
+                    mid = len(texto) // 2
+                    pos = texto.rfind(" ", 0, mid + 8)
+                    if pos < 5:
+                        pos = texto.find(" ", mid)
+                    if pos > 0:
+                        linea1 = texto[:pos]
+                        linea2 = texto[pos + 1:]
+                    else:
+                        linea1 = texto
+                        linea2 = ""
+                    fsz = 7 if len(linea1) <= 35 else (6 if len(linea1) <= 45 else 5)
+                    ax.text(x_centro, org_y + org_h * 0.62,
+                            linea1, ha="center", va="center",
+                            fontsize=fsz, fontweight="bold", color=C_GREEN, zorder=3)
+                    if linea2:
+                        ax.text(x_centro, org_y + org_h * 0.28,
+                                linea2, ha="center", va="center",
+                                fontsize=fsz, fontweight="bold", color=C_GREEN, zorder=3)
 
         # ═══════════════════════════════════════════════════════════════
         # 2. TÍTULO DEL PROYECTO
