@@ -289,6 +289,69 @@ class MaquetadorPlano:
                 bbox=dict(boxstyle="round,pad=0.12", facecolor="white",
                           edgecolor="#BDC3C7", linewidth=0.3, alpha=0.85))
 
+    # ── Escala gráfica sobre el mapa ─────────────────────────────────
+
+    def dibujar_escala_grafica_mapa(self):
+        """Dibuja una barra de escala discreta en la esquina inferior izquierda del mapa."""
+        ax = self.ax_map
+        barra_m = BARRA_ESCALA_M.get(self.escala, 1000)
+
+        xlim = ax.get_xlim()
+        ylim = ax.get_ylim()
+        rango_x = xlim[1] - xlim[0]
+        rango_y = ylim[1] - ylim[0]
+
+        # Posición: esquina inferior izquierda con margen
+        x0 = xlim[0] + rango_x * 0.02
+        y0 = ylim[0] + rango_y * 0.025
+        bar_h = rango_y * 0.006  # altura de la barra
+
+        n_seg = 4
+        seg_m = barra_m / n_seg
+        colores = ["#1C2333", "white"]
+
+        # Fondo semitransparente detrás de la barra
+        pad_x = rango_x * 0.008
+        pad_y = rango_y * 0.012
+        from matplotlib.patches import FancyBboxPatch
+        bg = FancyBboxPatch(
+            (x0 - pad_x, y0 - pad_y), barra_m + 2 * pad_x, bar_h + 2 * pad_y + rango_y * 0.022,
+            boxstyle="round,pad=0", facecolor="white", edgecolor="#BDC3C7",
+            linewidth=0.3, alpha=0.85, zorder=10, transform=ax.transData,
+        )
+        ax.add_patch(bg)
+
+        # Segmentos alternados
+        for i in range(n_seg):
+            x_seg = x0 + i * seg_m
+            rect = Rectangle((x_seg, y0), seg_m, bar_h,
+                              facecolor=colores[i % 2], edgecolor="#1C2333",
+                              linewidth=0.4, zorder=11)
+            ax.add_patch(rect)
+
+        # Etiqueta: "0" al inicio y distancia total al final
+        fsz = 3.5
+        y_txt = y0 + bar_h + rango_y * 0.004
+        ax.text(x0, y_txt, "0", ha="center", va="bottom",
+                fontsize=fsz, color="#1C2333", zorder=12)
+
+        # Etiqueta final con unidad
+        if barra_m >= 1000:
+            label_fin = f"{barra_m // 1000} km"
+        else:
+            label_fin = f"{barra_m} m"
+        ax.text(x0 + barra_m, y_txt, label_fin, ha="center", va="bottom",
+                fontsize=fsz, color="#1C2333", zorder=12)
+
+        # Marca intermedia
+        mid_m = barra_m // 2
+        if mid_m >= 1000:
+            label_mid = f"{mid_m // 1000}"
+        else:
+            label_mid = str(mid_m)
+        ax.text(x0 + mid_m, y_txt, label_mid, ha="center", va="bottom",
+                fontsize=fsz, color="#1C2333", zorder=12)
+
     # ── Etiquetas ──────────────────────────────────────────────────────
 
     def dibujar_etiquetas_infra(self, gdf_sel, campo_etiqueta="Nombre_Infra",
