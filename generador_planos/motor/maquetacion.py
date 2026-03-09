@@ -1212,7 +1212,7 @@ class MaquetadorPlano:
         # ═══════════════════════════════════════════════════════════════
         monte_h = 0.16
         monte_y = proy_y - monte_h
-        col_r = 0.65  # divisor izquierda/derecha
+        col_r = 0.66  # alineado con c2 de cabeceras/firmas
 
         # Celda izquierda: Monte + T.M.
         ax.add_patch(Rectangle((0, monte_y), col_r, monte_h,
