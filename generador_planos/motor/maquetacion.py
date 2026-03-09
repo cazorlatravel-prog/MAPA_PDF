@@ -43,6 +43,22 @@ ETIQUETAS_CAMPOS = {
 
 DPI_DEFAULT = 400  # calidad de impresión alta
 
+
+def _fmt_valor(valor_raw):
+    """Formatea un valor para mostrar: floats a 2 decimales."""
+    if valor_raw is None:
+        return "\u2014"
+    try:
+        f = float(valor_raw)
+        if f != f:  # NaN
+            return "\u2014"
+        if f == int(f) and abs(f) < 1e9:
+            return str(int(f))
+        return f"{f:.2f}"
+    except (ValueError, TypeError):
+        s = str(valor_raw)
+        return "\u2014" if s == "nan" else s
+
 # Presets de calidad: (DPI figura, DPI guardado)
 CALIDADES_PDF = {
     "Alta (400 DPI)": (400, 300),
@@ -512,9 +528,7 @@ class MaquetadorPlano:
                 for fi, campo in enumerate(campos_mostrar):
                     fy = fields_top - fi * field_h
                     campo_real = _resolver_campo(campo)
-                    valor = str(r.get(campo_real, "\u2014"))
-                    if valor == "nan":
-                        valor = "\u2014"
+                    valor = _fmt_valor(r.get(campo_real, None))
                     etiq = _etiqueta_campo(campo)
                     if len(etiq) > max_label:
                         etiq = etiq[:max_label - 1] + "."
@@ -596,8 +610,8 @@ class MaquetadorPlano:
             max_len = len(etiq)
             for r in rows[:5]:
                 campo_real = _resolver(campo)
-                val = str(r.get(campo_real, ""))
-                if val and val != "nan":
+                val = _fmt_valor(r.get(campo_real, None))
+                if val and val != "\u2014":
                     max_len = max(max_len, len(val))
             pesos.append(max(max_len, 3))
         total_peso = sum(pesos)
@@ -641,9 +655,7 @@ class MaquetadorPlano:
                                         facecolor="white", edgecolor=C_BORDER,
                                         linewidth=lw_d, zorder=1))
                 campo_real = _resolver(campo)
-                valor = str(r.get(campo_real, "\u2014"))
-                if valor == "nan":
-                    valor = "\u2014"
+                valor = _fmt_valor(r.get(campo_real, None))
                 if len(valor) > 20:
                     valor = valor[:19] + "\u2026"
                 ax.text(x0 + cw / 2, y + row_h / 2, valor,
