@@ -1039,16 +1039,36 @@ class MaquetadorPlano:
         C_BORDER = "#000000"
         C_TXT = "#1A1A2E"
 
-        # Borde del panel
-        ax.add_patch(Rectangle((0, 0), 1, 1, facecolor="white",
+        # ── Calcular altura real del contenido ──
+        items_inf = items_leyenda_infra or []
+        items_mon = items_leyenda_montes or []
+        n_inf = min(len(items_inf), 12)
+        n_mon = min(len(items_mon), 8)
+        mid = (n_inf + 1) // 2  # filas en sub-columna más larga
+
+        # Cada fila de items mide row_h; calcular cuántas filas máx
+        n_rows_max = max(mid, n_mon, 1)
+        row_h = min(0.10, 0.65 / max(n_rows_max, 1))
+
+        # Altura usada: título(0.08) + subtítulo(0.06) + filas*row_h + margen(0.04)
+        content_h = 0.08 + 0.06 + n_rows_max * row_h + 0.04
+        content_h = min(content_h, 1.0)
+
+        # y_top: borde superior del recuadro (contenido pegado arriba)
+        y_top = 1.0
+        y_bot = y_top - content_h
+
+        # Borde del panel ajustado al contenido
+        ax.add_patch(Rectangle((0, y_bot), 1, content_h, facecolor="white",
                                 edgecolor=C_BORDER, linewidth=1.0, zorder=0))
 
         # Título LEYENDA (centrado, bold, subrayado)
-        ax.text(0.5, 0.92, "LEYENDA", ha="center", va="center",
+        t_y = y_top - 0.05
+        ax.text(0.5, t_y, "LEYENDA", ha="center", va="center",
                 fontsize=7, fontweight="bold", color=C_TXT,
                 transform=ax.transAxes, zorder=2)
-        ax.plot([0.30, 0.70], [0.87, 0.87], color=C_BORDER, linewidth=1.0,
-                transform=ax.transAxes, zorder=2)
+        ax.plot([0.30, 0.70], [t_y - 0.03, t_y - 0.03], color=C_BORDER,
+                linewidth=1.0, transform=ax.transAxes, zorder=2)
 
         # ── helper para dibujar un símbolo + texto ──
         def _dibujar_item(x_sym0, x_sym1, x_txt, y, item, rh):
@@ -1072,39 +1092,35 @@ class MaquetadorPlano:
             ax.text(x_txt, y, str(label)[:22], ha="left", va="center",
                     fontsize=3.5, color=C_TXT, transform=ax.transAxes, zorder=3)
 
+        # ── Posición Y del subtítulo y primer item ──
+        sub_y = t_y - 0.09   # subtítulos de sección
+        first_y = sub_y - 0.06  # primer item
+
         # ── Sección izquierda: TIPO INFRAESTRUCTURA (2 sub-columnas) ──
-        ax.text(0.02, 0.81, "TIPO INFRAESTRUCTURA", ha="left", va="center",
+        ax.text(0.02, sub_y, "TIPO INFRAESTRUCTURA", ha="left", va="center",
                 fontsize=4, fontweight="bold", color=C_TXT, zorder=2)
 
-        items_inf = items_leyenda_infra or []
-        n_inf = min(len(items_inf), 12)
-        # Dividir en 2 sub-columnas: primera mitad izq, segunda mitad der
-        mid = (n_inf + 1) // 2
         col_left = items_inf[:mid]
         col_right = items_inf[mid:n_inf]
 
-        row_h = min(0.10, 0.65 / max(mid, 1))
-
         # Sub-columna izquierda (x: 0.02-0.35)
         for i, item in enumerate(col_left):
-            y = 0.74 - i * row_h
+            y = first_y - i * row_h
             _dibujar_item(0.02, 0.09, 0.10, y, item, row_h)
 
         # Sub-columna derecha (x: 0.35-0.65)
         for i, item in enumerate(col_right):
-            y = 0.74 - i * row_h
+            y = first_y - i * row_h
             _dibujar_item(0.35, 0.42, 0.43, y, item, row_h)
 
         # ── Sección derecha: MONTES PÚBLICOS ──
-        ax.text(0.80, 0.81, "MONTES PÚBLICOS", ha="center", va="center",
+        ax.text(0.80, sub_y, "MONTES PÚBLICOS", ha="center", va="center",
                 fontsize=4, fontweight="bold", color=C_TXT, zorder=2)
 
-        items_mon = items_leyenda_montes or []
-        n_mon = min(len(items_mon), 8)
-        row_h_m = min(0.10, 0.65 / max(n_mon, 1))
+        row_h_m = row_h  # misma altura de fila para alinear
 
         for i, item in enumerate(items_mon[:n_mon]):
-            y = 0.74 - i * row_h_m
+            y = first_y - i * row_h_m
             _dibujar_item(0.67, 0.74, 0.75, y, item, row_h_m)
 
     # ── Cajetín lateral (Plantilla 2: ax_esc) ────────────────────────
