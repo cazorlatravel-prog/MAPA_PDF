@@ -1382,16 +1382,18 @@ class MaquetadorPlano:
         _ancho_mm = self.fmt_mm[0]
         _factor = _ancho_mm / 210.0  # 1.0 para A4, ~1.41 para A3, ~2.0 para A2
         fsz_label_np = 3.5 * _factor
-        fsz_num_np = 14 * _factor
+        fsz_num_np = 9 * _factor
         ax.text(mid_r, monte_y + monte_h * 0.78,
                 "Nº DE PLANO:", ha="center", va="center",
                 fontsize=fsz_label_np, color=C_LABEL, fontweight="bold", zorder=3)
         ax.text(mid_r, monte_y + monte_h * 0.45,
                 str(n_plano), ha="center", va="center",
                 fontsize=fsz_num_np, fontweight="bold", color=C_GREEN_DARK, zorder=3)
+        # Mostrar solo el tamaño de papel (p.ej. "A3") sin orientación
+        _formato_corto = self.formato_key.split()[0]  # "A3 Horizontal" -> "A3"
         ax.text(mid_r, monte_y + monte_h * 0.15,
-                f"Formato {self.formato_key}", ha="center", va="center",
-                fontsize=fsz_label_np, color=C_LABEL, fontweight="bold", zorder=3)
+                _formato_corto, ha="center", va="center",
+                fontsize=fsz_label_np * 0.85, color=C_LABEL, zorder=3)
 
         # ═══════════════════════════════════════════════════════════════
         # 4. AUTORES (un solo recuadro) | Vº.Bº | ESCALA / FECHA
