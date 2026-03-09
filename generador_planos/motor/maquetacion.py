@@ -310,17 +310,6 @@ class MaquetadorPlano:
         seg_m = barra_m / n_seg
         colores = ["#1C2333", "white"]
 
-        # Fondo semitransparente detrás de la barra
-        pad_x = rango_x * 0.008
-        pad_y = rango_y * 0.012
-        from matplotlib.patches import FancyBboxPatch
-        bg = FancyBboxPatch(
-            (x0 - pad_x, y0 - pad_y), barra_m + 2 * pad_x, bar_h + 2 * pad_y + rango_y * 0.022,
-            boxstyle="round,pad=0", facecolor="white", edgecolor="#BDC3C7",
-            linewidth=0.3, alpha=0.85, zorder=10, transform=ax.transData,
-        )
-        ax.add_patch(bg)
-
         # Segmentos alternados
         for i in range(n_seg):
             x_seg = x0 + i * seg_m
@@ -332,8 +321,10 @@ class MaquetadorPlano:
         # Etiqueta: "0" al inicio y distancia total al final
         fsz = 3.5
         y_txt = y0 + bar_h + rango_y * 0.004
+        _txt_bbox = dict(boxstyle="round,pad=0.08", facecolor="white",
+                         edgecolor="none", alpha=0.6)
         ax.text(x0, y_txt, "0", ha="center", va="bottom",
-                fontsize=fsz, color="#1C2333", zorder=12)
+                fontsize=fsz, color="#1C2333", zorder=12, bbox=_txt_bbox)
 
         # Etiqueta final con unidad
         if barra_m >= 1000:
@@ -341,7 +332,7 @@ class MaquetadorPlano:
         else:
             label_fin = f"{barra_m} m"
         ax.text(x0 + barra_m, y_txt, label_fin, ha="center", va="bottom",
-                fontsize=fsz, color="#1C2333", zorder=12)
+                fontsize=fsz, color="#1C2333", zorder=12, bbox=_txt_bbox)
 
         # Marca intermedia
         mid_m = barra_m // 2
@@ -350,7 +341,7 @@ class MaquetadorPlano:
         else:
             label_mid = str(mid_m)
         ax.text(x0 + mid_m, y_txt, label_mid, ha="center", va="bottom",
-                fontsize=fsz, color="#1C2333", zorder=12)
+                fontsize=fsz, color="#1C2333", zorder=12, bbox=_txt_bbox)
 
     # ── Etiquetas ──────────────────────────────────────────────────────
 
