@@ -156,11 +156,11 @@ class MaquetadorPlano:
         self.ax_map = self.fig.add_subplot(gs[0, 0])
 
         # Panel lateral derecho: subdividido en 4 filas
-        # Minimapa | Tabla datos | Leyenda | Cajetín
+        # Minimapa (grande) | Tabla datos (compacta) | Leyenda | Cajetín
         gs_lateral = gridspec.GridSpecFromSubplotSpec(
             4, 1, subplot_spec=gs[0, 1],
-            height_ratios=[0.25, 0.15, 0.18, 0.42],
-            hspace=0.008,
+            height_ratios=[0.40, 0.06, 0.16, 0.38],
+            hspace=0.003,
         )
 
         self.ax_mini = self.fig.add_subplot(gs_lateral[0, 0])    # minimapa
@@ -561,10 +561,11 @@ class MaquetadorPlano:
     # ── Tabla de datos de infraestructuras (panel lateral) ──────────────
 
     def dibujar_tabla_infra(self, rows, campos_visibles, campo_mapeo=None):
-        """Dibuja tabla de infraestructuras debajo del mapa de localización.
+        """Dibuja tabla compacta de infraestructuras pegada al minimapa.
 
-        Estilo plano de referencia: fondo blanco, bordes negros finos,
-        cabecera con texto negro bold, datos en texto normal.
+        Estilo plano de referencia Junta de Andalucía: fondo blanco,
+        bordes negros finos, cabecera bold, texto muy pequeño.
+        La tabla ocupa solo la parte superior del axes y se pega al minimapa.
         """
         ax = self.ax_tabla
         if ax is None:
@@ -586,21 +587,19 @@ class MaquetadorPlano:
         n_rows_data = len(rows)
 
         if n_cols == 0 or n_rows_data == 0:
-            ax.text(0.5, 0.5, "Sin datos", ha="center", va="center",
-                    fontsize=4, color="#999")
             return
 
-        # Anchos proporcionales: campos con nombres largos más anchos
+        # Anchos proporcionales al contenido
         pesos = []
         for campo in campos:
             etiq = _etiqueta_campo(campo)
-            # Peso base por longitud de etiqueta + máx contenido
             max_len = len(etiq)
             for r in rows[:5]:
-                val = str(r.get(_resolver(campo) if campo_mapeo else campo, ""))
-                if val != "nan":
+                campo_real = _resolver(campo)
+                val = str(r.get(campo_real, ""))
+                if val and val != "nan":
                     max_len = max(max_len, len(val))
-            pesos.append(max(max_len, 4))
+            pesos.append(max(max_len, 3))
         total_peso = sum(pesos)
         col_widths = [p / total_peso for p in pesos]
 
@@ -609,25 +608,30 @@ class MaquetadorPlano:
         for w in col_widths:
             col_x.append(col_x[-1] + w)
 
-        # Altura de filas
+        # La tabla se ancla arriba del axes (y=1.0 hacia abajo)
         total_rows = n_rows_data + 1  # +1 cabecera
-        row_h = 1.0 / total_rows
+        row_h = 1.0 / max(total_rows, 1)
 
-        # ── Cabecera (fondo blanco, texto negro bold, bordes finos) ──
+        lw_h = 0.5   # linewidth cabecera
+        lw_d = 0.3   # linewidth datos
+        fsz_h = 2.2  # fontsize cabecera
+        fsz_d = 1.8  # fontsize datos
+
+        # ── Cabecera ──
         for ci, campo in enumerate(campos):
             x0 = col_x[ci]
             cw = col_widths[ci]
             ax.add_patch(Rectangle((x0, 1 - row_h), cw, row_h,
                                     facecolor="white", edgecolor=C_BORDER,
-                                    linewidth=0.4, zorder=1))
+                                    linewidth=lw_h, zorder=1))
             etiq = _etiqueta_campo(campo)
-            if len(etiq) > 14:
-                etiq = etiq[:13] + "."
+            if len(etiq) > 12:
+                etiq = etiq[:11] + "."
             ax.text(x0 + cw / 2, 1 - row_h / 2, etiq.upper(),
-                    ha="center", va="center", fontsize=2.8,
+                    ha="center", va="center", fontsize=fsz_h,
                     fontweight="bold", color=C_TXT, zorder=2)
 
-        # ── Filas de datos (fondo blanco, bordes finos) ──
+        # ── Filas de datos ──
         for ri, r in enumerate(rows):
             y = 1 - (ri + 2) * row_h
             for ci, campo in enumerate(campos):
@@ -635,15 +639,15 @@ class MaquetadorPlano:
                 cw = col_widths[ci]
                 ax.add_patch(Rectangle((x0, y), cw, row_h,
                                         facecolor="white", edgecolor=C_BORDER,
-                                        linewidth=0.3, zorder=1))
+                                        linewidth=lw_d, zorder=1))
                 campo_real = _resolver(campo)
                 valor = str(r.get(campo_real, "\u2014"))
                 if valor == "nan":
                     valor = "\u2014"
-                if len(valor) > 18:
-                    valor = valor[:17] + "\u2026"
+                if len(valor) > 20:
+                    valor = valor[:19] + "\u2026"
                 ax.text(x0 + cw / 2, y + row_h / 2, valor,
-                        ha="center", va="center", fontsize=2.5,
+                        ha="center", va="center", fontsize=fsz_d,
                         color=C_TXT, zorder=2)
 
     # ── Mapa de localización (panel inferior derecho) ──────────────────
@@ -659,9 +663,9 @@ class MaquetadorPlano:
         alto_util = (self.fmt_mm[1] - MARGENES_MM["sup"] - MARGENES_MM["inf"]
                      - _CABECERA_MM)
         if self.es_lateral:
-            # Panel lateral: 28% del ancho, ~20% del alto
+            # Panel lateral: 28% del ancho, ~38% del alto (minimapa grande)
             panel_w_mm = ancho_util * 0.28 * 0.90
-            panel_h_mm = alto_util * 0.20 * 0.90
+            panel_h_mm = alto_util * 0.38 * 0.90
         else:
             panel_w_mm = ancho_util * 0.30 * 0.95   # col 2 ratio, menos wspace
             panel_h_mm = alto_util * (1 - RATIO_MAPA_ALTO) * 0.90  # menos hspace
