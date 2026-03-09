@@ -1163,11 +1163,12 @@ class MaquetadorPlano:
         LW = 0.6  # linewidth de celdas
 
         # ── Alturas de cada fila (de arriba a abajo) ──
-        org_h = 0.22
-        proy_h = 0.18
-        monte_h = 0.14
-        aut_h = 0.14
-        total_h = org_h + proy_h + monte_h + aut_h  # 0.72
+        # Compactas: ajustadas al contenido de texto
+        org_h = 0.16
+        proy_h = 0.12
+        monte_h = 0.12
+        aut_h = 0.12
+        total_h = org_h + proy_h + monte_h + aut_h  # 0.52
 
         # Posiciones calculadas desde la parte inferior (y=0)
         aut_y = 0.0
@@ -1272,8 +1273,9 @@ class MaquetadorPlano:
             if space_pos > 10:
                 texto_proy = texto_proy[:space_pos] + "\n" + texto_proy[space_pos + 1:]
 
+        fsz_proy = 8 if len(texto_proy) <= 40 else 6.5
         ax.text(0.5, proy_y + proy_h * 0.50, texto_proy.upper(),
-                ha="center", va="center", fontsize=10, fontweight="bold",
+                ha="center", va="center", fontsize=fsz_proy, fontweight="bold",
                 color=C_TXT, zorder=3, linespacing=1.4)
 
         # ═══════════════════════════════════════════════════════════════
