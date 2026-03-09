@@ -1204,7 +1204,7 @@ class MaquetadorPlano:
                 texto_proy = texto_proy[:space_pos] + "\n" + texto_proy[space_pos + 1:]
 
         ax.text(0.5, proy_y + proy_h * 0.50, texto_proy.upper(),
-                ha="center", va="center", fontsize=5, fontweight="bold",
+                ha="center", va="center", fontsize=10, fontweight="bold",
                 color=C_TXT, zorder=3, linespacing=1.4)
 
         # ═══════════════════════════════════════════════════════════════
@@ -1301,9 +1301,9 @@ class MaquetadorPlano:
                 fontsize=9, fontweight="bold", color=C_TXT, zorder=3)
 
         # ═══════════════════════════════════════════════════════════════
-        # 5. FIRMAS: Autor+Firma juntos | Vº.Bº firma | FECHA
+        # 5. FIRMAS: Autor | Firma | Vº.Bº | FECHA  (en paralelo)
         # ═══════════════════════════════════════════════════════════════
-        firma_h = 0.28
+        firma_h = 0.16
         firma_y = aut_y - firma_h
 
         autor = caj.get("autor", "")
@@ -1313,51 +1313,64 @@ class MaquetadorPlano:
         revision = caj.get("revision", "")
         cargo_revision = caj.get("cargo_revision", "")
 
-        # Celda izquierda: los 2 autores juntos
-        ax.add_patch(Rectangle((0, firma_y), c1, firma_h,
+        # 4 columnas en paralelo: Autor | Firma | Vº.Bº | Fecha
+        fc1 = 0.165   # fin col autor
+        fc2 = 0.33    # fin col firma
+        fc3 = 0.66    # fin col revisión
+
+        # Celda 1: Fdo.: AUTOR + CARGO AUTOR
+        ax.add_patch(Rectangle((0, firma_y), fc1, firma_h,
                                 facecolor="white", edgecolor=C_BORDER,
                                 linewidth=LW, zorder=1))
-        # Autor 1 (mitad superior)
         if autor:
-            ax.text(c1 / 2, firma_y + firma_h * 0.72,
+            ax.text(fc1 / 2, firma_y + firma_h * 0.65,
                     f"Fdo.: {autor}", ha="center", va="center",
-                    fontsize=3.0, color=C_TXT, zorder=3)
+                    fontsize=2.8, color=C_TXT, zorder=3)
         if cargo_autor:
-            ax.text(c1 / 2, firma_y + firma_h * 0.58,
+            ax.text(fc1 / 2, firma_y + firma_h * 0.35,
                     cargo_autor, ha="center", va="center",
-                    fontsize=2.5, color=C_TXT, zorder=3)
-        # Autor 2 / Firma (mitad inferior)
-        if firma_txt:
-            ax.text(c1 / 2, firma_y + firma_h * 0.38,
-                    f"Fdo.: {firma_txt}", ha="center", va="center",
-                    fontsize=3.0, color=C_TXT, zorder=3)
-        if cargo_firma:
-            ax.text(c1 / 2, firma_y + firma_h * 0.24,
-                    cargo_firma, ha="center", va="center",
-                    fontsize=2.5, color=C_TXT, zorder=3)
+                    fontsize=2.3, color=C_TXT, zorder=3)
 
-        # Celda centro: Vº.Bº (revisión/director)
-        ax.add_patch(Rectangle((c1, firma_y), c2 - c1, firma_h,
+        # Celda 2: Fdo.: FIRMA + CARGO FIRMA
+        ax.add_patch(Rectangle((fc1, firma_y), fc2 - fc1, firma_h,
+                                facecolor="white", edgecolor=C_BORDER,
+                                linewidth=LW, zorder=1))
+        if firma_txt:
+            ax.text((fc1 + fc2) / 2, firma_y + firma_h * 0.65,
+                    f"Fdo.: {firma_txt}", ha="center", va="center",
+                    fontsize=2.8, color=C_TXT, zorder=3)
+        if cargo_firma:
+            ax.text((fc1 + fc2) / 2, firma_y + firma_h * 0.35,
+                    cargo_firma, ha="center", va="center",
+                    fontsize=2.3, color=C_TXT, zorder=3)
+
+        # Celda 3: Vº.Bº (revisión/director)
+        ax.add_patch(Rectangle((fc2, firma_y), fc3 - fc2, firma_h,
                                 facecolor="white", edgecolor=C_BORDER,
                                 linewidth=LW, zorder=1))
         if revision:
-            ax.text((c1 + c2) / 2, firma_y + firma_h * 0.55,
+            ax.text((fc2 + fc3) / 2, firma_y + firma_h * 0.65,
                     f"Fdo.: {revision}", ha="center", va="center",
-                    fontsize=3.0, color=C_TXT, zorder=3)
+                    fontsize=2.8, color=C_TXT, zorder=3)
         if cargo_revision:
-            ax.text((c1 + c2) / 2, firma_y + firma_h * 0.35,
+            ax.text((fc2 + fc3) / 2, firma_y + firma_h * 0.35,
                     cargo_revision, ha="center", va="center",
-                    fontsize=2.5, color=C_TXT, zorder=3)
+                    fontsize=2.3, color=C_TXT, zorder=3)
 
-        # Celda derecha: FECHA
-        ax.add_patch(Rectangle((c2, firma_y), 1 - c2, firma_h,
+        # Celda 4: FECHA (automática en español)
+        ax.add_patch(Rectangle((fc3, firma_y), 1 - fc3, firma_h,
                                 facecolor="white", edgecolor=C_BORDER,
                                 linewidth=LW, zorder=1))
-        ax.text(c2 + (1 - c2) * 0.50, firma_y + firma_h * 0.72,
+        ax.text(fc3 + (1 - fc3) * 0.50, firma_y + firma_h * 0.72,
                 "FECHA:", ha="center", va="center",
                 fontsize=3.5, color=C_TXT, zorder=3)
-        fecha = date.today().strftime("%B %Y").upper()
-        ax.text(c2 + (1 - c2) * 0.50, firma_y + firma_h * 0.35,
+        _MESES_ES = {1: "ENERO", 2: "FEBRERO", 3: "MARZO", 4: "ABRIL",
+                     5: "MAYO", 6: "JUNIO", 7: "JULIO", 8: "AGOSTO",
+                     9: "SEPTIEMBRE", 10: "OCTUBRE", 11: "NOVIEMBRE",
+                     12: "DICIEMBRE"}
+        hoy = date.today()
+        fecha = f"{_MESES_ES[hoy.month]} {hoy.year}"
+        ax.text(fc3 + (1 - fc3) * 0.50, firma_y + firma_h * 0.35,
                 fecha, ha="center", va="center",
                 fontsize=4.5, fontweight="bold", color=C_TXT, zorder=3)
 
