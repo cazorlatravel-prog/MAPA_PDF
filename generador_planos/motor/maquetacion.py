@@ -1360,12 +1360,12 @@ class MaquetadorPlano:
 
         if monte_txt:
             ax.text(0.03, monte_y + monte_h * 0.65, monte_txt,
-                    ha="left", va="center", fontsize=4.5, color=C_TXT,
+                    ha="left", va="center", fontsize=6, color=C_TXT,
                     fontweight="bold", zorder=3)
         if tm_txt:
             ax.text(0.03, monte_y + monte_h * 0.30, tm_txt,
-                    ha="left", va="center", fontsize=4.5, color=C_TXT_LIGHT,
-                    fontweight="normal", zorder=3)
+                    ha="left", va="center", fontsize=6, color=C_TXT,
+                    fontweight="bold", zorder=3)
 
         # Nº de plano
         num_inicio = caj.get("num_plano_inicio", 1)
