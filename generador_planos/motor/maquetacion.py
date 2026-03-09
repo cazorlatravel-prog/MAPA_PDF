@@ -1443,35 +1443,47 @@ class MaquetadorPlano:
                     cargo_revision, ha="center", va="center",
                     fontsize=2.3, color=C_TXT_LIGHT, fontstyle="italic", zorder=3)
 
-        # ── Celda ESCALA + FECHA (apiladas en la misma columna) ──
+        # ── Celda ESCALA + FECHA + SRC (apiladas en la misma columna) ──
         ax.add_patch(Rectangle((c2, aut_y), 1 - c2, aut_h,
                                 facecolor=C_BG_ESCALA, edgecolor=C_BORDER,
                                 linewidth=LW, zorder=1))
-        # Línea separadora horizontal entre escala y fecha
+        mid_x = c2 + (1 - c2) * 0.50
+        # Separador escala / fecha
         ax.plot([c2 + 0.01, 1 - 0.01],
-                [aut_y + aut_h * 0.48, aut_y + aut_h * 0.48],
+                [aut_y + aut_h * 0.60, aut_y + aut_h * 0.60],
                 color=C_BORDER_LIGHT, linewidth=0.3, zorder=2)
-        # Escala (parte superior)
-        ax.text(c2 + (1 - c2) * 0.50, aut_y + aut_h * 0.82,
+        # Separador fecha / SRC
+        ax.plot([c2 + 0.01, 1 - 0.01],
+                [aut_y + aut_h * 0.28, aut_y + aut_h * 0.28],
+                color=C_BORDER_LIGHT, linewidth=0.3, zorder=2)
+        # Escala (tercio superior)
+        ax.text(mid_x, aut_y + aut_h * 0.88,
                 "ESCALA:", ha="center", va="center",
-                fontsize=3.5, color=C_LABEL, fontweight="bold", zorder=3)
+                fontsize=3.0, color=C_LABEL, fontweight="bold", zorder=3)
         escala_txt = f"1:{self.escala:,}".replace(",", ".")
-        ax.text(c2 + (1 - c2) * 0.50, aut_y + aut_h * 0.60,
+        ax.text(mid_x, aut_y + aut_h * 0.70,
                 escala_txt, ha="center", va="center",
-                fontsize=7, fontweight="bold", color=C_GREEN_DARK, zorder=3)
-        # Fecha (parte inferior)
-        ax.text(c2 + (1 - c2) * 0.50, aut_y + aut_h * 0.35,
+                fontsize=6, fontweight="bold", color=C_GREEN_DARK, zorder=3)
+        # Fecha (tercio medio)
+        ax.text(mid_x, aut_y + aut_h * 0.50,
                 "FECHA:", ha="center", va="center",
-                fontsize=3.5, color=C_LABEL, fontweight="bold", zorder=3)
+                fontsize=3.0, color=C_LABEL, fontweight="bold", zorder=3)
         _MESES_ES = {1: "ENERO", 2: "FEBRERO", 3: "MARZO", 4: "ABRIL",
                      5: "MAYO", 6: "JUNIO", 7: "JULIO", 8: "AGOSTO",
                      9: "SEPTIEMBRE", 10: "OCTUBRE", 11: "NOVIEMBRE",
                      12: "DICIEMBRE"}
         hoy = date.today()
         fecha = f"{_MESES_ES[hoy.month]} {hoy.year}"
-        ax.text(c2 + (1 - c2) * 0.50, aut_y + aut_h * 0.15,
+        ax.text(mid_x, aut_y + aut_h * 0.36,
                 fecha, ha="center", va="center",
-                fontsize=4.5, fontweight="bold", color=C_GREEN_DARK, zorder=3)
+                fontsize=3.5, fontweight="bold", color=C_GREEN_DARK, zorder=3)
+        # Sistema de coordenadas (tercio inferior)
+        ax.text(mid_x, aut_y + aut_h * 0.18,
+                "COORD:", ha="center", va="center",
+                fontsize=2.5, color=C_LABEL, fontweight="bold", zorder=3)
+        ax.text(mid_x, aut_y + aut_h * 0.06,
+                "ETRS89 UTM 30N", ha="center", va="center",
+                fontsize=2.8, fontweight="bold", color=C_GREEN_DARK, zorder=3)
 
 
     # ── Rosa de los vientos (dentro del mapa principal, arriba-izquierda) ──
