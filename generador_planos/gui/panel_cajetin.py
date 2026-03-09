@@ -152,6 +152,21 @@ class PanelCajetin:
         self._cb_campo_etiq.current(1)
         row_idx += 2
 
+        # ── Etiquetas de montes en el mapa ──
+        tk.Label(f, text="Etiqueta montes (campo):", font=FONT_SMALL,
+                 bg=COLOR_PANEL, fg=COLOR_TEXTO).grid(
+                 row=row_idx, column=0, sticky="w")
+        self._campo_etiqueta_montes = tk.StringVar(value="(sin etiqueta)")
+        self._cb_campo_etiq_montes = ttk.Combobox(
+            f, textvariable=self._campo_etiqueta_montes,
+            values=["(sin etiqueta)"], state="readonly",
+            font=FONT_SMALL,
+        )
+        self._cb_campo_etiq_montes.grid(row=row_idx + 1, column=0,
+                                         sticky="ew", pady=(2, 6))
+        self._cb_campo_etiq_montes.current(0)
+        row_idx += 2
+
         # ── Colores de plantilla ──
         tk.Label(f, text="Colores plantilla:", font=FONT_BOLD,
                  bg=COLOR_PANEL, fg=COLOR_TEXTO_GRIS).grid(
@@ -242,6 +257,14 @@ class PanelCajetin:
             else:
                 self._cb_campo_etiq.current(0)
 
+    def actualizar_campos_montes(self, columnas: list):
+        """Actualiza el combobox de etiquetas de montes con las columnas del shapefile."""
+        cols = [c for c in columnas if c.lower() != "geometry"]
+        valores = ["(sin etiqueta)"] + cols
+        self._cb_campo_etiq_montes.configure(values=valores)
+        if self._campo_etiqueta_montes.get() not in valores:
+            self._cb_campo_etiq_montes.current(0)
+
     def _aplicar(self):
         cajetin = self.obtener_cajetin()
         plantilla = self.obtener_plantilla()
@@ -276,6 +299,9 @@ class PanelCajetin:
             "campo_etiqueta": (self._campo_etiqueta.get()
                                if self._campo_etiqueta.get() != "(sin etiqueta)"
                                else ""),
+            "campo_etiqueta_montes": (self._campo_etiqueta_montes.get()
+                                      if self._campo_etiqueta_montes.get() != "(sin etiqueta)"
+                                      else ""),
         }
 
     def obtener_plantilla(self) -> dict:

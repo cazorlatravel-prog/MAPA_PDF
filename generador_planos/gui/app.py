@@ -282,8 +282,12 @@ class App(tk.Tk):
             self._campos_visibles_proyecto = []
 
     def _on_montes_cargados(self):
-        """Actualiza el combobox de categorización de montes."""
+        """Actualiza comboboxes de categorización y etiquetas de montes."""
         self.panel_simbologia.actualizar_campo_categoria_montes()
+        if self.motor.gdf_montes is not None:
+            cols = [c for c in self.motor.gdf_montes.columns
+                    if c.lower() != "geometry"]
+            self.panel_cajetin.actualizar_campos_montes(cols)
 
     def _on_filtro_aplicado(self, indices: list):
         self._poblar_tabla(indices)

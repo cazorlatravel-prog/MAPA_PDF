@@ -335,6 +335,55 @@ class MaquetadorPlano:
             except Exception:
                 pass  # Si adjustText falla o no está instalado, continuar
 
+    # ── Etiquetas de montes ─────────────────────────────────────────────
+
+    def dibujar_etiquetas_montes(self, gdf_montes, campo_etiqueta="Monte",
+                                  campo_mapeo=None):
+        """Etiquetas para la capa de montes: rosa oscuro, grande, negrita."""
+        campo_real = campo_etiqueta
+        if campo_mapeo and campo_etiqueta in campo_mapeo:
+            campo_real = campo_mapeo[campo_etiqueta]
+
+        ylim = self.ax_map.get_ylim()
+        offset_y = (ylim[1] - ylim[0]) * 0.015
+
+        textos_anotados = []
+        etiquetas_vistas = set()
+
+        for _, row in gdf_montes.iterrows():
+            geom = row.geometry
+            if geom is None:
+                continue
+            texto = str(row.get(campo_real, ""))
+            if not texto or texto == "nan":
+                continue
+            if len(texto) > 30:
+                texto = texto[:29] + "\u2026"
+
+            if texto in etiquetas_vistas:
+                continue
+            etiquetas_vistas.add(texto)
+
+            cx, cy = geom.centroid.x, geom.centroid.y
+
+            txt = self.ax_map.annotate(
+                texto, xy=(cx, cy + offset_y), fontsize=6.5,
+                fontweight="bold", fontstyle="italic",
+                color="#C2185B", ha="center", va="bottom", zorder=7,
+                bbox=dict(boxstyle="round,pad=0.2", facecolor="white",
+                          edgecolor="#C2185B", linewidth=0.5, alpha=0.9),
+            )
+            textos_anotados.append(txt)
+
+        if len(textos_anotados) > 1:
+            try:
+                from adjustText import adjust_text
+                adjust_text(textos_anotados, ax=self.ax_map,
+                            arrowprops=dict(arrowstyle="-", color="#C2185B",
+                                            lw=0.4))
+            except Exception:
+                pass
+
     # ── Vértices ───────────────────────────────────────────────────────
 
     def dibujar_vertices_numerados(self, geom):

@@ -475,11 +475,19 @@ class GeneradorPlanos:
         ax_map.set_xlim(xmin, xmax)
         ax_map.set_ylim(ymin, ymax)
 
-        # Etiquetas
+        # Etiquetas infraestructuras
         campo_etiq = self._cajetin.get("campo_etiqueta", "Nombre_Infra")
         if campo_etiq:
             maq.dibujar_etiquetas_infra(gdf_sel, campo_etiqueta=campo_etiq,
                                          campo_mapeo=self._campo_mapeo)
+        # Etiquetas montes
+        campo_etiq_m = self._cajetin.get("campo_etiqueta_montes", "")
+        if campo_etiq_m and self.gdf_montes is not None:
+            montes_vis = self.gdf_montes.cx[xmin:xmax, ymin:ymax]
+            if not montes_vis.empty:
+                maq.dibujar_etiquetas_montes(montes_vis,
+                                              campo_etiqueta=campo_etiq_m,
+                                              campo_mapeo=self._campo_mapeo)
 
         # Leyenda y paneles según plantilla
         cx, cy = geom.centroid.x, geom.centroid.y
@@ -576,11 +584,19 @@ class GeneradorPlanos:
         ax_map.set_xlim(xmin, xmax)
         ax_map.set_ylim(ymin, ymax)
 
-        # Etiquetas
+        # Etiquetas infraestructuras
         campo_etiq = self._cajetin.get("campo_etiqueta", "Nombre_Infra")
         if campo_etiq:
             maq.dibujar_etiquetas_infra(gdf_grupo, campo_etiqueta=campo_etiq,
                                          campo_mapeo=self._campo_mapeo)
+        # Etiquetas montes
+        campo_etiq_m = self._cajetin.get("campo_etiqueta_montes", "")
+        if campo_etiq_m and self.gdf_montes is not None:
+            montes_vis = self.gdf_montes.cx[xmin:xmax, ymin:ymax]
+            if not montes_vis.empty:
+                maq.dibujar_etiquetas_montes(montes_vis,
+                                              campo_etiqueta=campo_etiq_m,
+                                              campo_mapeo=self._campo_mapeo)
 
         # Leyenda y paneles según plantilla
         cx, cy = geom_union.centroid.x, geom_union.centroid.y
@@ -806,12 +822,20 @@ class GeneradorPlanos:
                     ax_map.set_xlim(xmin, xmax)
                     ax_map.set_ylim(ymin, ymax)
 
-                    # Etiquetas
+                    # Etiquetas infraestructuras
                     campo_etiq = self._cajetin.get("campo_etiqueta", "Nombre_Infra")
                     if campo_etiq:
                         maq.dibujar_etiquetas_infra(
                             gdf_sel, campo_etiqueta=campo_etiq,
                             campo_mapeo=self._campo_mapeo)
+                    # Etiquetas montes
+                    campo_etiq_m = self._cajetin.get("campo_etiqueta_montes", "")
+                    if campo_etiq_m and self.gdf_montes is not None:
+                        montes_vis = self.gdf_montes.cx[xmin:xmax, ymin:ymax]
+                        if not montes_vis.empty:
+                            maq.dibujar_etiquetas_montes(
+                                montes_vis, campo_etiqueta=campo_etiq_m,
+                                campo_mapeo=self._campo_mapeo)
 
                     # Leyenda y paneles según plantilla
                     cx, cy = geom.centroid.x, geom.centroid.y
