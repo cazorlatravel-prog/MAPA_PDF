@@ -589,8 +589,14 @@ class MaquetadorPlano:
         ax.set_ylim(0, 1)
         ax.axis("off")
 
-        C_BORDER = "#000000"
+        C_BORDER = "#2C2C2C"
+        C_BORDER_LIGHT = "#AAAAAA"
         C_TXT = "#1A1A2E"
+        C_TXT_LIGHT = "#4A4A5A"
+        C_HDR_BG = "#00953B"       # Verde institucional para cabecera
+        C_HDR_TXT = "#FFFFFF"       # Texto blanco en cabecera
+        C_ROW_EVEN = "#FFFFFF"      # Filas pares: blanco
+        C_ROW_ODD = "#F5F8F5"       # Filas impares: verde muy tenue (zebra)
 
         def _resolver(campo):
             if campo_mapeo and campo in campo_mapeo:
@@ -628,32 +634,33 @@ class MaquetadorPlano:
         row_h = 1.0 / max(total_rows, 1)
 
         lw_h = 0.8   # linewidth cabecera
-        lw_d = 0.5   # linewidth datos
+        lw_d = 0.4   # linewidth datos (más fino)
         fsz_h = 2.5  # fontsize cabecera
         fsz_d = 2.0  # fontsize datos
 
-        # ── Cabecera ──
+        # ── Cabecera (fondo verde institucional, texto blanco) ──
         for ci, campo in enumerate(campos):
             x0 = col_x[ci]
             cw = col_widths[ci]
             ax.add_patch(Rectangle((x0, 1 - row_h), cw, row_h,
-                                    facecolor="white", edgecolor=C_BORDER,
+                                    facecolor=C_HDR_BG, edgecolor=C_BORDER,
                                     linewidth=lw_h, zorder=1))
             etiq = _etiqueta_campo(campo)
             if len(etiq) > 12:
                 etiq = etiq[:11] + "."
             ax.text(x0 + cw / 2, 1 - row_h / 2, etiq.upper(),
                     ha="center", va="center", fontsize=fsz_h,
-                    fontweight="bold", color=C_TXT, zorder=2)
+                    fontweight="bold", color=C_HDR_TXT, zorder=2)
 
-        # ── Filas de datos ──
+        # ── Filas de datos (zebra: alternas blanco / verde tenue) ──
         for ri, r in enumerate(rows):
             y = 1 - (ri + 2) * row_h
+            bg = C_ROW_ODD if ri % 2 == 1 else C_ROW_EVEN
             for ci, campo in enumerate(campos):
                 x0 = col_x[ci]
                 cw = col_widths[ci]
                 ax.add_patch(Rectangle((x0, y), cw, row_h,
-                                        facecolor="white", edgecolor=C_BORDER,
+                                        facecolor=bg, edgecolor=C_BORDER_LIGHT,
                                         linewidth=lw_d, zorder=1))
                 campo_real = _resolver(campo)
                 valor = _fmt_valor(r.get(campo_real, None))
@@ -661,7 +668,7 @@ class MaquetadorPlano:
                     valor = valor[:19] + "\u2026"
                 ax.text(x0 + cw / 2, y + row_h / 2, valor,
                         ha="center", va="center", fontsize=fsz_d,
-                        color=C_TXT, zorder=2)
+                        color=C_TXT_LIGHT, zorder=2)
 
     # ── Mapa de localización (panel inferior derecho) ──────────────────
 
@@ -1049,8 +1056,13 @@ class MaquetadorPlano:
         ax.set_ylim(0, 1)
         ax.axis("off")
 
-        C_BORDER = "#000000"
+        C_BORDER = "#2C2C2C"
         C_TXT = "#1A1A2E"
+        C_GREEN = "#00953B"
+        C_GREEN_DARK = "#006B2B"
+        C_LABEL = "#00953B"
+        C_BG_LEYENDA = "#FAFCFA"     # Fondo general leyenda
+        C_DIVIDER = "#CCCCCC"         # Líneas divisorias internas
 
         # ── Calcular altura real del contenido ──
         items_inf = items_leyenda_infra or []
@@ -1072,16 +1084,23 @@ class MaquetadorPlano:
         y_bot = y_top - content_h
 
         # Borde del panel ajustado al contenido
-        ax.add_patch(Rectangle((0, y_bot), 1, content_h, facecolor="white",
+        ax.add_patch(Rectangle((0, y_bot), 1, content_h, facecolor=C_BG_LEYENDA,
                                 edgecolor=C_BORDER, linewidth=1.0, zorder=0))
 
-        # Título LEYENDA (centrado, bold, subrayado)
-        t_y = y_top - 0.05
+        # Barra de título LEYENDA (fondo verde, texto blanco)
+        title_h = 0.07
+        ax.add_patch(Rectangle((0, y_top - title_h), 1, title_h,
+                                facecolor=C_GREEN, edgecolor=C_BORDER,
+                                linewidth=1.0, zorder=1))
+        t_y = y_top - title_h / 2
         ax.text(0.5, t_y, "LEYENDA", ha="center", va="center",
-                fontsize=7, fontweight="bold", color=C_TXT,
+                fontsize=7, fontweight="bold", color="white",
                 transform=ax.transAxes, zorder=2)
-        ax.plot([0.30, 0.70], [t_y - 0.03, t_y - 0.03], color=C_BORDER,
-                linewidth=1.0, transform=ax.transAxes, zorder=2)
+
+        # Línea divisoria vertical entre infraestructura y montes
+        ax.plot([0.65, 0.65], [y_top - title_h, y_bot],
+                color=C_DIVIDER, linewidth=0.5,
+                transform=ax.transAxes, zorder=1)
 
         # ── helper para dibujar un símbolo + texto ──
         def _dibujar_item(x_sym0, x_sym1, x_txt, y, item, rh):
@@ -1103,7 +1122,7 @@ class MaquetadorPlano:
                     edgecolor=color, linewidth=0.6,
                     transform=ax.transAxes, zorder=3))
             ax.text(x_txt, y, str(label)[:22], ha="left", va="center",
-                    fontsize=3.5, color=C_TXT, transform=ax.transAxes, zorder=3)
+                    fontsize=3.5, color="#3A3A4A", transform=ax.transAxes, zorder=3)
 
         # ── Posición Y del subtítulo y primer item ──
         sub_y = t_y - 0.09   # subtítulos de sección
@@ -1111,7 +1130,10 @@ class MaquetadorPlano:
 
         # ── Sección izquierda: TIPO INFRAESTRUCTURA (2 sub-columnas) ──
         ax.text(0.02, sub_y, "TIPO INFRAESTRUCTURA", ha="left", va="center",
-                fontsize=4, fontweight="bold", color=C_TXT, zorder=2)
+                fontsize=4, fontweight="bold", color=C_GREEN_DARK, zorder=2)
+        # Subrayado del subtítulo
+        ax.plot([0.02, 0.40], [sub_y - 0.02, sub_y - 0.02],
+                color=C_GREEN, linewidth=0.5, transform=ax.transAxes, zorder=2)
 
         col_left = items_inf[:mid]
         col_right = items_inf[mid:n_inf]
@@ -1128,7 +1150,10 @@ class MaquetadorPlano:
 
         # ── Sección derecha: MONTES PÚBLICOS ──
         ax.text(0.80, sub_y, "MONTES PÚBLICOS", ha="center", va="center",
-                fontsize=4, fontweight="bold", color=C_TXT, zorder=2)
+                fontsize=4, fontweight="bold", color=C_GREEN_DARK, zorder=2)
+        # Subrayado del subtítulo
+        ax.plot([0.68, 0.92], [sub_y - 0.02, sub_y - 0.02],
+                color=C_GREEN, linewidth=0.5, transform=ax.transAxes, zorder=2)
 
         row_h_m = row_h  # misma altura de fila para alinear
 
