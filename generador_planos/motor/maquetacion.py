@@ -1275,46 +1275,13 @@ class MaquetadorPlano:
                 fontsize=14, fontweight="bold", color=C_TXT, zorder=3)
 
         # ═══════════════════════════════════════════════════════════════
-        # 4. AUTORES | Vº.Bº | ESCALA  (fila de cabeceras)
+        # 4. AUTORES (un solo recuadro) | Vº.Bº | ESCALA / FECHA
+        #    "AUTORES:" título arriba-izq, 2 firmas lado a lado debajo
         # ═══════════════════════════════════════════════════════════════
-        aut_h = 0.12
+        aut_h = 0.18
         aut_y = monte_y - aut_h
-        c1 = 0.33
-        c2 = 0.66
-
-        # Celda AUTORES
-        ax.add_patch(Rectangle((0, aut_y), c1, aut_h,
-                                facecolor="white", edgecolor=C_BORDER,
-                                linewidth=LW, zorder=1))
-        ax.text(0.03, aut_y + aut_h * 0.50,
-                "AUTORES:", ha="left", va="center",
-                fontsize=3.5, fontweight="bold", color=C_TXT, zorder=3)
-
-        # Celda Vº.Bº
-        ax.add_patch(Rectangle((c1, aut_y), c2 - c1, aut_h,
-                                facecolor="white", edgecolor=C_BORDER,
-                                linewidth=LW, zorder=1))
-        ax.text((c1 + c2) / 2, aut_y + aut_h * 0.50,
-                "Vº.Bº", ha="center", va="center",
-                fontsize=3.5, fontweight="bold", color=C_TXT, zorder=3)
-
-        # Celda ESCALA (cabecera + valor)
-        ax.add_patch(Rectangle((c2, aut_y), 1 - c2, aut_h,
-                                facecolor="white", edgecolor=C_BORDER,
-                                linewidth=LW, zorder=1))
-        ax.text(c2 + (1 - c2) * 0.50, aut_y + aut_h * 0.72,
-                "ESCALA:", ha="center", va="center",
-                fontsize=3.5, color=C_TXT, zorder=3)
-        escala_txt = f"1:{self.escala:,}".replace(",", ".")
-        ax.text(c2 + (1 - c2) * 0.50, aut_y + aut_h * 0.28,
-                escala_txt, ha="center", va="center",
-                fontsize=9, fontweight="bold", color=C_TXT, zorder=3)
-
-        # ═══════════════════════════════════════════════════════════════
-        # 5. FIRMAS: Autor | Firma | Vº.Bº | FECHA  (en paralelo)
-        # ═══════════════════════════════════════════════════════════════
-        firma_h = 0.16
-        firma_y = aut_y - firma_h
+        c1 = 0.33   # fin columna autores
+        c2 = 0.66   # fin columna Vº.Bº
 
         autor = caj.get("autor", "")
         cargo_autor = caj.get("cargo_autor", "")
@@ -1323,55 +1290,65 @@ class MaquetadorPlano:
         revision = caj.get("revision", "")
         cargo_revision = caj.get("cargo_revision", "")
 
-        # 4 columnas en paralelo: Autor | Firma | Vº.Bº | Fecha
-        fc1 = 0.165   # fin col autor
-        fc2 = 0.33    # fin col firma
-        fc3 = 0.66    # fin col revisión
-
-        # Celda 1: Fdo.: AUTOR + CARGO AUTOR
-        ax.add_patch(Rectangle((0, firma_y), fc1, firma_h,
+        # ── Celda AUTORES (un solo rectángulo con título + 2 firmas) ──
+        ax.add_patch(Rectangle((0, aut_y), c1, aut_h,
                                 facecolor="white", edgecolor=C_BORDER,
                                 linewidth=LW, zorder=1))
+        # Título "AUTORES:" arriba-izquierda
+        ax.text(0.01, aut_y + aut_h * 0.90,
+                "AUTORES:", ha="left", va="center",
+                fontsize=3.0, fontweight="bold", color=C_TXT, zorder=3)
+        # Firma autor 1 (mitad izquierda)
+        mid_a1 = c1 * 0.25  # centro de la mitad izq
         if autor:
-            ax.text(fc1 / 2, firma_y + firma_h * 0.65,
+            ax.text(mid_a1, aut_y + aut_h * 0.50,
                     f"Fdo.: {autor}", ha="center", va="center",
                     fontsize=2.8, color=C_TXT, zorder=3)
         if cargo_autor:
-            ax.text(fc1 / 2, firma_y + firma_h * 0.35,
+            ax.text(mid_a1, aut_y + aut_h * 0.25,
                     cargo_autor, ha="center", va="center",
                     fontsize=2.3, color=C_TXT, zorder=3)
-
-        # Celda 2: Fdo.: FIRMA + CARGO FIRMA
-        ax.add_patch(Rectangle((fc1, firma_y), fc2 - fc1, firma_h,
-                                facecolor="white", edgecolor=C_BORDER,
-                                linewidth=LW, zorder=1))
+        # Firma autor 2 (mitad derecha)
+        mid_a2 = c1 * 0.75  # centro de la mitad der
         if firma_txt:
-            ax.text((fc1 + fc2) / 2, firma_y + firma_h * 0.65,
+            ax.text(mid_a2, aut_y + aut_h * 0.50,
                     f"Fdo.: {firma_txt}", ha="center", va="center",
                     fontsize=2.8, color=C_TXT, zorder=3)
         if cargo_firma:
-            ax.text((fc1 + fc2) / 2, firma_y + firma_h * 0.35,
+            ax.text(mid_a2, aut_y + aut_h * 0.25,
                     cargo_firma, ha="center", va="center",
                     fontsize=2.3, color=C_TXT, zorder=3)
 
-        # Celda 3: Vº.Bº (revisión/director)
-        ax.add_patch(Rectangle((fc2, firma_y), fc3 - fc2, firma_h,
+        # ── Celda Vº.Bº ──
+        ax.add_patch(Rectangle((c1, aut_y), c2 - c1, aut_h,
                                 facecolor="white", edgecolor=C_BORDER,
                                 linewidth=LW, zorder=1))
+        ax.text(c1 + 0.01, aut_y + aut_h * 0.90,
+                "Vº.Bº", ha="left", va="center",
+                fontsize=3.0, fontweight="bold", color=C_TXT, zorder=3)
         if revision:
-            ax.text((fc2 + fc3) / 2, firma_y + firma_h * 0.65,
+            ax.text((c1 + c2) / 2, aut_y + aut_h * 0.50,
                     f"Fdo.: {revision}", ha="center", va="center",
                     fontsize=2.8, color=C_TXT, zorder=3)
         if cargo_revision:
-            ax.text((fc2 + fc3) / 2, firma_y + firma_h * 0.35,
+            ax.text((c1 + c2) / 2, aut_y + aut_h * 0.25,
                     cargo_revision, ha="center", va="center",
                     fontsize=2.3, color=C_TXT, zorder=3)
 
-        # Celda 4: FECHA (automática en español)
-        ax.add_patch(Rectangle((fc3, firma_y), 1 - fc3, firma_h,
+        # ── Celda ESCALA + FECHA (apiladas en la misma columna) ──
+        ax.add_patch(Rectangle((c2, aut_y), 1 - c2, aut_h,
                                 facecolor="white", edgecolor=C_BORDER,
                                 linewidth=LW, zorder=1))
-        ax.text(fc3 + (1 - fc3) * 0.50, firma_y + firma_h * 0.72,
+        # Escala (parte superior)
+        ax.text(c2 + (1 - c2) * 0.50, aut_y + aut_h * 0.82,
+                "ESCALA:", ha="center", va="center",
+                fontsize=3.5, color=C_TXT, zorder=3)
+        escala_txt = f"1:{self.escala:,}".replace(",", ".")
+        ax.text(c2 + (1 - c2) * 0.50, aut_y + aut_h * 0.60,
+                escala_txt, ha="center", va="center",
+                fontsize=7, fontweight="bold", color=C_TXT, zorder=3)
+        # Fecha (parte inferior)
+        ax.text(c2 + (1 - c2) * 0.50, aut_y + aut_h * 0.35,
                 "FECHA:", ha="center", va="center",
                 fontsize=3.5, color=C_TXT, zorder=3)
         _MESES_ES = {1: "ENERO", 2: "FEBRERO", 3: "MARZO", 4: "ABRIL",
@@ -1380,7 +1357,7 @@ class MaquetadorPlano:
                      12: "DICIEMBRE"}
         hoy = date.today()
         fecha = f"{_MESES_ES[hoy.month]} {hoy.year}"
-        ax.text(fc3 + (1 - fc3) * 0.50, firma_y + firma_h * 0.35,
+        ax.text(c2 + (1 - c2) * 0.50, aut_y + aut_h * 0.15,
                 fecha, ha="center", va="center",
                 fontsize=4.5, fontweight="bold", color=C_TXT, zorder=3)
 
