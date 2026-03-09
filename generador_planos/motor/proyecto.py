@@ -43,10 +43,13 @@ class Proyecto:
         # Cajetín
         self.cajetin = {
             "autor": "",
+            "cargo_autor": "",
             "proyecto": "",
             "num_proyecto": "",
-            "revision": "0",
+            "revision": "",
+            "cargo_revision": "",
             "firma": "",
+            "cargo_firma": "",
             "organizacion": "",
             "subtitulo": "PLANO DE INFRAESTRUCTURA FORESTAL",
         }

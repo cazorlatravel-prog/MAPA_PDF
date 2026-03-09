@@ -1007,11 +1007,12 @@ class MaquetadorPlano:
     # ── Leyenda lateral (Plantilla 2: ax_info) ──────────────────────────
 
     def dibujar_leyenda_lateral(self, items_leyenda_infra, items_leyenda_montes):
-        """Dibuja la leyenda estilo Junta de Andalucía en el panel lateral.
+        """Dibuja la leyenda estilo plano de referencia.
 
-        Formato: LEYENDA (título subrayado), dos columnas:
-        - Izquierda: TIPO INFRAESTRUCTURA con símbolos
-        - Derecha: MONTES PÚBLICOS con símbolos
+        Formato:
+        - Título LEYENDA centrado con subrayado
+        - Izquierda: TIPO INFRAESTRUCTURA (2 sub-columnas de items)
+        - Derecha: MONTES PÚBLICOS (1 columna de items)
         """
         ax = self.ax_info
         ax.set_xlim(0, 1)
@@ -1025,84 +1026,69 @@ class MaquetadorPlano:
         ax.add_patch(Rectangle((0, 0), 1, 1, facecolor="white",
                                 edgecolor=C_BORDER, linewidth=1.0, zorder=0))
 
-        # Título LEYENDA (subrayado)
-        ax.text(0.5, 0.93, "LEYENDA", ha="center", va="center",
-                fontsize=6, fontweight="bold", color=C_TXT,
+        # Título LEYENDA (centrado, bold, subrayado)
+        ax.text(0.5, 0.92, "LEYENDA", ha="center", va="center",
+                fontsize=7, fontweight="bold", color=C_TXT,
                 transform=ax.transAxes, zorder=2)
-        ax.plot([0.25, 0.75], [0.89, 0.89], color=C_BORDER, linewidth=0.8,
+        ax.plot([0.30, 0.70], [0.87, 0.87], color=C_BORDER, linewidth=1.0,
                 transform=ax.transAxes, zorder=2)
 
-        # ── Columna izquierda: TIPO INFRAESTRUCTURA ──
-        ax.text(0.25, 0.84, "TIPO INFRAESTRUCTURA", ha="center", va="center",
-                fontsize=3.8, fontweight="bold", color=C_TXT, zorder=2)
-
-        items_inf = items_leyenda_infra or []
-        n_inf = min(len(items_inf), 8)
-        row_h = min(0.09, 0.70 / max(n_inf, 1))
-
-        for i, (label, color, geom_type, linestyle, marker, facecolor) in enumerate(items_inf[:n_inf]):
-            y = 0.78 - i * row_h
-            sym_x0 = 0.04
-            sym_x1 = 0.14
-            txt_x = 0.16
-
+        # ── helper para dibujar un símbolo + texto ──
+        def _dibujar_item(x_sym0, x_sym1, x_txt, y, item, rh):
+            label, color, geom_type, linestyle, marker, facecolor = item
             if "point" in geom_type:
-                ax.plot((sym_x0 + sym_x1) / 2, y, marker=marker or "o",
-                        color=color, markersize=4.5, markeredgecolor="white",
-                        markeredgewidth=0.3, transform=ax.transAxes, zorder=3)
+                ax.plot((x_sym0 + x_sym1) / 2, y, marker=marker or "o",
+                        color=color, markersize=3.5, markeredgecolor="white",
+                        markeredgewidth=0.2, transform=ax.transAxes, zorder=3)
             elif "line" in geom_type or "string" in geom_type:
-                ax.plot([sym_x0, sym_x1], [y, y], color=color,
+                ax.plot([x_sym0, x_sym1], [y, y], color=color,
                         linewidth=2.0, linestyle=linestyle or "-",
                         transform=ax.transAxes, zorder=3, solid_capstyle="round")
             else:
-                rect_w = sym_x1 - sym_x0
-                rect_h = row_h * 0.55
+                rect_w = x_sym1 - x_sym0
+                rect_h = rh * 0.50
                 ax.add_patch(Rectangle(
-                    (sym_x0, y - rect_h / 2), rect_w, rect_h,
+                    (x_sym0, y - rect_h / 2), rect_w, rect_h,
                     facecolor=facecolor or (color + "55"),
                     edgecolor=color, linewidth=0.6,
                     transform=ax.transAxes, zorder=3))
-
-            ax.text(txt_x, y, str(label)[:20], ha="left", va="center",
+            ax.text(x_txt, y, str(label)[:22], ha="left", va="center",
                     fontsize=3.5, color=C_TXT, transform=ax.transAxes, zorder=3)
 
-        # ── Línea divisoria vertical ──
-        ax.plot([0.50, 0.50], [0.87, 0.05], color="#CCCCCC", linewidth=0.5,
-                transform=ax.transAxes, zorder=1)
+        # ── Sección izquierda: TIPO INFRAESTRUCTURA (2 sub-columnas) ──
+        ax.text(0.02, 0.81, "TIPO INFRAESTRUCTURA", ha="left", va="center",
+                fontsize=4, fontweight="bold", color=C_TXT, zorder=2)
 
-        # ── Columna derecha: MONTES PÚBLICOS ──
-        ax.text(0.75, 0.84, "MONTES PÚBLICOS", ha="center", va="center",
-                fontsize=3.8, fontweight="bold", color=C_TXT, zorder=2)
+        items_inf = items_leyenda_infra or []
+        n_inf = min(len(items_inf), 12)
+        # Dividir en 2 sub-columnas: primera mitad izq, segunda mitad der
+        mid = (n_inf + 1) // 2
+        col_left = items_inf[:mid]
+        col_right = items_inf[mid:n_inf]
+
+        row_h = min(0.10, 0.65 / max(mid, 1))
+
+        # Sub-columna izquierda (x: 0.02-0.35)
+        for i, item in enumerate(col_left):
+            y = 0.74 - i * row_h
+            _dibujar_item(0.02, 0.09, 0.10, y, item, row_h)
+
+        # Sub-columna derecha (x: 0.35-0.65)
+        for i, item in enumerate(col_right):
+            y = 0.74 - i * row_h
+            _dibujar_item(0.35, 0.42, 0.43, y, item, row_h)
+
+        # ── Sección derecha: MONTES PÚBLICOS ──
+        ax.text(0.80, 0.81, "MONTES PÚBLICOS", ha="center", va="center",
+                fontsize=4, fontweight="bold", color=C_TXT, zorder=2)
 
         items_mon = items_leyenda_montes or []
         n_mon = min(len(items_mon), 8)
-        row_h_m = min(0.09, 0.70 / max(n_mon, 1))
+        row_h_m = min(0.10, 0.65 / max(n_mon, 1))
 
-        for i, (label, color, geom_type, linestyle, marker, facecolor) in enumerate(items_mon[:n_mon]):
-            y = 0.78 - i * row_h_m
-            sym_x0 = 0.54
-            sym_x1 = 0.64
-            txt_x = 0.66
-
-            if "point" in geom_type:
-                ax.plot((sym_x0 + sym_x1) / 2, y, marker=marker or "o",
-                        color=color, markersize=4.5,
-                        transform=ax.transAxes, zorder=3)
-            elif "line" in geom_type or "string" in geom_type:
-                ax.plot([sym_x0, sym_x1], [y, y], color=color,
-                        linewidth=2.0, linestyle=linestyle or "-",
-                        transform=ax.transAxes, zorder=3)
-            else:
-                rect_w = sym_x1 - sym_x0
-                rect_h = row_h_m * 0.55
-                ax.add_patch(Rectangle(
-                    (sym_x0, y - rect_h / 2), rect_w, rect_h,
-                    facecolor=facecolor or (color + "55"),
-                    edgecolor=color, linewidth=0.6,
-                    transform=ax.transAxes, zorder=3))
-
-            ax.text(txt_x, y, str(label)[:20], ha="left", va="center",
-                    fontsize=3.5, color=C_TXT, transform=ax.transAxes, zorder=3)
+        for i, item in enumerate(items_mon[:n_mon]):
+            y = 0.74 - i * row_h_m
+            _dibujar_item(0.67, 0.74, 0.75, y, item, row_h_m)
 
     # ── Cajetín lateral (Plantilla 2: ax_esc) ────────────────────────
 
@@ -1151,7 +1137,8 @@ class MaquetadorPlano:
                 iw, ih = img.size
                 aspect_img = iw / max(ih, 1)
                 logo_h_frac = org_h * 0.80
-                logo_w_frac = min(0.22, logo_h_frac * aspect_img * 0.7)
+                # Un solo logo: ocupa todo el espacio reservado (~35% ancho)
+                logo_w_frac = min(0.35, logo_h_frac * aspect_img * 0.7)
                 logo_ax = ax.inset_axes(
                     [0.02, org_y + org_h * 0.10, logo_w_frac, logo_h_frac],
                     transform=ax.transAxes)

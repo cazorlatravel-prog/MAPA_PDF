@@ -39,10 +39,13 @@ class PanelCajetin:
         # ── Campos del cajetín ──
         campos = [
             ("Autor:", "autor"),
+            ("Cargo autor:", "cargo_autor"),
             ("Proyecto:", "proyecto"),
             ("Nº Proyecto:", "num_proyecto"),
-            ("Revisión:", "revision"),
-            ("Firma:", "firma"),
+            ("Firma (Vº.Bº):", "firma"),
+            ("Cargo firma:", "cargo_firma"),
+            ("Revisión/Director:", "revision"),
+            ("Cargo revisión:", "cargo_revision"),
         ]
         self._vars = {}
         row_idx = 2  # starts after layout selector
@@ -57,7 +60,7 @@ class PanelCajetin:
             self._vars[key] = var
             row_idx += 2
 
-        self._vars["revision"].set("0")
+        self._vars["revision"].set("")
 
         # ── Organización ──
         tk.Label(f, text="Organización:", font=FONT_SMALL, bg=COLOR_PANEL,
@@ -257,10 +260,13 @@ class PanelCajetin:
             num_inicio = 1
         return {
             "autor": self._vars["autor"].get(),
+            "cargo_autor": self._vars["cargo_autor"].get(),
             "proyecto": self._vars["proyecto"].get(),
             "num_proyecto": self._vars["num_proyecto"].get(),
             "revision": self._vars["revision"].get(),
+            "cargo_revision": self._vars["cargo_revision"].get(),
             "firma": self._vars["firma"].get(),
+            "cargo_firma": self._vars["cargo_firma"].get(),
             "organizacion": org,
             "titulo_mapa": self._titulo_mapa.get(),
             "subtitulo": self._subtitulo.get(),
