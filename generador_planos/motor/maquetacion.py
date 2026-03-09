@@ -1134,11 +1134,22 @@ class MaquetadorPlano:
         C_GREEN = "#00953B"  # Verde Junta de Andalucía
         LW = 0.6  # linewidth de celdas
 
+        # ── Alturas de cada fila (de arriba a abajo) ──
+        org_h = 0.22
+        proy_h = 0.16
+        monte_h = 0.16
+        aut_h = 0.18
+        total_h = org_h + proy_h + monte_h + aut_h  # 0.72
+
+        # Posiciones calculadas desde la parte inferior (y=0)
+        aut_y = 0.0
+        monte_y = aut_y + aut_h
+        proy_y = monte_y + monte_h
+        org_y = proy_y + proy_h
+
         # ═══════════════════════════════════════════════════════════════
         # 1. BARRA ORGANIZACIÓN (fondo BLANCO, texto VERDE)
         # ═══════════════════════════════════════════════════════════════
-        org_h = 0.22
-        org_y = 1.0 - org_h
 
         ax.add_patch(Rectangle((0, org_y), 1, org_h,
                                 facecolor="white", edgecolor=C_BORDER,
@@ -1182,8 +1193,6 @@ class MaquetadorPlano:
         # ═══════════════════════════════════════════════════════════════
         # 2. TÍTULO DEL PROYECTO
         # ═══════════════════════════════════════════════════════════════
-        proy_h = 0.16
-        proy_y = org_y - proy_h
 
         ax.add_patch(Rectangle((0, proy_y), 1, proy_h,
                                 facecolor="white", edgecolor=C_BORDER,
@@ -1209,10 +1218,8 @@ class MaquetadorPlano:
                 color=C_TXT, zorder=3, linespacing=1.4)
 
         # ═══════════════════════════════════════════════════════════════
-        # 3. MONTE / T.M. (izq 65%) + Nº DE PLANO (der 35%)
+        # 3. MONTE / T.M. (izq 66%) + Nº DE PLANO (der 34%)
         # ═══════════════════════════════════════════════════════════════
-        monte_h = 0.16
-        monte_y = proy_y - monte_h
         col_r = 0.66  # alineado con c2 de cabeceras/firmas
 
         # Celda izquierda: Monte + T.M.
@@ -1278,8 +1285,6 @@ class MaquetadorPlano:
         # 4. AUTORES (un solo recuadro) | Vº.Bº | ESCALA / FECHA
         #    "AUTORES:" título arriba-izq, 2 firmas lado a lado debajo
         # ═══════════════════════════════════════════════════════════════
-        aut_h = 0.18
-        aut_y = monte_y - aut_h
         c1 = 0.33   # fin columna autores
         c2 = 0.66   # fin columna Vº.Bº
 
@@ -1361,10 +1366,6 @@ class MaquetadorPlano:
                 fecha, ha="center", va="center",
                 fontsize=4.5, fontweight="bold", color=C_TXT, zorder=3)
 
-        # Créditos cartografía (base del cajetín)
-        ax.text(0.5, 0.005, f"Base cartográfica: {proveedor}",
-                ha="center", va="bottom", fontsize=2.5, color="#888",
-                style="italic", zorder=3)
 
     # ── Rosa de los vientos (dentro del mapa principal, arriba-izquierda) ──
 
