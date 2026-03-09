@@ -1626,71 +1626,53 @@ class MaquetadorPlano:
     # ── Rosa de los vientos (dentro del mapa principal, arriba-izquierda) ──
 
     def dibujar_norte_en_mapa(self):
-        """Dibuja una rosa de los vientos profesional dentro del mapa (esquina sup-izq)."""
+        """Dibuja un indicador de norte minimalista y moderno en el mapa."""
         ax = self.ax_map
-        from matplotlib.patches import Polygon as MplPolygon
+        from matplotlib.patches import Polygon as MplPolygon, FancyBboxPatch
+        from matplotlib.path import Path
+        import matplotlib.patches as mpatches
 
-        # Centro y tamaño en coordenadas de ejes
-        cx, cy = 0.045, 0.91
-        r = 0.022  # radio de la rosa
+        # Posición (esquina superior izquierda) y tamaño
+        cx, cy = 0.045, 0.90
+        h = 0.055       # altura total de la flecha
+        w = 0.014        # ancho de la flecha
 
-        # Fondo circular semitransparente
-        circle_bg = plt.Circle((cx, cy - 0.005), r + 0.012,
-                                facecolor="white", edgecolor="#2C3E50",
-                                linewidth=0.5, alpha=0.90,
-                                transform=ax.transAxes, zorder=14)
-        ax.add_patch(circle_bg)
+        # Fondo: rectángulo redondeado sutil
+        bg_w, bg_h = 0.042, 0.095
+        bg = FancyBboxPatch(
+            (cx - bg_w / 2, cy - h * 0.45 - 0.006), bg_w, bg_h,
+            boxstyle="round,pad=0.005", facecolor="white", edgecolor="#AAAAAA",
+            linewidth=0.4, alpha=0.90,
+            transform=ax.transAxes, zorder=14)
+        ax.add_patch(bg)
 
-        # Triángulos de la rosa (N, S, E, W)
-        # Norte (punta arriba) — mitad oscura y mitad clara
-        tri_n_l = MplPolygon(
-            [(cx, cy + r * 1.1), (cx - r * 0.3, cy), (cx, cy)],
-            facecolor="#1A1A2E", edgecolor="#1A1A2E", linewidth=0.3,
-            transform=ax.transAxes, zorder=15)
-        tri_n_r = MplPolygon(
-            [(cx, cy + r * 1.1), (cx + r * 0.3, cy), (cx, cy)],
-            facecolor="#666666", edgecolor="#1A1A2E", linewidth=0.3,
-            transform=ax.transAxes, zorder=15)
-        # Sur
-        tri_s_l = MplPolygon(
-            [(cx, cy - r * 1.1), (cx - r * 0.3, cy), (cx, cy)],
-            facecolor="#AAAAAA", edgecolor="#1A1A2E", linewidth=0.3,
-            transform=ax.transAxes, zorder=15)
-        tri_s_r = MplPolygon(
-            [(cx, cy - r * 1.1), (cx + r * 0.3, cy), (cx, cy)],
-            facecolor="#DDDDDD", edgecolor="#1A1A2E", linewidth=0.3,
-            transform=ax.transAxes, zorder=15)
-        # Este
-        tri_e_l = MplPolygon(
-            [(cx + r * 1.1, cy), (cx, cy + r * 0.3), (cx, cy)],
-            facecolor="#888888", edgecolor="#1A1A2E", linewidth=0.3,
-            transform=ax.transAxes, zorder=15)
-        tri_e_r = MplPolygon(
-            [(cx + r * 1.1, cy), (cx, cy - r * 0.3), (cx, cy)],
-            facecolor="#CCCCCC", edgecolor="#1A1A2E", linewidth=0.3,
-            transform=ax.transAxes, zorder=15)
-        # Oeste
-        tri_w_l = MplPolygon(
-            [(cx - r * 1.1, cy), (cx, cy - r * 0.3), (cx, cy)],
-            facecolor="#888888", edgecolor="#1A1A2E", linewidth=0.3,
-            transform=ax.transAxes, zorder=15)
-        tri_w_r = MplPolygon(
-            [(cx - r * 1.1, cy), (cx, cy + r * 0.3), (cx, cy)],
-            facecolor="#CCCCCC", edgecolor="#1A1A2E", linewidth=0.3,
-            transform=ax.transAxes, zorder=15)
+        # Flecha norte: mitad izquierda oscura, mitad derecha clara
+        tri_left = MplPolygon(
+            [(cx, cy + h * 0.5),        # punta
+             (cx - w, cy - h * 0.35),   # base izquierda
+             (cx, cy - h * 0.1)],       # centro base
+            facecolor="#1C2333", edgecolor="#1C2333", linewidth=0.4,
+            transform=ax.transAxes, zorder=15, closed=True)
 
-        for tri in [tri_n_l, tri_n_r, tri_s_l, tri_s_r,
-                    tri_e_l, tri_e_r, tri_w_l, tri_w_r]:
-            ax.add_patch(tri)
+        tri_right = MplPolygon(
+            [(cx, cy + h * 0.5),        # punta
+             (cx + w, cy - h * 0.35),   # base derecha
+             (cx, cy - h * 0.1)],       # centro base
+            facecolor="#5A6377", edgecolor="#1C2333", linewidth=0.4,
+            transform=ax.transAxes, zorder=15, closed=True)
 
-        # Punto central
-        ax.plot(cx, cy, "o", color="#1A1A2E", markersize=1.5,
+        ax.add_patch(tri_left)
+        ax.add_patch(tri_right)
+
+        # Línea central fina (eje de la flecha)
+        ax.plot([cx, cx], [cy - h * 0.38, cy + h * 0.5],
+                color="#1C2333", linewidth=0.5,
                 transform=ax.transAxes, zorder=16)
 
-        # Letra "N" sobre el triángulo norte
-        ax.text(cx, cy + r * 1.1 + 0.008, "N",
-                ha="center", va="bottom", fontsize=4.5, fontweight="bold",
-                color="#1A1A2E", transform=ax.transAxes, zorder=16)
+        # Letra "N" — limpia, encima de la flecha
+        ax.text(cx, cy + h * 0.5 + 0.01, "N",
+                ha="center", va="bottom", fontsize=5.5, fontweight="bold",
+                color="#1C2333", transform=ax.transAxes, zorder=16)
 
     # ── Cajetín (integrado) ────────────────────────────────────────────
 
