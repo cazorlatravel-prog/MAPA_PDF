@@ -141,13 +141,13 @@ class MaquetadorPlano:
         # Panel lateral derecho: subdividido en 3 filas
         gs_lateral = gridspec.GridSpecFromSubplotSpec(
             3, 1, subplot_spec=gs[0, 1],
-            height_ratios=[0.28, 0.32, 0.40],
-            hspace=0.03,
+            height_ratios=[0.20, 0.28, 0.52],
+            hspace=0.02,
         )
 
         self.ax_mini = self.fig.add_subplot(gs_lateral[0, 0])   # minimapa arriba
-        self.ax_info = self.fig.add_subplot(gs_lateral[1, 0])   # datos centro
-        self.ax_esc = self.fig.add_subplot(gs_lateral[2, 0])    # cajetín+escala abajo
+        self.ax_info = self.fig.add_subplot(gs_lateral[1, 0])   # leyenda
+        self.ax_esc = self.fig.add_subplot(gs_lateral[2, 0])    # cajetín completo
 
         return self.fig, self.ax_map, self.ax_info, self.ax_mini, self.ax_esc
 
@@ -898,6 +898,340 @@ class MaquetadorPlano:
         # ── Créditos: cartografía base ──
         ax.text(0.5, 0.015, f"Base cartogr\u00e1fica: {proveedor}",
                 ha="center", va="bottom", fontsize=3.0, color="#888",
+                style="italic", zorder=3)
+
+    # ── Leyenda lateral (Plantilla 2: ax_info) ──────────────────────────
+
+    def dibujar_leyenda_lateral(self, items_leyenda_infra, items_leyenda_montes):
+        """Dibuja la leyenda estilo Junta de Andalucía en el panel lateral.
+
+        Formato: LEYENDA (título subrayado), dos columnas:
+        - Izquierda: TIPO INFRAESTRUCTURA con símbolos
+        - Derecha: MONTES PÚBLICOS con símbolos
+        """
+        ax = self.ax_info
+        ax.set_xlim(0, 1)
+        ax.set_ylim(0, 1)
+        ax.axis("off")
+
+        C_BORDER = "#000000"
+        C_TXT = "#1A1A2E"
+
+        # Borde del panel
+        ax.add_patch(Rectangle((0, 0), 1, 1, facecolor="white",
+                                edgecolor=C_BORDER, linewidth=1.0, zorder=0))
+
+        # Título LEYENDA (subrayado)
+        ax.text(0.5, 0.93, "LEYENDA", ha="center", va="center",
+                fontsize=6, fontweight="bold", color=C_TXT,
+                transform=ax.transAxes, zorder=2)
+        ax.plot([0.25, 0.75], [0.89, 0.89], color=C_BORDER, linewidth=0.8,
+                transform=ax.transAxes, zorder=2)
+
+        # ── Columna izquierda: TIPO INFRAESTRUCTURA ──
+        ax.text(0.25, 0.84, "TIPO INFRAESTRUCTURA", ha="center", va="center",
+                fontsize=3.8, fontweight="bold", color=C_TXT, zorder=2)
+
+        items_inf = items_leyenda_infra or []
+        n_inf = min(len(items_inf), 8)
+        row_h = min(0.09, 0.70 / max(n_inf, 1))
+
+        for i, (label, color, geom_type, linestyle, marker, facecolor) in enumerate(items_inf[:n_inf]):
+            y = 0.78 - i * row_h
+            sym_x0 = 0.04
+            sym_x1 = 0.14
+            txt_x = 0.16
+
+            if "point" in geom_type:
+                ax.plot((sym_x0 + sym_x1) / 2, y, marker=marker or "o",
+                        color=color, markersize=4.5, markeredgecolor="white",
+                        markeredgewidth=0.3, transform=ax.transAxes, zorder=3)
+            elif "line" in geom_type or "string" in geom_type:
+                ax.plot([sym_x0, sym_x1], [y, y], color=color,
+                        linewidth=2.0, linestyle=linestyle or "-",
+                        transform=ax.transAxes, zorder=3, solid_capstyle="round")
+            else:
+                rect_w = sym_x1 - sym_x0
+                rect_h = row_h * 0.55
+                ax.add_patch(Rectangle(
+                    (sym_x0, y - rect_h / 2), rect_w, rect_h,
+                    facecolor=facecolor or (color + "55"),
+                    edgecolor=color, linewidth=0.6,
+                    transform=ax.transAxes, zorder=3))
+
+            ax.text(txt_x, y, str(label)[:20], ha="left", va="center",
+                    fontsize=3.5, color=C_TXT, transform=ax.transAxes, zorder=3)
+
+        # ── Línea divisoria vertical ──
+        ax.plot([0.50, 0.50], [0.87, 0.05], color="#CCCCCC", linewidth=0.5,
+                transform=ax.transAxes, zorder=1)
+
+        # ── Columna derecha: MONTES PÚBLICOS ──
+        ax.text(0.75, 0.84, "MONTES PÚBLICOS", ha="center", va="center",
+                fontsize=3.8, fontweight="bold", color=C_TXT, zorder=2)
+
+        items_mon = items_leyenda_montes or []
+        n_mon = min(len(items_mon), 8)
+        row_h_m = min(0.09, 0.70 / max(n_mon, 1))
+
+        for i, (label, color, geom_type, linestyle, marker, facecolor) in enumerate(items_mon[:n_mon]):
+            y = 0.78 - i * row_h_m
+            sym_x0 = 0.54
+            sym_x1 = 0.64
+            txt_x = 0.66
+
+            if "point" in geom_type:
+                ax.plot((sym_x0 + sym_x1) / 2, y, marker=marker or "o",
+                        color=color, markersize=4.5,
+                        transform=ax.transAxes, zorder=3)
+            elif "line" in geom_type or "string" in geom_type:
+                ax.plot([sym_x0, sym_x1], [y, y], color=color,
+                        linewidth=2.0, linestyle=linestyle or "-",
+                        transform=ax.transAxes, zorder=3)
+            else:
+                rect_w = sym_x1 - sym_x0
+                rect_h = row_h_m * 0.55
+                ax.add_patch(Rectangle(
+                    (sym_x0, y - rect_h / 2), rect_w, rect_h,
+                    facecolor=facecolor or (color + "55"),
+                    edgecolor=color, linewidth=0.6,
+                    transform=ax.transAxes, zorder=3))
+
+            ax.text(txt_x, y, str(label)[:20], ha="left", va="center",
+                    fontsize=3.5, color=C_TXT, transform=ax.transAxes, zorder=3)
+
+    # ── Cajetín lateral (Plantilla 2: ax_esc) ────────────────────────
+
+    def dibujar_cajetin_lateral(self, row, cajetin=None, plantilla=None,
+                                 num_plano=None, proveedor=""):
+        """Dibuja el cajetín completo estilo Junta de Andalucía.
+
+        Estructura (de arriba a abajo):
+        1. Barra verde con logos + nombre organización
+        2. Título del proyecto (recuadro)
+        3. Info monte + T.M.
+        4. Tabla: Nº plano, Escala, Autores/Firmas, Fecha
+        """
+        ax = self.ax_esc
+        ax.set_xlim(0, 1)
+        ax.set_ylim(0, 1)
+        ax.axis("off")
+
+        caj = cajetin or {}
+        pl = plantilla or {}
+
+        C_BORDER = "#000000"
+        C_TXT = "#1A1A2E"
+        C_GREEN = "#00953B"  # Verde Junta de Andalucía
+
+        # ═══════════════════════════════════════════════════════════════
+        # BARRA ORGANIZACIÓN (fondo verde con logos)
+        # ═══════════════════════════════════════════════════════════════
+        org_h = 0.16
+        org_y = 1.0 - org_h
+
+        ax.add_patch(Rectangle((0, org_y), 1, org_h,
+                                facecolor=C_GREEN, edgecolor=C_BORDER,
+                                linewidth=1.0, zorder=1))
+
+        org = caj.get("organizacion", "")
+        logo_path = caj.get("logo_path", "")
+
+        x_txt = 0.02
+        # Logo (se adapta a cuadrado o rectangular)
+        if logo_path:
+            try:
+                from PIL import Image as PILImage
+                img = PILImage.open(logo_path)
+                iw, ih = img.size
+                aspect_img = iw / max(ih, 1)
+                # Adaptar: si es más ancho que alto, darle más ancho
+                logo_h_frac = org_h * 0.80
+                logo_w_frac = min(0.18, logo_h_frac * aspect_img * 0.7)
+                logo_ax = ax.inset_axes(
+                    [0.02, org_y + org_h * 0.10, logo_w_frac, logo_h_frac],
+                    transform=ax.transAxes)
+                logo_ax.imshow(img, aspect="equal")
+                logo_ax.axis("off")
+                x_txt = 0.02 + logo_w_frac + 0.02
+            except Exception:
+                pass
+
+        # Nombre de la organización (grande, a la derecha del logo)
+        if org:
+            lineas = org.split("\n")
+            if len(lineas) >= 2:
+                # Primera línea grande (nombre principal)
+                ax.text(max(x_txt, 0.35), org_y + org_h * 0.62,
+                        lineas[0].upper(), ha="left", va="center",
+                        fontsize=7, fontweight="bold", color=C_TXT, zorder=3)
+                # Segunda línea (subtítulo org)
+                ax.text(max(x_txt, 0.35), org_y + org_h * 0.30,
+                        lineas[1], ha="left", va="center",
+                        fontsize=4, color=C_TXT, zorder=3)
+            else:
+                ax.text(0.5, org_y + org_h * 0.50, org.upper(),
+                        ha="center", va="center",
+                        fontsize=6.5, fontweight="bold", color=C_TXT, zorder=3)
+
+        # ═══════════════════════════════════════════════════════════════
+        # TÍTULO DEL PROYECTO (recuadro)
+        # ═══════════════════════════════════════════════════════════════
+        proy_h = 0.14
+        proy_y = org_y - proy_h
+
+        ax.add_patch(Rectangle((0, proy_y), 1, proy_h,
+                                facecolor="white", edgecolor=C_BORDER,
+                                linewidth=0.8, zorder=1))
+
+        titulo_proy = caj.get("proyecto", "")
+        subtitulo = caj.get("subtitulo", "")
+        # Subtítulo dinámico desde campo
+        campo_sub = caj.get("campo_subtitulo", "")
+        if campo_sub and row is not None:
+            val = str(row.get(campo_sub, ""))
+            if val and val != "nan":
+                subtitulo = val
+
+        texto_proy = titulo_proy or subtitulo or "PROYECTO"
+        # Wrap text si es muy largo
+        if len(texto_proy) > 50:
+            mid = len(texto_proy) // 2
+            # Buscar espacio cercano al medio para partir
+            space_pos = texto_proy.rfind(" ", 0, mid + 10)
+            if space_pos > 10:
+                texto_proy = texto_proy[:space_pos] + "\n" + texto_proy[space_pos + 1:]
+
+        ax.text(0.5, proy_y + proy_h * 0.50, texto_proy.upper(),
+                ha="center", va="center", fontsize=4.5, fontweight="bold",
+                color=C_TXT, zorder=3, linespacing=1.3,
+                wrap=True)
+
+        # ═══════════════════════════════════════════════════════════════
+        # INFO MONTE + T.M. (nombre del monte y término municipal)
+        # ═══════════════════════════════════════════════════════════════
+        monte_h = 0.10
+        monte_y = proy_y - monte_h
+
+        ax.add_patch(Rectangle((0, monte_y), 1, monte_h,
+                                facecolor="white", edgecolor=C_BORDER,
+                                linewidth=0.8, zorder=1))
+
+        # Buscar campos de monte y municipio en el row
+        monte_txt = ""
+        tm_txt = ""
+        if row is not None:
+            for candidato in ["Monte", "MONTE", "Nombre_Monte", "NOMBRE_MONTE",
+                              "MP", "M.P.", "monte"]:
+                val = str(row.get(candidato, ""))
+                if val and val != "nan":
+                    monte_txt = f"M.P. {val}"
+                    break
+            for candidato in ["Municipio", "MUNICIPIO", "TM", "T.M.",
+                              "municipio", "TERMINO_MUNICIPAL"]:
+                val = str(row.get(candidato, ""))
+                if val and val != "nan":
+                    tm_txt = f"T.M. {val}"
+                    break
+
+        if monte_txt:
+            ax.text(0.03, monte_y + monte_h * 0.65, monte_txt,
+                    ha="left", va="center", fontsize=4, color=C_TXT,
+                    fontweight="bold", zorder=3)
+        if tm_txt:
+            ax.text(0.03, monte_y + monte_h * 0.30, tm_txt,
+                    ha="left", va="center", fontsize=4, color=C_TXT, zorder=3)
+
+        # ═══════════════════════════════════════════════════════════════
+        # TABLA INFERIOR: Nº plano, Escala, Autores, Fecha
+        # ═══════════════════════════════════════════════════════════════
+        tabla_y = monte_y  # desde aquí hacia abajo
+        tabla_h = tabla_y  # espacio restante
+
+        # ── Fila 1: Nº de plano + Escala ──
+        fila1_h = tabla_h * 0.30
+        fila1_y = tabla_y - fila1_h
+
+        # Mitad izquierda: Nº DE PLANO
+        ax.add_patch(Rectangle((0, fila1_y), 0.55, fila1_h,
+                                facecolor="white", edgecolor=C_BORDER,
+                                linewidth=0.6, zorder=1))
+        num_inicio = caj.get("num_plano_inicio", 1)
+        if num_plano is not None:
+            n_plano = num_plano
+        else:
+            idx = (row.name if row is not None and hasattr(row, "name")
+                   and isinstance(row.name, int) else 0)
+            n_plano = idx + num_inicio
+
+        ax.text(0.03, fila1_y + fila1_h * 0.50,
+                "Nº DE PLANO:", ha="left", va="center",
+                fontsize=3.5, color=C_TXT, zorder=3)
+        ax.text(0.38, fila1_y + fila1_h * 0.50,
+                str(n_plano), ha="center", va="center",
+                fontsize=11, fontweight="bold", color=C_TXT, zorder=3)
+
+        # Mitad derecha: ESCALA
+        ax.add_patch(Rectangle((0.55, fila1_y), 0.45, fila1_h,
+                                facecolor="white", edgecolor=C_BORDER,
+                                linewidth=0.6, zorder=1))
+        ax.text(0.57, fila1_y + fila1_h * 0.70,
+                "ESCALA:", ha="left", va="center",
+                fontsize=3.5, color=C_TXT, zorder=3)
+        escala_txt = f"1:{self.escala:,}".replace(",", ".")
+        ax.text(0.78, fila1_y + fila1_h * 0.35,
+                escala_txt, ha="center", va="center",
+                fontsize=8, fontweight="bold", color=C_TXT, zorder=3)
+
+        # ── Fila 2: Autores / Vº.Bº / Director ──
+        fila2_h = tabla_h * 0.45
+        fila2_y = fila1_y - fila2_h
+
+        # 3 columnas
+        col_w = 1.0 / 3.0
+        autor = caj.get("autor", "")
+        firma = caj.get("firma", "")
+        revision = caj.get("revision", "")
+
+        etiquetas_fila2 = [
+            ("AUTORES:", f"Fdo.: {autor}" if autor else ""),
+            ("Vº.Bº", f"Fdo.: {firma}" if firma else ""),
+            ("", f"Rev.: {revision}" if revision else ""),
+        ]
+
+        for i, (titulo, contenido) in enumerate(etiquetas_fila2):
+            x0 = i * col_w
+            ax.add_patch(Rectangle((x0, fila2_y), col_w, fila2_h,
+                                    facecolor="white", edgecolor=C_BORDER,
+                                    linewidth=0.6, zorder=1))
+            if titulo:
+                ax.text(x0 + col_w / 2, fila2_y + fila2_h * 0.85,
+                        titulo, ha="center", va="center",
+                        fontsize=3.2, fontweight="bold", color=C_TXT, zorder=3)
+            if contenido:
+                ax.text(x0 + col_w / 2, fila2_y + fila2_h * 0.25,
+                        contenido, ha="center", va="center",
+                        fontsize=3, color=C_TXT, zorder=3)
+
+        # ── Fila 3: Fecha ──
+        fila3_h = tabla_h * 0.25
+        fila3_y = fila2_y - fila3_h
+
+        ax.add_patch(Rectangle((0, fila3_y), 1, fila3_h,
+                                facecolor="white", edgecolor=C_BORDER,
+                                linewidth=0.6, zorder=1))
+
+        fecha = date.today().strftime("%B %Y").upper()
+        ax.text(0.03, fila3_y + fila3_h * 0.50,
+                "FECHA:", ha="left", va="center",
+                fontsize=3.5, fontweight="bold", color=C_TXT, zorder=3)
+        ax.text(0.75, fila3_y + fila3_h * 0.50,
+                fecha, ha="center", va="center",
+                fontsize=5, fontweight="bold", color=C_TXT, zorder=3)
+
+        # Créditos cartografía
+        ax.text(0.5, 0.005, f"Base: {proveedor}",
+                ha="center", va="bottom", fontsize=2.5, color="#888",
                 style="italic", zorder=3)
 
     # ── Rosa de los vientos (dentro del mapa principal, arriba-izquierda) ──

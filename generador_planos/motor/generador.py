@@ -378,6 +378,61 @@ class GeneradorPlanos:
                           simb.marker, simb.facecolor))
         return items if items else None
 
+    def _construir_items_leyenda_separados(self, gdf_sel, color_infra,
+                                              xmin=None, xmax=None,
+                                              ymin=None, ymax=None):
+        """Construye items de leyenda separados: infraestructuras y montes.
+
+        Usado por Plantilla 2 (panel lateral) donde se muestran en 2 columnas.
+        """
+        items_infra = []
+        items_montes = []
+
+        geom_type = ""
+        for g in gdf_sel.geometry:
+            if g is not None:
+                geom_type = str(g.geom_type).lower()
+                break
+
+        campo_cat = self.config_infra.get("campo_categoria")
+        if campo_cat and campo_cat in gdf_sel.columns:
+            campo_real = campo_cat
+            if self._campo_mapeo and campo_cat in self._campo_mapeo:
+                campo_real = self._campo_mapeo[campo_cat]
+            valores_unicos = sorted(gdf_sel[campo_real].astype(str).unique())
+            for valor in valores_unicos:
+                simb = self.gestor_simbologia.obtener_simbologia_infra(
+                    campo_cat, valor)
+                label = str(valor)[:25]
+                items_infra.append((label, simb.color, geom_type, simb.linestyle,
+                                    simb.marker, simb.facecolor))
+        else:
+            items_infra.append(("Infraestructuras", color_infra, geom_type,
+                                "-", "o", color_infra + "55"))
+
+        # Montes
+        if self.gdf_montes is not None:
+            campo_cat_montes = self.config_infra.get("campo_categoria_montes")
+            if xmin is not None:
+                montes_vis = self.gdf_montes.cx[xmin:xmax, ymin:ymax]
+            else:
+                montes_vis = self.gdf_montes
+            if not montes_vis.empty:
+                if campo_cat_montes and campo_cat_montes in montes_vis.columns:
+                    valores_visibles = sorted(
+                        montes_vis[campo_cat_montes].astype(str).unique())
+                    for valor in valores_visibles:
+                        simb = self.gestor_simbologia.obtener_simbologia_monte(
+                            campo_cat_montes, valor)
+                        label = str(valor)[:25]
+                        items_montes.append((label, simb.color, "polygon", "-",
+                                             None, simb.facecolor))
+                else:
+                    items_montes.append(("Montes", "#1a5c10", "polygon", "-",
+                                         None, "#22992244"))
+
+        return items_infra, items_montes
+
     # ── Generación de plano individual ───────────────────────────────────
 
     def generar_plano(self, idx_fila: int, formato_key: str,
@@ -424,26 +479,37 @@ class GeneradorPlanos:
             maq.dibujar_etiquetas_infra(gdf_sel, campo_etiqueta=campo_etiq,
                                          campo_mapeo=self._campo_mapeo)
 
-        # Leyenda (solo infraestructuras visibles en el extent)
-        items_ley = self._construir_items_leyenda(gdf_sel, color_infra,
-                                                   xmin, xmax, ymin, ymax)
-        maq.dibujar_leyenda(items_ley)
+        # Leyenda y paneles según plantilla
+        cx, cy = geom.centroid.x, geom.centroid.y
+
+        if maq.es_lateral:
+            # Plantilla 2: leyenda lateral + cajetín lateral
+            items_inf, items_mon = self._construir_items_leyenda_separados(
+                gdf_sel, color_infra, xmin, xmax, ymin, ymax)
+            maq.dibujar_leyenda_lateral(items_inf, items_mon)
+            maq.dibujar_mapa_posicion(cx, cy)
+            maq.dibujar_cajetin_lateral(row, cajetin=self._cajetin,
+                                         plantilla=self._plantilla,
+                                         proveedor=proveedor)
+        else:
+            # Plantilla 1: layout clásico
+            items_ley = self._construir_items_leyenda(gdf_sel, color_infra,
+                                                       xmin, xmax, ymin, ymax)
+            maq.dibujar_leyenda(items_ley)
+            maq.dibujar_panel_atributos(row, campos_visibles,
+                                         campo_mapeo=self._campo_mapeo,
+                                         campo_encabezado=campo_encabezado)
+            maq.dibujar_mapa_posicion(cx, cy)
+            items_cat = self._construir_items_categoria(gdf_sel,
+                                                         xmin, xmax, ymin, ymax)
+            maq.dibujar_barra_escala(proveedor, cx_utm=cx, cy_utm=cy,
+                                      cajetin=self._cajetin,
+                                      items_categoria=items_cat)
+            maq.dibujar_cajetin(self._cajetin)
 
         maq.dibujar_grid_utm(xmin, xmax, ymin, ymax)
-        maq.dibujar_panel_atributos(row, campos_visibles,
-                                     campo_mapeo=self._campo_mapeo,
-                                     campo_encabezado=campo_encabezado)
-
-        cx, cy = geom.centroid.x, geom.centroid.y
-        maq.dibujar_mapa_posicion(cx, cy)
-        items_cat = self._construir_items_categoria(gdf_sel,
-                                                     xmin, xmax, ymin, ymax)
-        maq.dibujar_barra_escala(proveedor, cx_utm=cx, cy_utm=cy,
-                                  cajetin=self._cajetin,
-                                  items_categoria=items_cat)
         maq.dibujar_norte_en_mapa()
         maq.dibujar_cabecera(row, cajetin=self._cajetin, plantilla=self._plantilla)
-        maq.dibujar_cajetin(self._cajetin)
         maq.dibujar_marcos(plantilla=self._plantilla, cajetin=self._cajetin)
 
         nombre_infra = str(row.get("Nombre_Infra", f"infra_{idx_fila:04d}"))
@@ -511,25 +577,35 @@ class GeneradorPlanos:
             maq.dibujar_etiquetas_infra(gdf_grupo, campo_etiqueta=campo_etiq,
                                          campo_mapeo=self._campo_mapeo)
 
-        # Leyenda con estadísticas (solo infraestructuras visibles en el extent)
-        items_ley = self._construir_items_leyenda(gdf_grupo, color_infra,
-                                                   xmin, xmax, ymin, ymax)
-        stats = _calcular_stats_grupo(gdf_grupo)
-        maq.dibujar_leyenda(items_ley, stats_resumen=stats)
+        # Leyenda y paneles según plantilla
+        cx, cy = geom_union.centroid.x, geom_union.centroid.y
+
+        if maq.es_lateral:
+            items_inf, items_mon = self._construir_items_leyenda_separados(
+                gdf_grupo, color_infra, xmin, xmax, ymin, ymax)
+            maq.dibujar_leyenda_lateral(items_inf, items_mon)
+            maq.dibujar_mapa_posicion(cx, cy)
+            maq.dibujar_cajetin_lateral(rows[0], cajetin=self._cajetin,
+                                         plantilla=self._plantilla,
+                                         num_plano=num_plano,
+                                         proveedor=proveedor)
+        else:
+            items_ley = self._construir_items_leyenda(gdf_grupo, color_infra,
+                                                       xmin, xmax, ymin, ymax)
+            stats = _calcular_stats_grupo(gdf_grupo)
+            maq.dibujar_leyenda(items_ley, stats_resumen=stats)
+            maq.dibujar_panel_atributos_multi(rows, campos_visibles,
+                                               campo_mapeo=self._campo_mapeo,
+                                               campo_encabezado=campo_encabezado)
+            maq.dibujar_mapa_posicion(cx, cy)
+            items_cat = self._construir_items_categoria(gdf_grupo,
+                                                         xmin, xmax, ymin, ymax)
+            maq.dibujar_barra_escala(proveedor, cx_utm=cx, cy_utm=cy,
+                                      cajetin=self._cajetin,
+                                      items_categoria=items_cat)
+            maq.dibujar_cajetin(self._cajetin)
 
         maq.dibujar_grid_utm(xmin, xmax, ymin, ymax)
-
-        maq.dibujar_panel_atributos_multi(rows, campos_visibles,
-                                           campo_mapeo=self._campo_mapeo,
-                                           campo_encabezado=campo_encabezado)
-
-        cx, cy = geom_union.centroid.x, geom_union.centroid.y
-        maq.dibujar_mapa_posicion(cx, cy)
-        items_cat = self._construir_items_categoria(gdf_grupo,
-                                                     xmin, xmax, ymin, ymax)
-        maq.dibujar_barra_escala(proveedor, cx_utm=cx, cy_utm=cy,
-                                  cajetin=self._cajetin,
-                                  items_categoria=items_cat)
         maq.dibujar_norte_en_mapa()
 
         etiq_campo = ETIQUETAS_CAMPOS.get(campo_grupo, campo_grupo)
@@ -537,8 +613,6 @@ class GeneradorPlanos:
         maq.dibujar_cabecera(rows[0], titulo_grupo=titulo_grupo,
                               num_plano_override=num_plano,
                               cajetin=self._cajetin, plantilla=self._plantilla)
-
-        maq.dibujar_cajetin(self._cajetin)
         maq.dibujar_marcos(plantilla=self._plantilla, cajetin=self._cajetin)
 
         nombre_safe = "".join(c for c in valor_grupo if c.isalnum() or c in "_ -")[:40]
@@ -731,25 +805,34 @@ class GeneradorPlanos:
                             gdf_sel, campo_etiqueta=campo_etiq,
                             campo_mapeo=self._campo_mapeo)
 
-                    # Leyenda
-                    items_ley = self._construir_items_leyenda(gdf_sel, color_infra)
-                    maq.dibujar_leyenda(items_ley)
+                    # Leyenda y paneles según plantilla
+                    cx, cy = geom.centroid.x, geom.centroid.y
+
+                    if maq.es_lateral:
+                        items_inf, items_mon = self._construir_items_leyenda_separados(
+                            gdf_sel, color_infra, xmin, xmax, ymin, ymax)
+                        maq.dibujar_leyenda_lateral(items_inf, items_mon)
+                        maq.dibujar_mapa_posicion(cx, cy)
+                        maq.dibujar_cajetin_lateral(row, cajetin=self._cajetin,
+                                                     plantilla=self._plantilla,
+                                                     proveedor=proveedor)
+                    else:
+                        items_ley = self._construir_items_leyenda(gdf_sel, color_infra)
+                        maq.dibujar_leyenda(items_ley)
+                        maq.dibujar_panel_atributos(row, campos,
+                                                     campo_mapeo=self._campo_mapeo,
+                                                     campo_encabezado=campo_encabezado)
+                        maq.dibujar_mapa_posicion(cx, cy)
+                        items_cat = self._construir_items_categoria(gdf_sel)
+                        maq.dibujar_barra_escala(proveedor, cx_utm=cx, cy_utm=cy,
+                                                  cajetin=self._cajetin,
+                                                  items_categoria=items_cat)
+                        maq.dibujar_cajetin(self._cajetin)
 
                     maq.dibujar_grid_utm(xmin, xmax, ymin, ymax)
-                    maq.dibujar_panel_atributos(row, campos,
-                                                 campo_mapeo=self._campo_mapeo,
-                                                 campo_encabezado=campo_encabezado)
-
-                    cx, cy = geom.centroid.x, geom.centroid.y
-                    maq.dibujar_mapa_posicion(cx, cy)
-                    items_cat = self._construir_items_categoria(gdf_sel)
-                    maq.dibujar_barra_escala(proveedor, cx_utm=cx, cy_utm=cy,
-                                              cajetin=self._cajetin,
-                                              items_categoria=items_cat)
                     maq.dibujar_norte_en_mapa()
                     maq.dibujar_cabecera(row, cajetin=self._cajetin,
                                           plantilla=self._plantilla)
-                    maq.dibujar_cajetin(self._cajetin)
                     maq.dibujar_marcos(plantilla=self._plantilla, cajetin=self._cajetin)
 
                     pdf.savefig(fig, dpi=300, facecolor="white")
