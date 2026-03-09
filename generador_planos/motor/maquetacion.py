@@ -1158,10 +1158,20 @@ class MaquetadorPlano:
         caj = cajetin or {}
         pl = plantilla or {}
 
-        C_BORDER = "#000000"
-        C_TXT = "#1A1A2E"
-        C_GREEN = "#00953B"  # Verde Junta de Andalucía
-        LW = 0.6  # linewidth de celdas
+        C_BORDER = "#2C2C2C"        # Borde gris oscuro (más suave que negro)
+        C_BORDER_LIGHT = "#888888"  # Borde interno sutil
+        C_TXT = "#1A1A2E"           # Texto principal oscuro
+        C_TXT_LIGHT = "#4A4A5A"     # Texto secundario
+        C_GREEN = "#00953B"          # Verde Junta de Andalucía
+        C_GREEN_DARK = "#006B2B"     # Verde oscuro para fondos
+        C_BG_ORG = "#00953B"         # Fondo barra organización
+        C_BG_PROY = "#F0F4F0"        # Fondo proyecto (verde muy tenue)
+        C_BG_MONTE = "#FAFAFA"       # Fondo monte (gris casi blanco)
+        C_BG_NUM = "#F5F7F5"         # Fondo nº de plano
+        C_BG_AUT = "#FFFFFF"          # Fondo autores
+        C_BG_ESCALA = "#F0F4F0"       # Fondo escala/fecha
+        C_LABEL = "#00953B"           # Color etiquetas (verde)
+        LW = 0.8  # linewidth de celdas
 
         # ── Alturas de cada fila (de arriba a abajo) ──
         # Compactas: ajustadas al contenido de texto
@@ -1178,12 +1188,12 @@ class MaquetadorPlano:
         org_y = proy_y + proy_h
 
         # ═══════════════════════════════════════════════════════════════
-        # 1. BARRA ORGANIZACIÓN (fondo BLANCO, texto VERDE)
+        # 1. BARRA ORGANIZACIÓN (fondo VERDE institucional, texto BLANCO)
         # ═══════════════════════════════════════════════════════════════
 
         ax.add_patch(Rectangle((0, org_y), 1, org_h,
-                                facecolor="white", edgecolor=C_BORDER,
-                                linewidth=1.0, zorder=1))
+                                facecolor=C_BG_ORG, edgecolor=C_GREEN_DARK,
+                                linewidth=1.2, zorder=1))
 
         org = caj.get("organizacion", "")
         logo_path = caj.get("logo_path", "")
@@ -1219,17 +1229,17 @@ class MaquetadorPlano:
                 fsz1 = 8 if len(linea1) <= 30 else (6.5 if len(linea1) <= 45 else 5.5)
                 ax.text(x_centro, org_y + org_h * 0.62,
                         linea1, ha="center", va="center",
-                        fontsize=fsz1, fontweight="bold", color=C_GREEN, zorder=3)
+                        fontsize=fsz1, fontweight="bold", color="white", zorder=3)
                 ax.text(x_centro, org_y + org_h * 0.28,
                         linea2, ha="center", va="center",
-                        fontsize=4.5, color=C_TXT, zorder=3)
+                        fontsize=4.5, color="#E0F0E0", zorder=3)
             else:
                 texto = org.upper()
                 # Si cabe en 1 línea (~30 chars), ponerlo en una sola
                 if len(texto) <= 30:
                     ax.text(x_centro, org_y + org_h * 0.50, texto,
                             ha="center", va="center",
-                            fontsize=7, fontweight="bold", color=C_GREEN, zorder=3)
+                            fontsize=7, fontweight="bold", color="white", zorder=3)
                 else:
                     # Partir en 2 líneas por el espacio más cercano al centro
                     mid = len(texto) // 2
@@ -1245,19 +1255,24 @@ class MaquetadorPlano:
                     fsz = 7 if len(linea1) <= 35 else (6 if len(linea1) <= 45 else 5)
                     ax.text(x_centro, org_y + org_h * 0.62,
                             linea1, ha="center", va="center",
-                            fontsize=fsz, fontweight="bold", color=C_GREEN, zorder=3)
+                            fontsize=fsz, fontweight="bold", color="white", zorder=3)
                     if linea2:
                         ax.text(x_centro, org_y + org_h * 0.28,
                                 linea2, ha="center", va="center",
-                                fontsize=fsz, fontweight="bold", color=C_GREEN, zorder=3)
+                                fontsize=fsz, fontweight="bold", color="white", zorder=3)
 
         # ═══════════════════════════════════════════════════════════════
         # 2. TÍTULO DEL PROYECTO
         # ═══════════════════════════════════════════════════════════════
 
         ax.add_patch(Rectangle((0, proy_y), 1, proy_h,
-                                facecolor="white", edgecolor=C_BORDER,
+                                facecolor=C_BG_PROY, edgecolor=C_BORDER,
                                 linewidth=LW, zorder=1))
+        # Líneas decorativas superior e inferior del proyecto
+        ax.plot([0.08, 0.92], [proy_y + proy_h * 0.92, proy_y + proy_h * 0.92],
+                color=C_GREEN, linewidth=0.5, zorder=2)
+        ax.plot([0.08, 0.92], [proy_y + proy_h * 0.08, proy_y + proy_h * 0.08],
+                color=C_GREEN, linewidth=0.5, zorder=2)
 
         titulo_proy = caj.get("proyecto", "")
         subtitulo = caj.get("subtitulo", "")
@@ -1277,7 +1292,7 @@ class MaquetadorPlano:
         fsz_proy = 8 if len(texto_proy) <= 40 else 6.5
         ax.text(0.5, proy_y + proy_h * 0.50, texto_proy.upper(),
                 ha="center", va="center", fontsize=fsz_proy, fontweight="bold",
-                color=C_TXT, zorder=3, linespacing=1.4)
+                color=C_GREEN_DARK, zorder=3, linespacing=1.4)
 
         # ═══════════════════════════════════════════════════════════════
         # 3. MONTE / T.M. (izq 66%) + Nº DE PLANO (der 34%)
@@ -1286,11 +1301,11 @@ class MaquetadorPlano:
 
         # Celda izquierda: Monte + T.M.
         ax.add_patch(Rectangle((0, monte_y), col_r, monte_h,
-                                facecolor="white", edgecolor=C_BORDER,
+                                facecolor=C_BG_MONTE, edgecolor=C_BORDER,
                                 linewidth=LW, zorder=1))
         # Celda derecha: Nº de plano
         ax.add_patch(Rectangle((col_r, monte_y), 1 - col_r, monte_h,
-                                facecolor="white", edgecolor=C_BORDER,
+                                facecolor=C_BG_NUM, edgecolor=C_BORDER,
                                 linewidth=LW, zorder=1))
 
         monte_txt = ""
@@ -1324,8 +1339,8 @@ class MaquetadorPlano:
                     fontweight="bold", zorder=3)
         if tm_txt:
             ax.text(0.03, monte_y + monte_h * 0.30, tm_txt,
-                    ha="left", va="center", fontsize=4.5, color=C_TXT,
-                    fontweight="bold", zorder=3)
+                    ha="left", va="center", fontsize=4.5, color=C_TXT_LIGHT,
+                    fontweight="normal", zorder=3)
 
         # Nº de plano
         num_inicio = caj.get("num_plano_inicio", 1)
@@ -1339,10 +1354,10 @@ class MaquetadorPlano:
         mid_r = col_r + (1 - col_r) / 2
         ax.text(mid_r, monte_y + monte_h * 0.78,
                 "Nº DE PLANO:", ha="center", va="center",
-                fontsize=3.5, color=C_TXT, zorder=3)
+                fontsize=3.5, color=C_LABEL, fontweight="bold", zorder=3)
         ax.text(mid_r, monte_y + monte_h * 0.35,
                 str(n_plano), ha="center", va="center",
-                fontsize=14, fontweight="bold", color=C_TXT, zorder=3)
+                fontsize=14, fontweight="bold", color=C_GREEN_DARK, zorder=3)
 
         # ═══════════════════════════════════════════════════════════════
         # 4. AUTORES (un solo recuadro) | Vº.Bº | ESCALA / FECHA
@@ -1360,65 +1375,69 @@ class MaquetadorPlano:
 
         # ── Celda AUTORES (un solo rectángulo con título + 2 firmas) ──
         ax.add_patch(Rectangle((0, aut_y), c1, aut_h,
-                                facecolor="white", edgecolor=C_BORDER,
+                                facecolor=C_BG_AUT, edgecolor=C_BORDER,
                                 linewidth=LW, zorder=1))
-        # Título "AUTORES:" arriba-izquierda
+        # Título "AUTORES:" arriba-izquierda (verde institucional)
         ax.text(0.01, aut_y + aut_h * 0.92,
                 "AUTORES:", ha="left", va="top",
-                fontsize=3.0, fontweight="bold", color=C_TXT, zorder=3)
+                fontsize=3.0, fontweight="bold", color=C_LABEL, zorder=3)
         # Firma autor 1 (mitad izquierda)
         mid_a1 = c1 * 0.25  # centro de la mitad izq
         if autor:
             ax.text(mid_a1, aut_y + aut_h * 0.62,
                     f"Fdo.: {autor}", ha="center", va="center",
-                    fontsize=2.8, color=C_TXT, zorder=3)
+                    fontsize=2.8, color=C_TXT, fontweight="bold", zorder=3)
         if cargo_autor:
             ax.text(mid_a1, aut_y + aut_h * 0.38,
                     cargo_autor, ha="center", va="center",
-                    fontsize=2.3, color=C_TXT, zorder=3)
+                    fontsize=2.3, color=C_TXT_LIGHT, fontstyle="italic", zorder=3)
         # Firma autor 2 (mitad derecha)
         mid_a2 = c1 * 0.75  # centro de la mitad der
         if firma_txt:
             ax.text(mid_a2, aut_y + aut_h * 0.62,
                     f"Fdo.: {firma_txt}", ha="center", va="center",
-                    fontsize=2.8, color=C_TXT, zorder=3)
+                    fontsize=2.8, color=C_TXT, fontweight="bold", zorder=3)
         if cargo_firma:
             ax.text(mid_a2, aut_y + aut_h * 0.38,
                     cargo_firma, ha="center", va="center",
-                    fontsize=2.3, color=C_TXT, zorder=3)
+                    fontsize=2.3, color=C_TXT_LIGHT, fontstyle="italic", zorder=3)
 
         # ── Celda Vº.Bº ──
         ax.add_patch(Rectangle((c1, aut_y), c2 - c1, aut_h,
-                                facecolor="white", edgecolor=C_BORDER,
+                                facecolor=C_BG_AUT, edgecolor=C_BORDER,
                                 linewidth=LW, zorder=1))
         ax.text(c1 + 0.01, aut_y + aut_h * 0.92,
                 "Vº.Bº", ha="left", va="top",
-                fontsize=3.0, fontweight="bold", color=C_TXT, zorder=3)
+                fontsize=3.0, fontweight="bold", color=C_LABEL, zorder=3)
         if revision:
             ax.text((c1 + c2) / 2, aut_y + aut_h * 0.62,
                     f"Fdo.: {revision}", ha="center", va="center",
-                    fontsize=2.8, color=C_TXT, zorder=3)
+                    fontsize=2.8, color=C_TXT, fontweight="bold", zorder=3)
         if cargo_revision:
             ax.text((c1 + c2) / 2, aut_y + aut_h * 0.38,
                     cargo_revision, ha="center", va="center",
-                    fontsize=2.3, color=C_TXT, zorder=3)
+                    fontsize=2.3, color=C_TXT_LIGHT, fontstyle="italic", zorder=3)
 
         # ── Celda ESCALA + FECHA (apiladas en la misma columna) ──
         ax.add_patch(Rectangle((c2, aut_y), 1 - c2, aut_h,
-                                facecolor="white", edgecolor=C_BORDER,
+                                facecolor=C_BG_ESCALA, edgecolor=C_BORDER,
                                 linewidth=LW, zorder=1))
+        # Línea separadora horizontal entre escala y fecha
+        ax.plot([c2 + 0.01, 1 - 0.01],
+                [aut_y + aut_h * 0.48, aut_y + aut_h * 0.48],
+                color=C_BORDER_LIGHT, linewidth=0.3, zorder=2)
         # Escala (parte superior)
         ax.text(c2 + (1 - c2) * 0.50, aut_y + aut_h * 0.82,
                 "ESCALA:", ha="center", va="center",
-                fontsize=3.5, color=C_TXT, zorder=3)
+                fontsize=3.5, color=C_LABEL, fontweight="bold", zorder=3)
         escala_txt = f"1:{self.escala:,}".replace(",", ".")
         ax.text(c2 + (1 - c2) * 0.50, aut_y + aut_h * 0.60,
                 escala_txt, ha="center", va="center",
-                fontsize=7, fontweight="bold", color=C_TXT, zorder=3)
+                fontsize=7, fontweight="bold", color=C_GREEN_DARK, zorder=3)
         # Fecha (parte inferior)
         ax.text(c2 + (1 - c2) * 0.50, aut_y + aut_h * 0.35,
                 "FECHA:", ha="center", va="center",
-                fontsize=3.5, color=C_TXT, zorder=3)
+                fontsize=3.5, color=C_LABEL, fontweight="bold", zorder=3)
         _MESES_ES = {1: "ENERO", 2: "FEBRERO", 3: "MARZO", 4: "ABRIL",
                      5: "MAYO", 6: "JUNIO", 7: "JULIO", 8: "AGOSTO",
                      9: "SEPTIEMBRE", 10: "OCTUBRE", 11: "NOVIEMBRE",
@@ -1427,7 +1446,7 @@ class MaquetadorPlano:
         fecha = f"{_MESES_ES[hoy.month]} {hoy.year}"
         ax.text(c2 + (1 - c2) * 0.50, aut_y + aut_h * 0.15,
                 fecha, ha="center", va="center",
-                fontsize=4.5, fontweight="bold", color=C_TXT, zorder=3)
+                fontsize=4.5, fontweight="bold", color=C_GREEN_DARK, zorder=3)
 
 
     # ── Rosa de los vientos (dentro del mapa principal, arriba-izquierda) ──
