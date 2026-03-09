@@ -156,9 +156,10 @@ class MaquetadorPlano:
         self.ax_map = self.fig.add_subplot(gs[0, 0])
 
         # Panel lateral derecho: subdividido en 4 filas
+        # Minimapa | Tabla datos | Leyenda | Cajetín
         gs_lateral = gridspec.GridSpecFromSubplotSpec(
             4, 1, subplot_spec=gs[0, 1],
-            height_ratios=[0.25, 0.10, 0.20, 0.45],
+            height_ratios=[0.25, 0.15, 0.18, 0.42],
             hspace=0.008,
         )
 
@@ -560,10 +561,10 @@ class MaquetadorPlano:
     # ── Tabla de datos de infraestructuras (panel lateral) ──────────────
 
     def dibujar_tabla_infra(self, rows, campos_visibles, campo_mapeo=None):
-        """Dibuja tabla compacta de infraestructuras debajo del mapa de localización.
+        """Dibuja tabla de infraestructuras debajo del mapa de localización.
 
-        Estilo: tabla con cabecera oscura y filas alternas, similar al plano
-        de referencia de la Junta de Andalucía.
+        Estilo plano de referencia: fondo blanco, bordes negros finos,
+        cabecera con texto negro bold, datos en texto normal.
         """
         ax = self.ax_tabla
         if ax is None:
@@ -573,13 +574,7 @@ class MaquetadorPlano:
         ax.axis("off")
 
         C_BORDER = "#000000"
-        C_HEADER = "#2C3E50"
         C_TXT = "#1A1A2E"
-        C_ALT = "#E8F4F8"
-
-        # Borde exterior
-        ax.add_patch(Rectangle((0, 0), 1, 1, facecolor="white",
-                                edgecolor=C_BORDER, linewidth=0.8, zorder=0))
 
         def _resolver(campo):
             if campo_mapeo and campo in campo_mapeo:
@@ -595,42 +590,60 @@ class MaquetadorPlano:
                     fontsize=4, color="#999")
             return
 
-        # Calcular anchos de columna proporcionales
-        col_w = 1.0 / n_cols
+        # Anchos proporcionales: campos con nombres largos más anchos
+        pesos = []
+        for campo in campos:
+            etiq = _etiqueta_campo(campo)
+            # Peso base por longitud de etiqueta + máx contenido
+            max_len = len(etiq)
+            for r in rows[:5]:
+                val = str(r.get(_resolver(campo) if campo_mapeo else campo, ""))
+                if val != "nan":
+                    max_len = max(max_len, len(val))
+            pesos.append(max(max_len, 4))
+        total_peso = sum(pesos)
+        col_widths = [p / total_peso for p in pesos]
+
+        # Acumular posiciones X
+        col_x = [0.0]
+        for w in col_widths:
+            col_x.append(col_x[-1] + w)
+
         # Altura de filas
         total_rows = n_rows_data + 1  # +1 cabecera
         row_h = 1.0 / total_rows
 
-        # ── Cabecera ──
+        # ── Cabecera (fondo blanco, texto negro bold, bordes finos) ──
         for ci, campo in enumerate(campos):
-            x0 = ci * col_w
-            ax.add_patch(Rectangle((x0, 1 - row_h), col_w, row_h,
-                                    facecolor=C_HEADER, edgecolor=C_BORDER,
-                                    linewidth=0.3, zorder=1))
+            x0 = col_x[ci]
+            cw = col_widths[ci]
+            ax.add_patch(Rectangle((x0, 1 - row_h), cw, row_h,
+                                    facecolor="white", edgecolor=C_BORDER,
+                                    linewidth=0.4, zorder=1))
             etiq = _etiqueta_campo(campo)
-            if len(etiq) > 12:
-                etiq = etiq[:11] + "."
-            ax.text(x0 + col_w / 2, 1 - row_h / 2, etiq.upper(),
-                    ha="center", va="center", fontsize=2.5,
-                    fontweight="bold", color="white", zorder=2)
+            if len(etiq) > 14:
+                etiq = etiq[:13] + "."
+            ax.text(x0 + cw / 2, 1 - row_h / 2, etiq.upper(),
+                    ha="center", va="center", fontsize=2.8,
+                    fontweight="bold", color=C_TXT, zorder=2)
 
-        # ── Filas de datos ──
+        # ── Filas de datos (fondo blanco, bordes finos) ──
         for ri, r in enumerate(rows):
-            y = 1 - (ri + 2) * row_h  # +2 porque fila 0 es cabecera
-            bg = C_ALT if ri % 2 == 0 else "white"
+            y = 1 - (ri + 2) * row_h
             for ci, campo in enumerate(campos):
-                x0 = ci * col_w
-                ax.add_patch(Rectangle((x0, y), col_w, row_h,
-                                        facecolor=bg, edgecolor=C_BORDER,
-                                        linewidth=0.2, zorder=1))
+                x0 = col_x[ci]
+                cw = col_widths[ci]
+                ax.add_patch(Rectangle((x0, y), cw, row_h,
+                                        facecolor="white", edgecolor=C_BORDER,
+                                        linewidth=0.3, zorder=1))
                 campo_real = _resolver(campo)
                 valor = str(r.get(campo_real, "\u2014"))
                 if valor == "nan":
                     valor = "\u2014"
-                if len(valor) > 14:
-                    valor = valor[:13] + "\u2026"
-                ax.text(x0 + col_w / 2, y + row_h / 2, valor,
-                        ha="center", va="center", fontsize=2.2,
+                if len(valor) > 18:
+                    valor = valor[:17] + "\u2026"
+                ax.text(x0 + cw / 2, y + row_h / 2, valor,
+                        ha="center", va="center", fontsize=2.5,
                         color=C_TXT, zorder=2)
 
     # ── Mapa de localización (panel inferior derecho) ──────────────────
