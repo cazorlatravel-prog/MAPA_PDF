@@ -1114,11 +1114,11 @@ class MaquetadorPlano:
         """Dibuja el cajetín completo estilo Junta de Andalucía.
 
         Estructura idéntica al plano de referencia (de arriba a abajo):
-        1. Barra verde con logos + nombre organización
-        2. Título del proyecto (recuadro centrado)
-        3. Monte/T.M. (izq 65%) | Nº de planos (der 35%)
-        4. Autores (izq 33%) | Vº.Bº (centro 33%) | Escala (der 34%)
-        5. Firmas (izq 27%) | Firmas (27%) | Firmas (27%) | Fecha (19%)
+        1. Barra organización: fondo BLANCO, logos + texto verde
+        2. Título del proyecto (recuadro centrado, bold)
+        3. Monte/T.M. (izq 65%) | Nº DE PLANO (der 35%)
+        4. AUTORES (izq, 2 técnicos) | Vº.Bº (centro) | ESCALA (der 50%)
+           con sub-fila inferior: Firmas de los 2 autores juntas | Firma Vº.Bº | FECHA
         """
         ax = self.ax_esc
         ax.set_xlim(0, 1)
@@ -1134,13 +1134,13 @@ class MaquetadorPlano:
         LW = 0.6  # linewidth de celdas
 
         # ═══════════════════════════════════════════════════════════════
-        # 1. BARRA ORGANIZACIÓN (fondo verde con logos)
+        # 1. BARRA ORGANIZACIÓN (fondo BLANCO, texto VERDE)
         # ═══════════════════════════════════════════════════════════════
         org_h = 0.18
         org_y = 1.0 - org_h
 
         ax.add_patch(Rectangle((0, org_y), 1, org_h,
-                                facecolor=C_GREEN, edgecolor=C_BORDER,
+                                facecolor="white", edgecolor=C_BORDER,
                                 linewidth=1.0, zorder=1))
 
         org = caj.get("organizacion", "")
@@ -1154,7 +1154,6 @@ class MaquetadorPlano:
                 iw, ih = img.size
                 aspect_img = iw / max(ih, 1)
                 logo_h_frac = org_h * 0.80
-                # Un solo logo: ocupa todo el espacio reservado (~35% ancho)
                 logo_w_frac = min(0.35, logo_h_frac * aspect_img * 0.7)
                 logo_ax = ax.inset_axes(
                     [0.02, org_y + org_h * 0.10, logo_w_frac, logo_h_frac],
@@ -1170,14 +1169,14 @@ class MaquetadorPlano:
             if len(lineas) >= 2:
                 ax.text(max(x_txt, 0.38), org_y + org_h * 0.62,
                         lineas[0].upper(), ha="left", va="center",
-                        fontsize=8, fontweight="bold", color=C_TXT, zorder=3)
+                        fontsize=8, fontweight="bold", color=C_GREEN, zorder=3)
                 ax.text(max(x_txt, 0.38), org_y + org_h * 0.28,
                         lineas[1], ha="left", va="center",
                         fontsize=4.5, color=C_TXT, zorder=3)
             else:
                 ax.text(0.5, org_y + org_h * 0.50, org.upper(),
                         ha="center", va="center",
-                        fontsize=7, fontweight="bold", color=C_TXT, zorder=3)
+                        fontsize=7, fontweight="bold", color=C_GREEN, zorder=3)
 
         # ═══════════════════════════════════════════════════════════════
         # 2. TÍTULO DEL PROYECTO
@@ -1209,7 +1208,7 @@ class MaquetadorPlano:
                 color=C_TXT, zorder=3, linespacing=1.4)
 
         # ═══════════════════════════════════════════════════════════════
-        # 3. MONTE / T.M. (izq 65%) + Nº DE PLANOS (der 35%)
+        # 3. MONTE / T.M. (izq 65%) + Nº DE PLANO (der 35%)
         # ═══════════════════════════════════════════════════════════════
         monte_h = 0.14
         monte_y = proy_y - monte_h
@@ -1219,7 +1218,7 @@ class MaquetadorPlano:
         ax.add_patch(Rectangle((0, monte_y), col_r, monte_h,
                                 facecolor="white", edgecolor=C_BORDER,
                                 linewidth=LW, zorder=1))
-        # Celda derecha: Nº de planos
+        # Celda derecha: Nº de plano
         ax.add_patch(Rectangle((col_r, monte_y), 1 - col_r, monte_h,
                                 facecolor="white", edgecolor=C_BORDER,
                                 linewidth=LW, zorder=1))
@@ -1248,7 +1247,7 @@ class MaquetadorPlano:
             ax.text(0.03, monte_y + monte_h * 0.30, tm_txt,
                     ha="left", va="center", fontsize=4.5, color=C_TXT, zorder=3)
 
-        # Nº de planos
+        # Nº de plano
         num_inicio = caj.get("num_plano_inicio", 1)
         if num_plano is not None:
             n_plano = num_plano
@@ -1259,16 +1258,16 @@ class MaquetadorPlano:
 
         mid_r = col_r + (1 - col_r) / 2
         ax.text(mid_r, monte_y + monte_h * 0.78,
-                "Nº DE PLANOS", ha="center", va="center",
+                "Nº DE PLANO:", ha="center", va="center",
                 fontsize=3.5, color=C_TXT, zorder=3)
         ax.text(mid_r, monte_y + monte_h * 0.35,
                 str(n_plano), ha="center", va="center",
                 fontsize=14, fontweight="bold", color=C_TXT, zorder=3)
 
         # ═══════════════════════════════════════════════════════════════
-        # 4. AUTORES (izq 33%) | Vº.Bº (centro 33%) | ESCALA (der 34%)
+        # 4. AUTORES | Vº.Bº | ESCALA  (fila de cabeceras)
         # ═══════════════════════════════════════════════════════════════
-        aut_h = 0.13
+        aut_h = 0.10
         aut_y = monte_y - aut_h
         c1 = 0.33
         c2 = 0.66
@@ -1277,76 +1276,88 @@ class MaquetadorPlano:
         ax.add_patch(Rectangle((0, aut_y), c1, aut_h,
                                 facecolor="white", edgecolor=C_BORDER,
                                 linewidth=LW, zorder=1))
-        ax.text(0.03, aut_y + aut_h * 0.78,
+        ax.text(0.03, aut_y + aut_h * 0.50,
                 "AUTORES:", ha="left", va="center",
-                fontsize=3.5, color=C_TXT, zorder=3)
+                fontsize=3.5, fontweight="bold", color=C_TXT, zorder=3)
 
         # Celda Vº.Bº
         ax.add_patch(Rectangle((c1, aut_y), c2 - c1, aut_h,
                                 facecolor="white", edgecolor=C_BORDER,
                                 linewidth=LW, zorder=1))
-        ax.text((c1 + c2) / 2, aut_y + aut_h * 0.78,
+        ax.text((c1 + c2) / 2, aut_y + aut_h * 0.50,
                 "Vº.Bº", ha="center", va="center",
-                fontsize=3.5, color=C_TXT, zorder=3)
+                fontsize=3.5, fontweight="bold", color=C_TXT, zorder=3)
 
-        # Celda ESCALA
+        # Celda ESCALA (cabecera + valor)
         ax.add_patch(Rectangle((c2, aut_y), 1 - c2, aut_h,
                                 facecolor="white", edgecolor=C_BORDER,
                                 linewidth=LW, zorder=1))
-        ax.text(c2 + (1 - c2) * 0.50, aut_y + aut_h * 0.78,
-                "ESCALA", ha="center", va="center",
+        ax.text(c2 + (1 - c2) * 0.50, aut_y + aut_h * 0.72,
+                "ESCALA:", ha="center", va="center",
                 fontsize=3.5, color=C_TXT, zorder=3)
         escala_txt = f"1:{self.escala:,}".replace(",", ".")
-        ax.text(c2 + (1 - c2) * 0.50, aut_y + aut_h * 0.30,
+        ax.text(c2 + (1 - c2) * 0.50, aut_y + aut_h * 0.28,
                 escala_txt, ha="center", va="center",
                 fontsize=9, fontweight="bold", color=C_TXT, zorder=3)
 
         # ═══════════════════════════════════════════════════════════════
-        # 5. FIRMAS (3 cols 27%) + FECHA (19%)
+        # 5. FIRMAS: Autor+Firma juntos | Vº.Bº firma | FECHA
         # ═══════════════════════════════════════════════════════════════
-        firma_h = 0.18
+        firma_h = 0.22
         firma_y = aut_y - firma_h
-        fc1 = 0.27
-        fc2 = 0.54
-        fc3 = 0.81  # inicio celda fecha
 
         autor = caj.get("autor", "")
+        cargo_autor = caj.get("cargo_autor", "")
         firma_txt = caj.get("firma", "")
+        cargo_firma = caj.get("cargo_firma", "")
         revision = caj.get("revision", "")
+        cargo_revision = caj.get("cargo_revision", "")
 
-        firmas_data = [
-            (0, fc1, f"Fdo.: {autor}" if autor else "",
-             caj.get("cargo_autor", "")),
-            (fc1, fc2, f"Fdo.: {firma_txt}" if firma_txt else "",
-             caj.get("cargo_firma", "")),
-            (fc2, fc3, f"Fdo.: {revision}" if revision else "",
-             caj.get("cargo_revision", "")),
-        ]
-
-        for x0, x1, fdo, cargo in firmas_data:
-            w = x1 - x0
-            ax.add_patch(Rectangle((x0, firma_y), w, firma_h,
-                                    facecolor="white", edgecolor=C_BORDER,
-                                    linewidth=LW, zorder=1))
-            if fdo:
-                ax.text(x0 + w / 2, firma_y + firma_h * 0.55,
-                        fdo, ha="center", va="center",
-                        fontsize=3.2, color=C_TXT, zorder=3)
-            if cargo:
-                ax.text(x0 + w / 2, firma_y + firma_h * 0.25,
-                        cargo, ha="center", va="center",
-                        fontsize=2.8, color=C_TXT, zorder=3)
-
-        # Celda FECHA
-        fw = 1 - fc3
-        ax.add_patch(Rectangle((fc3, firma_y), fw, firma_h,
+        # Celda izquierda: los 2 autores juntos
+        ax.add_patch(Rectangle((0, firma_y), c1, firma_h,
                                 facecolor="white", edgecolor=C_BORDER,
                                 linewidth=LW, zorder=1))
-        ax.text(fc3 + fw * 0.50, firma_y + firma_h * 0.72,
+        # Autor 1 (mitad superior)
+        if autor:
+            ax.text(c1 / 2, firma_y + firma_h * 0.72,
+                    f"Fdo.: {autor}", ha="center", va="center",
+                    fontsize=3.0, color=C_TXT, zorder=3)
+        if cargo_autor:
+            ax.text(c1 / 2, firma_y + firma_h * 0.58,
+                    cargo_autor, ha="center", va="center",
+                    fontsize=2.5, color=C_TXT, zorder=3)
+        # Autor 2 / Firma (mitad inferior)
+        if firma_txt:
+            ax.text(c1 / 2, firma_y + firma_h * 0.38,
+                    f"Fdo.: {firma_txt}", ha="center", va="center",
+                    fontsize=3.0, color=C_TXT, zorder=3)
+        if cargo_firma:
+            ax.text(c1 / 2, firma_y + firma_h * 0.24,
+                    cargo_firma, ha="center", va="center",
+                    fontsize=2.5, color=C_TXT, zorder=3)
+
+        # Celda centro: Vº.Bº (revisión/director)
+        ax.add_patch(Rectangle((c1, firma_y), c2 - c1, firma_h,
+                                facecolor="white", edgecolor=C_BORDER,
+                                linewidth=LW, zorder=1))
+        if revision:
+            ax.text((c1 + c2) / 2, firma_y + firma_h * 0.55,
+                    f"Fdo.: {revision}", ha="center", va="center",
+                    fontsize=3.0, color=C_TXT, zorder=3)
+        if cargo_revision:
+            ax.text((c1 + c2) / 2, firma_y + firma_h * 0.35,
+                    cargo_revision, ha="center", va="center",
+                    fontsize=2.5, color=C_TXT, zorder=3)
+
+        # Celda derecha: FECHA
+        ax.add_patch(Rectangle((c2, firma_y), 1 - c2, firma_h,
+                                facecolor="white", edgecolor=C_BORDER,
+                                linewidth=LW, zorder=1))
+        ax.text(c2 + (1 - c2) * 0.50, firma_y + firma_h * 0.72,
                 "FECHA:", ha="center", va="center",
                 fontsize=3.5, color=C_TXT, zorder=3)
         fecha = date.today().strftime("%B %Y").upper()
-        ax.text(fc3 + fw * 0.50, firma_y + firma_h * 0.30,
+        ax.text(c2 + (1 - c2) * 0.50, firma_y + firma_h * 0.35,
                 fecha, ha="center", va="center",
                 fontsize=4.5, fontweight="bold", color=C_TXT, zorder=3)
 
