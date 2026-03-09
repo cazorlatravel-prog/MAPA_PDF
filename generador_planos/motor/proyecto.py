@@ -40,6 +40,19 @@ class Proyecto:
         self.patron_nombre = "plano_{num}_{nombre}"
         self.layout_key = "Plantilla 1 (Clásica)"
 
+        # Campos adicionales
+        self.transparencia_infra = 0.35
+        self.calidad_pdf = "Alta (400 DPI)"
+        self.campo_encabezado = ""
+
+        # Generación
+        self.modo_gen = "todos"
+        self.rango_desde = 1
+        self.rango_hasta = 10
+        self.campo_agrupacion = "Monte"
+        self.multipagina = False
+        self.incluir_portada = False
+
         # Cajetín
         self.cajetin = {
             "autor": "",
@@ -87,6 +100,15 @@ class Proyecto:
             "carpeta_salida": self.carpeta_salida,
             "patron_nombre": self.patron_nombre,
             "layout_key": self.layout_key,
+            "transparencia_infra": self.transparencia_infra,
+            "calidad_pdf": self.calidad_pdf,
+            "campo_encabezado": self.campo_encabezado,
+            "modo_gen": self.modo_gen,
+            "rango_desde": self.rango_desde,
+            "rango_hasta": self.rango_hasta,
+            "campo_agrupacion": self.campo_agrupacion,
+            "multipagina": self.multipagina,
+            "incluir_portada": self.incluir_portada,
             "cajetin": self.cajetin,
             "plantilla": self.plantilla,
             "capas_extra": self.capas_extra,
@@ -102,6 +124,9 @@ class Proyecto:
             "escala_manual", "transparencia_montes", "color_infra",
             "campos_visibles", "campo_mapeo", "carpeta_salida", "patron_nombre",
             "layout_key",
+            "transparencia_infra", "calidad_pdf", "campo_encabezado",
+            "modo_gen", "rango_desde", "rango_hasta", "campo_agrupacion",
+            "multipagina", "incluir_portada",
             "cajetin", "plantilla", "capas_extra", "simbologia",
         ]:
             if key in d:

@@ -304,6 +304,9 @@ class PanelCajetin:
                 self._campo_subtitulo.set(campo_sub)
             self._num_plano_inicio.set(
                 str(cajetin.get("num_plano_inicio", 1)))
+            campo_etiq = cajetin.get("campo_etiqueta", "")
+            if campo_etiq:
+                self._campo_etiqueta.set(campo_etiq)
 
         if plantilla:
             for key, color in plantilla.items():

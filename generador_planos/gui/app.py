@@ -273,6 +273,14 @@ class App(tk.Tk):
         self.panel_campos.actualizar_campos(columnas)
         self.panel_cajetin.actualizar_campos_subtitulo(columnas)
 
+        # Restaurar campos visibles del proyecto si se acaba de cargar uno
+        if hasattr(self, "_campos_visibles_proyecto") and self._campos_visibles_proyecto:
+            campos_proy = self._campos_visibles_proyecto
+            for campo, var in self.panel_campos._check_campos.items():
+                var.set(campo in campos_proy)
+            self.panel_campos._actualizar_count()
+            self._campos_visibles_proyecto = []
+
     def _on_montes_cargados(self):
         """Actualiza el combobox de categorización de montes."""
         self.panel_simbologia.actualizar_campo_categoria_montes()
@@ -327,8 +335,11 @@ class App(tk.Tk):
         p.proveedor = self.panel_config.proveedor.get()
         p.escala_manual = self.panel_config.escala_manual
         p.transparencia_montes = self.panel_capas.transparencia.get()
+        p.transparencia_infra = self.panel_capas.transparencia_infra.get()
         p.color_infra = self.panel_config.color_infra
+        p.calidad_pdf = self.panel_config.calidad_pdf
         p.campos_visibles = self.panel_campos.obtener_campos_activos()
+        p.campo_encabezado = self.panel_campos.obtener_campo_encabezado() or ""
         p.carpeta_salida = self.panel_config.salida.get()
         p.patron_nombre = self.panel_config.patron_nombre.get()
         p.layout_key = self.panel_cajetin.obtener_layout_key()
@@ -336,6 +347,20 @@ class App(tk.Tk):
         p.plantilla = self.panel_cajetin.obtener_plantilla()
         p.simbologia = self.motor.gestor_simbologia.to_dict()
         p.capas_extra = self.motor.gestor_capas.to_dict()
+
+        # Generación
+        p.modo_gen = self.panel_gen._modo_gen.get()
+        try:
+            p.rango_desde = int(self.panel_gen._rango_desde.get())
+        except ValueError:
+            p.rango_desde = 1
+        try:
+            p.rango_hasta = int(self.panel_gen._rango_hasta.get())
+        except ValueError:
+            p.rango_hasta = 10
+        p.campo_agrupacion = self.panel_gen._campo_agrupacion.get()
+        p.multipagina = self.panel_gen._multipagina.get()
+        p.incluir_portada = self.panel_gen._incluir_portada.get()
 
         try:
             p.guardar(ruta)
@@ -354,13 +379,43 @@ class App(tk.Tk):
 
         try:
             p = Proyecto.cargar(ruta)
+
+            # ── Configuración general ──
             self.panel_config.formato.set(p.formato)
             self.panel_config.proveedor.set(p.proveedor)
-            self.panel_capas.transparencia.set(p.transparencia_montes)
             self.panel_config.salida.set(p.carpeta_salida)
-            if hasattr(p, "patron_nombre") and p.patron_nombre:
+            if p.patron_nombre:
                 self.panel_config.patron_nombre.set(p.patron_nombre)
-            if hasattr(p, "layout_key") and p.layout_key:
+
+            # Escala manual
+            if p.escala_manual:
+                self.panel_config._escala_manual.set(f"{p.escala_manual:,}")
+            else:
+                self.panel_config._escala_manual.set("0 (auto)")
+
+            # Color infraestructura
+            if p.color_infra:
+                self.panel_config._color_infra = p.color_infra
+                self.panel_config._lbl_color.configure(bg=p.color_infra)
+
+            # Calidad PDF
+            if hasattr(p, "calidad_pdf") and p.calidad_pdf:
+                self.panel_config._calidad_pdf.set(p.calidad_pdf)
+
+            # ── Transparencias ──
+            self.panel_capas.transparencia.set(p.transparencia_montes)
+            if hasattr(p, "transparencia_infra"):
+                self.panel_capas.transparencia_infra.set(p.transparencia_infra)
+
+            # ── Campos ──
+            if hasattr(p, "campo_encabezado") and p.campo_encabezado:
+                self.panel_campos._combo_encabezado.set(p.campo_encabezado)
+
+            # campos_visibles se restauran después de cargar el SHP
+            # (se guardan para restaurar cuando se recargue la capa)
+
+            # ── Layout y cajetín ──
+            if p.layout_key:
                 self.panel_cajetin._layout_key.set(p.layout_key)
                 self.motor.layout_key = p.layout_key
             self.panel_cajetin.cargar_desde_proyecto(p.cajetin, p.plantilla)
@@ -369,10 +424,29 @@ class App(tk.Tk):
             self.motor.set_cajetin(p.cajetin)
             self.motor.set_plantilla(p.plantilla)
 
-            # Simbología
+            # ── Simbología ──
             if p.simbologia:
                 from ..motor.simbologia import GestorSimbologia
                 self.motor.gestor_simbologia = GestorSimbologia.from_dict(p.simbologia)
+
+            # ── Generación ──
+            if hasattr(p, "modo_gen") and p.modo_gen:
+                self.panel_gen._modo_gen.set(p.modo_gen)
+            if hasattr(p, "rango_desde"):
+                self.panel_gen._rango_desde.delete(0, "end")
+                self.panel_gen._rango_desde.insert(0, str(p.rango_desde))
+            if hasattr(p, "rango_hasta"):
+                self.panel_gen._rango_hasta.delete(0, "end")
+                self.panel_gen._rango_hasta.insert(0, str(p.rango_hasta))
+            if hasattr(p, "campo_agrupacion") and p.campo_agrupacion:
+                self.panel_gen._campo_agrupacion.set(p.campo_agrupacion)
+            if hasattr(p, "multipagina"):
+                self.panel_gen._multipagina.set(p.multipagina)
+            if hasattr(p, "incluir_portada"):
+                self.panel_gen._incluir_portada.set(p.incluir_portada)
+
+            # Guardar campos visibles para restaurar tras cargar SHP
+            self._campos_visibles_proyecto = p.campos_visibles or []
 
             self._escribir_log(f"Proyecto cargado: {p.nombre}", "ok")
         except Exception as e:
