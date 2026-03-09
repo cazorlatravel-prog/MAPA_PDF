@@ -1110,11 +1110,12 @@ class MaquetadorPlano:
                                  num_plano=None, proveedor=""):
         """Dibuja el cajetín completo estilo Junta de Andalucía.
 
-        Estructura (de arriba a abajo):
+        Estructura idéntica al plano de referencia (de arriba a abajo):
         1. Barra verde con logos + nombre organización
-        2. Título del proyecto (recuadro)
-        3. Info monte + T.M.
-        4. Tabla: Nº plano, Escala, Autores/Firmas, Fecha
+        2. Título del proyecto (recuadro centrado)
+        3. Monte/T.M. (izq 65%) | Nº de planos (der 35%)
+        4. Autores (izq 33%) | Vº.Bº (centro 33%) | Escala (der 34%)
+        5. Firmas (izq 27%) | Firmas (27%) | Firmas (27%) | Fecha (19%)
         """
         ax = self.ax_esc
         ax.set_xlim(0, 1)
@@ -1127,11 +1128,12 @@ class MaquetadorPlano:
         C_BORDER = "#000000"
         C_TXT = "#1A1A2E"
         C_GREEN = "#00953B"  # Verde Junta de Andalucía
+        LW = 0.6  # linewidth de celdas
 
         # ═══════════════════════════════════════════════════════════════
-        # BARRA ORGANIZACIÓN (fondo verde con logos)
+        # 1. BARRA ORGANIZACIÓN (fondo verde con logos)
         # ═══════════════════════════════════════════════════════════════
-        org_h = 0.16
+        org_h = 0.18
         org_y = 1.0 - org_h
 
         ax.add_patch(Rectangle((0, org_y), 1, org_h,
@@ -1142,16 +1144,14 @@ class MaquetadorPlano:
         logo_path = caj.get("logo_path", "")
 
         x_txt = 0.02
-        # Logo (se adapta a cuadrado o rectangular)
         if logo_path:
             try:
                 from PIL import Image as PILImage
                 img = PILImage.open(logo_path)
                 iw, ih = img.size
                 aspect_img = iw / max(ih, 1)
-                # Adaptar: si es más ancho que alto, darle más ancho
                 logo_h_frac = org_h * 0.80
-                logo_w_frac = min(0.18, logo_h_frac * aspect_img * 0.7)
+                logo_w_frac = min(0.22, logo_h_frac * aspect_img * 0.7)
                 logo_ax = ax.inset_axes(
                     [0.02, org_y + org_h * 0.10, logo_w_frac, logo_h_frac],
                     transform=ax.transAxes)
@@ -1161,36 +1161,32 @@ class MaquetadorPlano:
             except Exception:
                 pass
 
-        # Nombre de la organización (grande, a la derecha del logo)
         if org:
             lineas = org.split("\n")
             if len(lineas) >= 2:
-                # Primera línea grande (nombre principal)
-                ax.text(max(x_txt, 0.35), org_y + org_h * 0.62,
+                ax.text(max(x_txt, 0.38), org_y + org_h * 0.62,
                         lineas[0].upper(), ha="left", va="center",
-                        fontsize=7, fontweight="bold", color=C_TXT, zorder=3)
-                # Segunda línea (subtítulo org)
-                ax.text(max(x_txt, 0.35), org_y + org_h * 0.30,
+                        fontsize=8, fontweight="bold", color=C_TXT, zorder=3)
+                ax.text(max(x_txt, 0.38), org_y + org_h * 0.28,
                         lineas[1], ha="left", va="center",
-                        fontsize=4, color=C_TXT, zorder=3)
+                        fontsize=4.5, color=C_TXT, zorder=3)
             else:
                 ax.text(0.5, org_y + org_h * 0.50, org.upper(),
                         ha="center", va="center",
-                        fontsize=6.5, fontweight="bold", color=C_TXT, zorder=3)
+                        fontsize=7, fontweight="bold", color=C_TXT, zorder=3)
 
         # ═══════════════════════════════════════════════════════════════
-        # TÍTULO DEL PROYECTO (recuadro)
+        # 2. TÍTULO DEL PROYECTO
         # ═══════════════════════════════════════════════════════════════
         proy_h = 0.14
         proy_y = org_y - proy_h
 
         ax.add_patch(Rectangle((0, proy_y), 1, proy_h,
                                 facecolor="white", edgecolor=C_BORDER,
-                                linewidth=0.8, zorder=1))
+                                linewidth=LW, zorder=1))
 
         titulo_proy = caj.get("proyecto", "")
         subtitulo = caj.get("subtitulo", "")
-        # Subtítulo dinámico desde campo
         campo_sub = caj.get("campo_subtitulo", "")
         if campo_sub and row is not None:
             val = str(row.get(campo_sub, ""))
@@ -1198,30 +1194,32 @@ class MaquetadorPlano:
                 subtitulo = val
 
         texto_proy = titulo_proy or subtitulo or "PROYECTO"
-        # Wrap text si es muy largo
         if len(texto_proy) > 50:
             mid = len(texto_proy) // 2
-            # Buscar espacio cercano al medio para partir
             space_pos = texto_proy.rfind(" ", 0, mid + 10)
             if space_pos > 10:
                 texto_proy = texto_proy[:space_pos] + "\n" + texto_proy[space_pos + 1:]
 
         ax.text(0.5, proy_y + proy_h * 0.50, texto_proy.upper(),
-                ha="center", va="center", fontsize=4.5, fontweight="bold",
-                color=C_TXT, zorder=3, linespacing=1.3,
-                wrap=True)
+                ha="center", va="center", fontsize=5, fontweight="bold",
+                color=C_TXT, zorder=3, linespacing=1.4)
 
         # ═══════════════════════════════════════════════════════════════
-        # INFO MONTE + T.M. (nombre del monte y término municipal)
+        # 3. MONTE / T.M. (izq 65%) + Nº DE PLANOS (der 35%)
         # ═══════════════════════════════════════════════════════════════
-        monte_h = 0.10
+        monte_h = 0.14
         monte_y = proy_y - monte_h
+        col_r = 0.65  # divisor izquierda/derecha
 
-        ax.add_patch(Rectangle((0, monte_y), 1, monte_h,
+        # Celda izquierda: Monte + T.M.
+        ax.add_patch(Rectangle((0, monte_y), col_r, monte_h,
                                 facecolor="white", edgecolor=C_BORDER,
-                                linewidth=0.8, zorder=1))
+                                linewidth=LW, zorder=1))
+        # Celda derecha: Nº de planos
+        ax.add_patch(Rectangle((col_r, monte_y), 1 - col_r, monte_h,
+                                facecolor="white", edgecolor=C_BORDER,
+                                linewidth=LW, zorder=1))
 
-        # Buscar campos de monte y municipio en el row
         monte_txt = ""
         tm_txt = ""
         if row is not None:
@@ -1240,26 +1238,13 @@ class MaquetadorPlano:
 
         if monte_txt:
             ax.text(0.03, monte_y + monte_h * 0.65, monte_txt,
-                    ha="left", va="center", fontsize=4, color=C_TXT,
+                    ha="left", va="center", fontsize=4.5, color=C_TXT,
                     fontweight="bold", zorder=3)
         if tm_txt:
             ax.text(0.03, monte_y + monte_h * 0.30, tm_txt,
-                    ha="left", va="center", fontsize=4, color=C_TXT, zorder=3)
+                    ha="left", va="center", fontsize=4.5, color=C_TXT, zorder=3)
 
-        # ═══════════════════════════════════════════════════════════════
-        # TABLA INFERIOR: Nº plano, Escala, Autores, Fecha
-        # ═══════════════════════════════════════════════════════════════
-        tabla_y = monte_y  # desde aquí hacia abajo
-        tabla_h = tabla_y  # espacio restante
-
-        # ── Fila 1: Nº de plano + Escala ──
-        fila1_h = tabla_h * 0.30
-        fila1_y = tabla_y - fila1_h
-
-        # Mitad izquierda: Nº DE PLANO
-        ax.add_patch(Rectangle((0, fila1_y), 0.55, fila1_h,
-                                facecolor="white", edgecolor=C_BORDER,
-                                linewidth=0.6, zorder=1))
+        # Nº de planos
         num_inicio = caj.get("num_plano_inicio", 1)
         if num_plano is not None:
             n_plano = num_plano
@@ -1268,73 +1253,101 @@ class MaquetadorPlano:
                    and isinstance(row.name, int) else 0)
             n_plano = idx + num_inicio
 
-        ax.text(0.03, fila1_y + fila1_h * 0.50,
-                "Nº DE PLANO:", ha="left", va="center",
+        mid_r = col_r + (1 - col_r) / 2
+        ax.text(mid_r, monte_y + monte_h * 0.78,
+                "Nº DE PLANOS", ha="center", va="center",
                 fontsize=3.5, color=C_TXT, zorder=3)
-        ax.text(0.38, fila1_y + fila1_h * 0.50,
+        ax.text(mid_r, monte_y + monte_h * 0.35,
                 str(n_plano), ha="center", va="center",
-                fontsize=11, fontweight="bold", color=C_TXT, zorder=3)
+                fontsize=14, fontweight="bold", color=C_TXT, zorder=3)
 
-        # Mitad derecha: ESCALA
-        ax.add_patch(Rectangle((0.55, fila1_y), 0.45, fila1_h,
+        # ═══════════════════════════════════════════════════════════════
+        # 4. AUTORES (izq 33%) | Vº.Bº (centro 33%) | ESCALA (der 34%)
+        # ═══════════════════════════════════════════════════════════════
+        aut_h = 0.13
+        aut_y = monte_y - aut_h
+        c1 = 0.33
+        c2 = 0.66
+
+        # Celda AUTORES
+        ax.add_patch(Rectangle((0, aut_y), c1, aut_h,
                                 facecolor="white", edgecolor=C_BORDER,
-                                linewidth=0.6, zorder=1))
-        ax.text(0.57, fila1_y + fila1_h * 0.70,
-                "ESCALA:", ha="left", va="center",
+                                linewidth=LW, zorder=1))
+        ax.text(0.03, aut_y + aut_h * 0.78,
+                "AUTORES:", ha="left", va="center",
+                fontsize=3.5, color=C_TXT, zorder=3)
+
+        # Celda Vº.Bº
+        ax.add_patch(Rectangle((c1, aut_y), c2 - c1, aut_h,
+                                facecolor="white", edgecolor=C_BORDER,
+                                linewidth=LW, zorder=1))
+        ax.text((c1 + c2) / 2, aut_y + aut_h * 0.78,
+                "Vº.Bº", ha="center", va="center",
+                fontsize=3.5, color=C_TXT, zorder=3)
+
+        # Celda ESCALA
+        ax.add_patch(Rectangle((c2, aut_y), 1 - c2, aut_h,
+                                facecolor="white", edgecolor=C_BORDER,
+                                linewidth=LW, zorder=1))
+        ax.text(c2 + (1 - c2) * 0.50, aut_y + aut_h * 0.78,
+                "ESCALA", ha="center", va="center",
                 fontsize=3.5, color=C_TXT, zorder=3)
         escala_txt = f"1:{self.escala:,}".replace(",", ".")
-        ax.text(0.78, fila1_y + fila1_h * 0.35,
+        ax.text(c2 + (1 - c2) * 0.50, aut_y + aut_h * 0.30,
                 escala_txt, ha="center", va="center",
-                fontsize=8, fontweight="bold", color=C_TXT, zorder=3)
+                fontsize=9, fontweight="bold", color=C_TXT, zorder=3)
 
-        # ── Fila 2: Autores / Vº.Bº / Director ──
-        fila2_h = tabla_h * 0.45
-        fila2_y = fila1_y - fila2_h
+        # ═══════════════════════════════════════════════════════════════
+        # 5. FIRMAS (3 cols 27%) + FECHA (19%)
+        # ═══════════════════════════════════════════════════════════════
+        firma_h = 0.18
+        firma_y = aut_y - firma_h
+        fc1 = 0.27
+        fc2 = 0.54
+        fc3 = 0.81  # inicio celda fecha
 
-        # 3 columnas
-        col_w = 1.0 / 3.0
         autor = caj.get("autor", "")
-        firma = caj.get("firma", "")
+        firma_txt = caj.get("firma", "")
         revision = caj.get("revision", "")
 
-        etiquetas_fila2 = [
-            ("AUTORES:", f"Fdo.: {autor}" if autor else ""),
-            ("Vº.Bº", f"Fdo.: {firma}" if firma else ""),
-            ("", f"Rev.: {revision}" if revision else ""),
+        firmas_data = [
+            (0, fc1, f"Fdo.: {autor}" if autor else "",
+             caj.get("cargo_autor", "")),
+            (fc1, fc2, f"Fdo.: {firma_txt}" if firma_txt else "",
+             caj.get("cargo_firma", "")),
+            (fc2, fc3, f"Fdo.: {revision}" if revision else "",
+             caj.get("cargo_revision", "")),
         ]
 
-        for i, (titulo, contenido) in enumerate(etiquetas_fila2):
-            x0 = i * col_w
-            ax.add_patch(Rectangle((x0, fila2_y), col_w, fila2_h,
+        for x0, x1, fdo, cargo in firmas_data:
+            w = x1 - x0
+            ax.add_patch(Rectangle((x0, firma_y), w, firma_h,
                                     facecolor="white", edgecolor=C_BORDER,
-                                    linewidth=0.6, zorder=1))
-            if titulo:
-                ax.text(x0 + col_w / 2, fila2_y + fila2_h * 0.85,
-                        titulo, ha="center", va="center",
-                        fontsize=3.2, fontweight="bold", color=C_TXT, zorder=3)
-            if contenido:
-                ax.text(x0 + col_w / 2, fila2_y + fila2_h * 0.25,
-                        contenido, ha="center", va="center",
-                        fontsize=3, color=C_TXT, zorder=3)
+                                    linewidth=LW, zorder=1))
+            if fdo:
+                ax.text(x0 + w / 2, firma_y + firma_h * 0.55,
+                        fdo, ha="center", va="center",
+                        fontsize=3.2, color=C_TXT, zorder=3)
+            if cargo:
+                ax.text(x0 + w / 2, firma_y + firma_h * 0.25,
+                        cargo, ha="center", va="center",
+                        fontsize=2.8, color=C_TXT, zorder=3)
 
-        # ── Fila 3: Fecha ──
-        fila3_h = tabla_h * 0.25
-        fila3_y = fila2_y - fila3_h
-
-        ax.add_patch(Rectangle((0, fila3_y), 1, fila3_h,
+        # Celda FECHA
+        fw = 1 - fc3
+        ax.add_patch(Rectangle((fc3, firma_y), fw, firma_h,
                                 facecolor="white", edgecolor=C_BORDER,
-                                linewidth=0.6, zorder=1))
-
+                                linewidth=LW, zorder=1))
+        ax.text(fc3 + fw * 0.50, firma_y + firma_h * 0.72,
+                "FECHA:", ha="center", va="center",
+                fontsize=3.5, color=C_TXT, zorder=3)
         fecha = date.today().strftime("%B %Y").upper()
-        ax.text(0.03, fila3_y + fila3_h * 0.50,
-                "FECHA:", ha="left", va="center",
-                fontsize=3.5, fontweight="bold", color=C_TXT, zorder=3)
-        ax.text(0.75, fila3_y + fila3_h * 0.50,
+        ax.text(fc3 + fw * 0.50, firma_y + firma_h * 0.30,
                 fecha, ha="center", va="center",
-                fontsize=5, fontweight="bold", color=C_TXT, zorder=3)
+                fontsize=4.5, fontweight="bold", color=C_TXT, zorder=3)
 
-        # Créditos cartografía
-        ax.text(0.5, 0.005, f"Base: {proveedor}",
+        # Créditos cartografía (base del cajetín)
+        ax.text(0.5, 0.005, f"Base cartográfica: {proveedor}",
                 ha="center", va="bottom", fontsize=2.5, color="#888",
                 style="italic", zorder=3)
 
