@@ -191,6 +191,14 @@ class MaquetadorPlano:
 
     # ── Grid UTM ──────────────────────────────────────────────────────
 
+    @staticmethod
+    def _formato_coord(valor):
+        """Formatea coordenada UTM con punto como separador de miles (convención española).
+        Ej: 508000 → '508.000', 4217500 → '4.217.500'
+        """
+        s = f"{int(valor):,}".replace(",", ".")
+        return s
+
     def dibujar_grid_utm(self, xmin, xmax, ymin, ymax):
         intervalo = INTERVALOS_GRID.get(self.escala, 1000)
         ax = self.ax_map
@@ -212,32 +220,26 @@ class MaquetadorPlano:
         xs_filt = [x for x in xs if x > xmin + margen_x and x < xmax - margen_x]
         ys_filt = [y for y in ys if y > ymin + margen_y and y < ymax - margen_y]
 
+        # Formato español con punto de miles: 508.000, 4.217.500
         ax.set_xticks(xs_filt)
         ax.set_yticks(ys_filt)
-        ax.set_xticklabels([f"{int(x)}" for x in xs_filt], fontsize=4,
-                           color="#2C3E50", rotation=30, ha="left")
-        ax.set_yticklabels([f"{int(y)}" for y in ys_filt], fontsize=4.5,
-                           color="#2C3E50")
-        # Etiquetas en los cuatro lados del mapa
+        ax.set_xticklabels([self._formato_coord(x) for x in xs_filt],
+                           fontsize=4.5, color="#2C3E50", rotation=0, ha="center")
+        ax.set_yticklabels([self._formato_coord(y) for y in ys_filt],
+                           fontsize=4.5, color="#2C3E50")
+
+        # Etiquetas en los cuatro lados del mapa, fuera del marco
         ax.tick_params(which="major", length=4, width=0.6, color="#2C3E50",
                        direction="out", labelbottom=True, labeltop=True,
-                       labelleft=True, labelright=True, pad=1)
-        # Etiquetas inferiores sin rotación y tamaño reducido para no solapar cajetines
-        ax.tick_params(axis="x", which="major", labelsize=3.5)
+                       labelleft=True, labelright=True, pad=2)
 
-        # Líneas de cuadrícula completas (estilo cartográfico profesional)
+        # Líneas de cuadrícula continuas (estilo cartográfico profesional)
         for x in xs:
-            ax.axvline(x, color="#2C3E50", linewidth=0.15, alpha=0.4,
-                        linestyle=(0, (8, 6)), zorder=3)
+            ax.axvline(x, color="#2C3E50", linewidth=0.25, alpha=0.45,
+                       zorder=3)
         for y in ys:
-            ax.axhline(y, color="#2C3E50", linewidth=0.15, alpha=0.4,
-                        linestyle=(0, (8, 6)), zorder=3)
-
-        # Cruces de intersección reforzadas
-        for x in xs:
-            for y in ys:
-                ax.plot(x, y, "+", color="#2C3E50", markersize=4,
-                        markeredgewidth=0.5, alpha=0.5, zorder=4)
+            ax.axhline(y, color="#2C3E50", linewidth=0.25, alpha=0.45,
+                       zorder=3)
 
         # Indicación del sistema de referencia (esquina inferior derecha del mapa)
         ax.text(0.995, 0.005, "ETRS89 / UTM zona 30N · EPSG:25830",
