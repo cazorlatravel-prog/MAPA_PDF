@@ -93,6 +93,7 @@ class GeneradorPlanos:
         self._cajetin = {}
         self._plantilla = {}
         self.config_infra = {}  # linewidth, alpha, linestyle, marker
+        self.layout_key = "Plantilla 1 (Clásica)"
         self._cancelar = threading.Event()
 
     def cancelar_generacion(self):
@@ -204,11 +205,29 @@ class GeneradorPlanos:
             montes_clip = self.gdf_montes.cx[xmin:xmax, ymin:ymax]
             if not montes_clip.empty:
                 alpha = transparencia
-                green = int(34 * alpha)
-                montes_clip.plot(
-                    ax=ax_map, facecolor=f"#{green:02x}9922",
-                    edgecolor="#1a5c10", linewidth=0.8, alpha=alpha,
-                )
+                campo_cat_montes = self.config_infra.get("campo_categoria_montes")
+                if campo_cat_montes and campo_cat_montes in montes_clip.columns:
+                    # Colorear por categoría
+                    valores_unicos = montes_clip[campo_cat_montes].astype(str).unique()
+                    for valor in valores_unicos:
+                        simb = self.gestor_simbologia.obtener_simbologia_monte(
+                            campo_cat_montes, valor)
+                        mask = montes_clip[campo_cat_montes].astype(str) == valor
+                        gdf_cat = montes_clip[mask]
+                        if gdf_cat.empty:
+                            continue
+                        gdf_cat.plot(
+                            ax=ax_map, facecolor=simb.facecolor,
+                            edgecolor=simb.color, linewidth=simb.linewidth,
+                            alpha=alpha, zorder=1,
+                        )
+                else:
+                    # Color fijo
+                    green = int(34 * alpha)
+                    montes_clip.plot(
+                        ax=ax_map, facecolor=f"#{green:02x}9922",
+                        edgecolor="#1a5c10", linewidth=0.8, alpha=alpha,
+                    )
 
         # Capas extra
         self.gestor_capas.dibujar_en_mapa(
@@ -308,12 +327,23 @@ class GeneradorPlanos:
 
         # Montes (solo si hay montes visibles en el extent)
         if self.gdf_montes is not None:
+            campo_cat_montes = self.config_infra.get("campo_categoria_montes")
             if xmin is not None:
                 montes_vis = self.gdf_montes.cx[xmin:xmax, ymin:ymax]
-                if not montes_vis.empty:
-                    items.append(("Montes", "#1a5c10", "polygon", "-", None, "#22992244"))
             else:
-                items.append(("Montes", "#1a5c10", "polygon", "-", None, "#22992244"))
+                montes_vis = self.gdf_montes
+            if not montes_vis.empty:
+                if campo_cat_montes and campo_cat_montes in montes_vis.columns:
+                    # Leyenda por categoría de montes
+                    valores_visibles = sorted(montes_vis[campo_cat_montes].astype(str).unique())
+                    for valor in valores_visibles:
+                        simb = self.gestor_simbologia.obtener_simbologia_monte(
+                            campo_cat_montes, valor)
+                        label = str(valor)[:25]
+                        items.append((label, simb.color, "polygon", "-",
+                                      None, simb.facecolor))
+                else:
+                    items.append(("Montes", "#1a5c10", "polygon", "-", None, "#22992244"))
 
         # Capas extra
         items.extend(self.gestor_capas.obtener_items_leyenda(self.gestor_simbologia))
@@ -368,7 +398,7 @@ class GeneradorPlanos:
         escala = seleccionar_escala(geom, formato_key, escala_manual)
         log(f"  Escala elegida: 1:{escala:,}")
 
-        maq = MaquetadorPlano(formato_key, escala)
+        maq = MaquetadorPlano(formato_key, escala, layout_key=self.layout_key)
         fig, ax_map, ax_info, ax_mini, ax_esc = maq.crear_figura()
 
         xmin, xmax, ymin, ymax = maq.calcular_extension_mapa(geom)
@@ -457,7 +487,7 @@ class GeneradorPlanos:
         escala = seleccionar_escala(geom_union, formato_key, escala_manual)
         log(f"  Escala elegida: 1:{escala:,} ({len(indices)} infraestructuras)")
 
-        maq = MaquetadorPlano(formato_key, escala)
+        maq = MaquetadorPlano(formato_key, escala, layout_key=self.layout_key)
         fig, ax_map, ax_info, ax_mini, ax_esc = maq.crear_figura()
 
         xmin, xmax, ymin, ymax = maq.calcular_extension_mapa(geom_union)
@@ -673,7 +703,7 @@ class GeneradorPlanos:
                     geom = row.geometry
 
                     escala = seleccionar_escala(geom, formato_key, escala_manual)
-                    maq = MaquetadorPlano(formato_key, escala)
+                    maq = MaquetadorPlano(formato_key, escala, layout_key=self.layout_key)
                     fig, ax_map, ax_info, ax_mini, ax_esc = maq.crear_figura()
 
                     xmin, xmax, ymin, ymax = maq.calcular_extension_mapa(geom)

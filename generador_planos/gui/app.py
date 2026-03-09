@@ -88,6 +88,7 @@ class App(tk.Tk):
             izq, self.motor,
             callback_log=self._escribir_log,
             callback_tabla=self._on_tabla_cargada,
+            callback_montes_cargados=self._on_montes_cargados,
         )
 
         # 2. Filtrado de datos
@@ -267,19 +268,26 @@ class App(tk.Tk):
         self.panel_filtros.actualizar_campos()
         self.panel_simbologia.actualizar_capas_extra()
         self.panel_simbologia.actualizar_campo_categoria()
+        self.panel_simbologia.actualizar_campo_categoria_montes()
         # Actualizar checkboxes de campos con las columnas reales del shapefile
         self.panel_campos.actualizar_campos(columnas)
         self.panel_cajetin.actualizar_campos_subtitulo(columnas)
+
+    def _on_montes_cargados(self):
+        """Actualiza el combobox de categorización de montes."""
+        self.panel_simbologia.actualizar_campo_categoria_montes()
 
     def _on_filtro_aplicado(self, indices: list):
         self._poblar_tabla(indices)
 
     def _auto_aplicar_todo(self):
-        """Aplica cajetín, plantilla y simbología al motor antes de generar."""
+        """Aplica cajetín, plantilla, layout y simbología al motor antes de generar."""
         cajetin = self.panel_cajetin.obtener_cajetin()
         plantilla = self.panel_cajetin.obtener_plantilla()
         self.motor.set_cajetin(cajetin)
         self.motor.set_plantilla(plantilla)
+        # Plantilla de layout
+        self.motor.layout_key = self.panel_cajetin.obtener_layout_key()
         # Primero aplicar simbología (colores de categorías, montes, capas extra)
         self.panel_simbologia._aplicar()
         # Después sobreescribir alpha con el valor del panel Capas (tiene prioridad)
@@ -320,6 +328,7 @@ class App(tk.Tk):
         p.campos_visibles = self.panel_campos.obtener_campos_activos()
         p.carpeta_salida = self.panel_config.salida.get()
         p.patron_nombre = self.panel_config.patron_nombre.get()
+        p.layout_key = self.panel_cajetin.obtener_layout_key()
         p.cajetin = self.panel_cajetin.obtener_cajetin()
         p.plantilla = self.panel_cajetin.obtener_plantilla()
         p.simbologia = self.motor.gestor_simbologia.to_dict()
@@ -348,6 +357,9 @@ class App(tk.Tk):
             self.panel_config.salida.set(p.carpeta_salida)
             if hasattr(p, "patron_nombre") and p.patron_nombre:
                 self.panel_config.patron_nombre.set(p.patron_nombre)
+            if hasattr(p, "layout_key") and p.layout_key:
+                self.panel_cajetin._layout_key.set(p.layout_key)
+                self.motor.layout_key = p.layout_key
             self.panel_cajetin.cargar_desde_proyecto(p.cajetin, p.plantilla)
 
             # Aplicar cajetín y plantilla al motor

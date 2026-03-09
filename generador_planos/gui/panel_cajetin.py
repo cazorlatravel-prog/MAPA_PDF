@@ -14,6 +14,7 @@ from .estilos import (
     COLOR_ACENTO, FONT_BOLD, FONT_SMALL,
     crear_frame_seccion,
 )
+from ..motor.plantillas_layout import PLANTILLAS_DISPONIBLES
 
 
 class PanelCajetin:
@@ -25,6 +26,16 @@ class PanelCajetin:
 
         f = crear_frame_seccion(parent, "\U0001f4cb  CAJETÍN / PLANTILLA")
 
+        # ── Selector de plantilla de layout ──
+        tk.Label(f, text="Plantilla de layout:", font=FONT_BOLD,
+                 bg=COLOR_PANEL, fg=COLOR_ACENTO).grid(
+                 row=0, column=0, sticky="w")
+        self._layout_key = tk.StringVar(value=PLANTILLAS_DISPONIBLES[0])
+        ttk.Combobox(f, textvariable=self._layout_key,
+                     values=PLANTILLAS_DISPONIBLES,
+                     state="readonly", font=FONT_SMALL).grid(
+                     row=1, column=0, sticky="ew", pady=(2, 8))
+
         # ── Campos del cajetín ──
         campos = [
             ("Autor:", "autor"),
@@ -34,7 +45,7 @@ class PanelCajetin:
             ("Firma:", "firma"),
         ]
         self._vars = {}
-        row_idx = 0
+        row_idx = 2  # starts after layout selector
         for label, key in campos:
             tk.Label(f, text=label, font=FONT_SMALL, bg=COLOR_PANEL,
                      fg=COLOR_TEXTO).grid(row=row_idx, column=0, sticky="w")
@@ -263,6 +274,9 @@ class PanelCajetin:
 
     def obtener_plantilla(self) -> dict:
         return dict(self._colores)
+
+    def obtener_layout_key(self) -> str:
+        return self._layout_key.get()
 
     def cargar_desde_proyecto(self, cajetin: dict, plantilla: dict):
         """Carga valores desde un proyecto guardado."""

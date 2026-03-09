@@ -56,19 +56,29 @@ def _etiqueta_campo(campo):
 class MaquetadorPlano:
     """Crea la maquetación completa del plano cartográfico (layout v4)."""
 
-    def __init__(self, formato_key: str, escala: int):
+    def __init__(self, formato_key: str, escala: int, layout_key: str = None):
         self.formato_key = formato_key
         self.fmt_mm = FORMATOS[formato_key]
         self.escala = escala
+        self.layout_key = layout_key or "Plantilla 1 (Clásica)"
         self.fig = None
         self.ax_map = None
         self.ax_info = None   # datos infraestructura (centro)
         self.ax_mini = None   # mapa localización (derecha)
         self.ax_esc = None    # cajetín proyecto + escala + norte (izquierda)
 
+    @property
+    def es_lateral(self):
+        return self.layout_key == "Plantilla 2 (Panel lateral)"
+
     # ── Creación de la figura ──────────────────────────────────────────
 
     def crear_figura(self):
+        if self.es_lateral:
+            return self._crear_figura_lateral()
+        return self._crear_figura_clasica()
+
+    def _crear_figura_clasica(self):
         fig_w = self.fmt_mm[0] / 25.4
         fig_h = self.fmt_mm[1] / 25.4
         self.fig = plt.figure(figsize=(fig_w, fig_h), dpi=DPI,
@@ -101,14 +111,59 @@ class MaquetadorPlano:
 
         return self.fig, self.ax_map, self.ax_info, self.ax_mini, self.ax_esc
 
+    def _crear_figura_lateral(self):
+        """Plantilla 2: Mapa a la izquierda, panel lateral derecho."""
+        fig_w = self.fmt_mm[0] / 25.4
+        fig_h = self.fmt_mm[1] / 25.4
+        self.fig = plt.figure(figsize=(fig_w, fig_h), dpi=DPI,
+                              facecolor="white")
+
+        izq = MARGENES_MM["izq"] / self.fmt_mm[0]
+        der = MARGENES_MM["der"] / self.fmt_mm[0]
+        sup = MARGENES_MM["sup"] / self.fmt_mm[1]
+        inf = MARGENES_MM["inf"] / self.fmt_mm[1]
+        h_cab = _CABECERA_MM / self.fmt_mm[1]
+
+        gs_top = 1 - sup - h_cab - 0.005
+
+        # Grid principal: 1 fila x 2 columnas
+        gs = gridspec.GridSpec(
+            1, 2, figure=self.fig,
+            left=izq, right=1 - der,
+            top=gs_top, bottom=inf,
+            width_ratios=[0.72, 0.28],
+            hspace=0.02, wspace=0.008,
+        )
+
+        # Mapa principal: columna izquierda
+        self.ax_map = self.fig.add_subplot(gs[0, 0])
+
+        # Panel lateral derecho: subdividido en 3 filas
+        gs_lateral = gridspec.GridSpecFromSubplotSpec(
+            3, 1, subplot_spec=gs[0, 1],
+            height_ratios=[0.28, 0.32, 0.40],
+            hspace=0.03,
+        )
+
+        self.ax_mini = self.fig.add_subplot(gs_lateral[0, 0])   # minimapa arriba
+        self.ax_info = self.fig.add_subplot(gs_lateral[1, 0])   # datos centro
+        self.ax_esc = self.fig.add_subplot(gs_lateral[2, 0])    # cajetín+escala abajo
+
+        return self.fig, self.ax_map, self.ax_info, self.ax_mini, self.ax_esc
+
     # ── Extensión del mapa ─────────────────────────────────────────────
 
     def calcular_extension_mapa(self, geom):
         cx, cy = geom.centroid.x, geom.centroid.y
         ancho_util = self.fmt_mm[0] - MARGENES_MM["izq"] - MARGENES_MM["der"]
         alto_util = self.fmt_mm[1] - MARGENES_MM["sup"] - MARGENES_MM["inf"]
-        ancho_mm = ancho_util * RATIO_MAPA_ANCHO
-        alto_mm = (alto_util - _CABECERA_MM) * RATIO_MAPA_ALTO
+        if self.es_lateral:
+            # Plantilla 2: mapa ocupa 72% del ancho y toda la altura
+            ancho_mm = ancho_util * 0.72
+            alto_mm = (alto_util - _CABECERA_MM)
+        else:
+            ancho_mm = ancho_util * RATIO_MAPA_ANCHO
+            alto_mm = (alto_util - _CABECERA_MM) * RATIO_MAPA_ALTO
         semi_x = (ancho_mm / 1000.0) * self.escala / 2
         semi_y = (alto_mm / 1000.0) * self.escala / 2
         return cx - semi_x, cx + semi_x, cy - semi_y, cy + semi_y

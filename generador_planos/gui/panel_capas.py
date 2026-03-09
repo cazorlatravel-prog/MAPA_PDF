@@ -32,10 +32,12 @@ CAMPOS_ESPERADOS = list(ETIQUETAS_CAMPOS.keys())
 class PanelCapas:
     """Panel lateral para carga de shapefiles y control de transparencia."""
 
-    def __init__(self, parent, motor, callback_log, callback_tabla):
+    def __init__(self, parent, motor, callback_log, callback_tabla,
+                 callback_montes_cargados=None):
         self.motor = motor
         self.callback_log = callback_log
         self.callback_tabla = callback_tabla
+        self.callback_montes_cargados = callback_montes_cargados
 
         f = crear_frame_seccion(parent, "\U0001f4c2  CAPAS")
 
@@ -221,6 +223,8 @@ class PanelCapas:
             if ok:
                 self._ruta_montes.set(os.path.basename(ruta))
                 self.callback_log(msg, "ok")
+                if self.callback_montes_cargados:
+                    self.callback_montes_cargados()
             else:
                 self._ruta_montes.set("Error al cargar")
                 self.callback_log(msg, "error")
@@ -399,6 +403,8 @@ class PanelCapas:
             if ok:
                 self._ruta_montes.set(f"{os.path.basename(ruta)}\n{capa}")
                 self.callback_log(msg, "ok")
+                if self.callback_montes_cargados:
+                    self.callback_montes_cargados()
             else:
                 self._ruta_montes.set("Error al cargar")
                 self.callback_log(msg, "error")
