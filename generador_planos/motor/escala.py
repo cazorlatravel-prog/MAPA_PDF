@@ -30,7 +30,7 @@ BARRA_ESCALA_M = {
     30000: 5000,
 }
 
-MARGENES_MM = {"izq": 15, "der": 15, "sup": 10, "inf": 12}
+MARGENES_MM = {"izq": 10, "der": 10, "sup": 10, "inf": 12}
 
 FORMATOS = {
     "A4 Vertical":   (210, 297),
@@ -43,7 +43,7 @@ FORMATOS = {
 
 # Proporción del mapa principal respecto al ancho/alto útil
 RATIO_MAPA_ANCHO = 1.0
-RATIO_MAPA_ALTO = 0.75
+RATIO_MAPA_ALTO = 0.78
 
 _CABECERA_MM = 6  # Altura de la cabecera (debe coincidir con maquetacion._CABECERA_MM)
 
@@ -64,8 +64,8 @@ def seleccionar_escala(geom, formato_key: str, escala_manual: int = None,
     alto_util_mm = fmt_mm[1] - MARGENES_MM["sup"] - MARGENES_MM["inf"]
 
     if es_lateral:
-        # Plantilla 2: mapa ocupa 80% del ancho y toda la altura
-        ancho_mapa_mm = ancho_util_mm * 0.80
+        # Plantilla 2: mapa ocupa 83% del ancho y toda la altura
+        ancho_mapa_mm = ancho_util_mm * 0.83
         alto_mapa_mm = alto_util_mm - _CABECERA_MM
     else:
         ancho_mapa_mm = ancho_util_mm * RATIO_MAPA_ANCHO

@@ -139,7 +139,7 @@ class MaquetadorPlano:
             top=gs_top, bottom=inf,
             width_ratios=[0.28, 0.42, 0.30],
             height_ratios=[RATIO_MAPA_ALTO, 1 - RATIO_MAPA_ALTO],
-            hspace=0.04, wspace=0.005,
+            hspace=0.025, wspace=0.005,
         )
 
         # Mapa principal: fila 0, ancho completo (3 columnas)
@@ -179,8 +179,8 @@ class MaquetadorPlano:
             1, 2, figure=self.fig,
             left=izq, right=1 - der,
             top=gs_top, bottom=inf,
-            width_ratios=[0.80, 0.20],
-            hspace=0.02, wspace=0.008,
+            width_ratios=[0.83, 0.17],
+            hspace=0.02, wspace=0.005,
         )
 
         # Mapa principal: columna izquierda
@@ -208,8 +208,8 @@ class MaquetadorPlano:
         ancho_util = self.fmt_mm[0] - MARGENES_MM["izq"] - MARGENES_MM["der"]
         alto_util = self.fmt_mm[1] - MARGENES_MM["sup"] - MARGENES_MM["inf"]
         if self.es_lateral:
-            # Plantilla 2: mapa ocupa 80% del ancho y toda la altura
-            ancho_mm = ancho_util * 0.80
+            # Plantilla 2: mapa ocupa 83% del ancho y toda la altura
+            ancho_mm = ancho_util * 0.83
             alto_mm = (alto_util - _CABECERA_MM)
         else:
             ancho_mm = ancho_util * RATIO_MAPA_ANCHO
