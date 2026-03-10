@@ -180,7 +180,7 @@ class MaquetadorPlano:
             left=izq, right=1 - der,
             top=gs_top, bottom=inf,
             width_ratios=[0.78, 0.22],
-            hspace=0.02, wspace=0.005,
+            hspace=0.02, wspace=0.025,
         )
 
         # Mapa principal: columna izquierda
