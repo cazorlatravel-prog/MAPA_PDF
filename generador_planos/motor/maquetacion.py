@@ -447,8 +447,8 @@ class MaquetadorPlano:
             try:
                 from adjustText import adjust_text
                 adjust_text(textos_anotados, ax=self.ax_map,
-                            arrowprops=dict(arrowstyle="-", color="#C2185B",
-                                            lw=0.4))
+                            arrowprops=dict(arrowstyle="-", color="none",
+                                            lw=0))
             except Exception:
                 pass
 
