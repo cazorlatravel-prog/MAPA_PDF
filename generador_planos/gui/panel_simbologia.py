@@ -212,11 +212,6 @@ class PanelSimbologia:
         # Generar simbología automática
         self.motor.gestor_simbologia.generar_por_categoria(campo, valores)
 
-        nombres_trazos = list(TIPOS_TRAZO.keys())
-        nombres_marcadores = list(MARCADORES.keys())
-        trazos_inv = {v: k for k, v in TIPOS_TRAZO.items()}
-        marcadores_inv = {v: k for k, v in MARCADORES.items()}
-
         for i, valor in enumerate(valores[:20]):
             color = PALETA_CATEGORIAS[i % len(PALETA_CATEGORIAS)]
 
@@ -241,25 +236,9 @@ class PanelSimbologia:
                       relief="flat", cursor="hand2", anchor="w").pack(
                       side="left", fill="x", expand=True)
 
-            # Fila de estilo: trazo + marcador
-            style_f = tk.Frame(self._frame_categorias, bg=COLOR_PANEL)
-            style_f.pack(fill="x", pady=(0, 2), padx=(14, 0))
-
-            # Trazo
-            trazo_var = tk.StringVar(value=trazos_inv.get("-", "Continuo"))
-            ttk.Combobox(style_f, textvariable=trazo_var,
-                         values=nombres_trazos, state="readonly",
-                         font=FONT_SMALL, width=8).pack(side="left", padx=(0, 2))
-
-            # Marcador
-            marcador_var = tk.StringVar(value="C\u00edrculo")
-            ttk.Combobox(style_f, textvariable=marcador_var,
-                         values=nombres_marcadores, state="readonly",
-                         font=FONT_SMALL, width=7).pack(side="left")
 
             self._widgets_categorias.append(
-                (str(valor), color_var, lbl_color,
-                 trazo_var, marcador_var))
+                (str(valor), color_var, lbl_color))
 
         if len(valores) > 20:
             tk.Label(self._frame_categorias,
@@ -381,13 +360,11 @@ class PanelSimbologia:
         campo_cat = self._campo_categoria.get()
         if campo_cat != "(ninguno)" and self._widgets_categorias:
             for entry in self._widgets_categorias:
-                valor, color_var, _, trazo_var, marcador_var = entry
+                valor, color_var, _ = entry
                 if campo_cat in gs.categorias and valor in gs.categorias[campo_cat]:
                     simb = gs.categorias[campo_cat][valor]
                     simb.color = color_var["color"]
                     simb.facecolor = color_var["color"] + "55"
-                    simb.linestyle = TIPOS_TRAZO.get(trazo_var.get(), "-")
-                    simb.marker = MARCADORES.get(marcador_var.get(), "o")
 
         # Categorización de montes por campo
         campo_cat_montes = self._campo_cat_montes.get()
