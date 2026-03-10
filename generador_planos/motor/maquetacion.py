@@ -949,9 +949,12 @@ class MaquetadorPlano:
                 from PIL import Image as PILImage
                 img = PILImage.open(logo_path)
                 # Calcular posición del logo dentro del axes
-                logo_size = header_h * 0.75
-                logo_ax = ax.inset_axes([0.02, header_y + header_h * 0.12,
-                                          0.10, logo_size],
+                iw, ih = img.size
+                aspect_img = iw / max(ih, 1)
+                logo_size = header_h * 0.80
+                logo_w = min(0.15, logo_size * aspect_img * 0.6)
+                logo_ax = ax.inset_axes([0.02, header_y + header_h * 0.10,
+                                          logo_w, logo_size],
                                          transform=ax.transAxes)
                 logo_ax.imshow(img, aspect="equal")
                 logo_ax.axis("off")
@@ -1327,7 +1330,7 @@ class MaquetadorPlano:
 
         # ── Alturas de cada fila (de arriba a abajo) ──
         # Compactas: ajustadas al contenido de texto
-        org_h = 0.07
+        org_h = 0.12
         proy_h = 0.08
         monte_h = 0.08
         aut_h = 0.10
@@ -1740,15 +1743,19 @@ class MaquetadorPlano:
                 from PIL import Image as PILImage
                 img = PILImage.open(logo_path)
                 # Encajar logo ajustado a la altura de la cabecera
+                iw, ih = img.size
+                aspect_img = iw / max(ih, 1)
+                logo_h_f = h_cab * 0.84
+                logo_w_f = max(0.04, logo_h_f * aspect_img * 0.5)
                 logo_ax = self.fig.add_axes([
                     izq_f + 0.003,
                     1 - sup_f - h_cab + h_cab * 0.08,
-                    0.03,
-                    h_cab * 0.84,
+                    logo_w_f,
+                    logo_h_f,
                 ], zorder=30)
                 logo_ax.imshow(img, aspect="equal")
                 logo_ax.axis("off")
-                x_org = 0.055
+                x_org = izq_f + 0.003 + logo_w_f + 0.008
             except Exception:
                 pass
 
