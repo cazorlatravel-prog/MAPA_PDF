@@ -1204,39 +1204,47 @@ class MaquetadorPlano:
         ax.axis("off")
 
         C_BORDER = "#2C2C2C"
-        C_TXT = "#1A1A2E"
         C_GREEN = "#007932"
         C_GREEN_DARK = "#368f3f"
-        C_LABEL = "#007932"
-        C_BG_LEYENDA = "#FAFCFA"     # Fondo general leyenda
-        C_DIVIDER = "#CCCCCC"         # Líneas divisorias internas
+        C_BG_LEYENDA = "#FAFCFA"
+        C_DIVIDER = "#CCCCCC"
 
         # ── Calcular contenido ──
         items_inf = items_leyenda_infra or []
         items_mon = items_leyenda_montes or []
         n_inf = min(len(items_inf), 12)
         n_mon = min(len(items_mon), 8)
-        mid = (n_inf + 1) // 2  # filas en sub-columna más larga
+        mid = (n_inf + 1) // 2
+
+        # ── Espaciado fijo compacto ──
+        title_h = 0.06
+        slot_h = 0.055           # altura fija por fila
+        pad_top = 0.015          # margen bajo título
+        pad_bot = 0.02           # margen inferior
+
+        n_rows_max = max(mid, n_mon, 1)
+        # Altura total del contenido (título + subtítulo + filas + márgenes)
+        content_h = title_h + pad_top + slot_h * (1 + n_rows_max) + pad_bot
+        content_h = min(content_h, 1.0)
 
         y_top = 1.0
-        y_bot = 0.0
+        y_box_bot = y_top - content_h
 
-        # Borde del panel
-        ax.add_patch(Rectangle((0, y_bot), 1, 1.0, facecolor=C_BG_LEYENDA,
+        # Fondo ajustado al contenido
+        ax.add_patch(Rectangle((0, y_box_bot), 1, content_h,
+                                facecolor=C_BG_LEYENDA,
                                 edgecolor=C_BORDER, linewidth=1.0, zorder=0))
 
-        # Barra de título LEYENDA compacta
-        title_h = 0.10
+        # Barra de título LEYENDA
         ax.add_patch(Rectangle((0, y_top - title_h), 1, title_h,
                                 facecolor=C_GREEN, edgecolor=C_BORDER,
                                 linewidth=1.0, zorder=1))
-        t_y = y_top - title_h / 2
-        ax.text(0.5, t_y, "LEYENDA", ha="center", va="center",
+        ax.text(0.5, y_top - title_h / 2, "LEYENDA", ha="center", va="center",
                 fontsize=5, fontweight="bold", color="white",
                 transform=ax.transAxes, zorder=2)
 
-        # Línea divisoria vertical entre infraestructura y montes
-        ax.plot([0.65, 0.65], [y_top - title_h, y_bot],
+        # Divisoria vertical entre infra y montes
+        ax.plot([0.65, 0.65], [y_top - title_h, y_box_bot],
                 color=C_DIVIDER, linewidth=0.5,
                 transform=ax.transAxes, zorder=1)
 
@@ -1262,17 +1270,8 @@ class MaquetadorPlano:
             ax.text(x_txt, y, str(label)[:16], ha="left", va="center",
                     fontsize=2.8, color="#3A3A4A", transform=ax.transAxes, zorder=3)
 
-        # ── Distribuir items compactos, pegados al título ──
-        n_rows_max = max(mid, n_mon, 1)
-        # Calcular slot_h para ocupar todo el espacio disponible sin huecos
-        content_top = y_top - title_h - 0.01
-        content_bot = y_bot + 0.01
-        avail = content_top - content_bot
-        # 1 slot para subtítulo + n_rows para items
-        total_slots = 1 + n_rows_max
-        slot_h = avail / max(total_slots, 1)
-
-        sub_y = content_top - slot_h * 0.5
+        # ── Posiciones verticales compactas ──
+        sub_y = y_top - title_h - pad_top - slot_h * 0.5
         first_y = sub_y - slot_h
 
         # ── Sección izquierda: INFRAESTRUCTURA (2 sub-columnas) ──
@@ -1282,12 +1281,10 @@ class MaquetadorPlano:
         col_left = items_inf[:mid]
         col_right = items_inf[mid:n_inf]
 
-        # Sub-columna izquierda (x: 0.02-0.35)
         for i, item in enumerate(col_left):
             y = first_y - i * slot_h
             _dibujar_item(0.02, 0.08, 0.09, y, item, slot_h)
 
-        # Sub-columna derecha (x: 0.35-0.65)
         for i, item in enumerate(col_right):
             y = first_y - i * slot_h
             _dibujar_item(0.35, 0.41, 0.42, y, item, slot_h)
