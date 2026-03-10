@@ -35,7 +35,7 @@ class Proyecto:
         self.ruta_raster_localizacion = ""  # Ráster local para mapa de localización
         self.prov_localizacion = "WMS IGN (online)"
         self.escala_manual = None  # None = automática
-        self.transparencia_montes = 0.5
+        self.transparencia_montes = 0.3
         self.color_infra = "#E74C3C"
         self.campos_visibles = []
         self.campo_mapeo = {}
@@ -55,6 +55,14 @@ class Proyecto:
         self.campo_agrupacion = "Monte"
         self.multipagina = False
         self.incluir_portada = False
+
+        # Origen datos tabla
+        self.origen_datos_tabla = "Shapefile (capa cargada)"
+        self.ruta_excel_tabla = ""
+        self.hoja_excel_tabla = ""
+        self.campo_enlace_shp = ""
+        self.campo_enlace_excel = ""
+        self.columnas_excel_activas = []
 
         # Cajetín
         self.cajetin = {
@@ -119,6 +127,12 @@ class Proyecto:
             "plantilla": self.plantilla,
             "capas_extra": self.capas_extra,
             "simbologia": self.simbologia,
+            "origen_datos_tabla": self.origen_datos_tabla,
+            "ruta_excel_tabla": self.ruta_excel_tabla,
+            "hoja_excel_tabla": self.hoja_excel_tabla,
+            "campo_enlace_shp": self.campo_enlace_shp,
+            "campo_enlace_excel": self.campo_enlace_excel,
+            "columnas_excel_activas": self.columnas_excel_activas,
         }
 
     @classmethod
@@ -135,6 +149,8 @@ class Proyecto:
             "modo_gen", "rango_desde", "rango_hasta", "campo_agrupacion",
             "multipagina", "incluir_portada",
             "cajetin", "plantilla", "capas_extra", "simbologia",
+            "origen_datos_tabla", "ruta_excel_tabla", "hoja_excel_tabla",
+            "campo_enlace_shp", "campo_enlace_excel", "columnas_excel_activas",
         ]:
             if key in d:
                 setattr(p, key, d[key])

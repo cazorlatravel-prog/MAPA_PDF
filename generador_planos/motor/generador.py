@@ -8,6 +8,7 @@ simbología, etiquetas, vértices, leyenda, cajetín, portada e índice.
 
 import os
 import threading
+import traceback
 
 import geopandas as gpd
 import matplotlib
@@ -28,6 +29,22 @@ from .proyecto import cargar_lotes_csv
 
 # Campos esperados en el shapefile
 CAMPOS_ATRIBUTOS = list(ETIQUETAS_CAMPOS.keys())
+
+
+def _limpiar_tipos_mixtos(gdf):
+    """Convierte columnas con tipos mixtos (str + float) a str para evitar TypeError."""
+    import numpy as np
+    for col in gdf.columns:
+        if col == "geometry":
+            continue
+        if gdf[col].dtype == object:
+            # Columna con tipo 'object' puede tener mezcla de str, float, int, None
+            # Intentar convertir a numérico; si no se puede, forzar a str
+            try:
+                gdf[col] = gdf[col].where(gdf[col].isna(), gdf[col].astype(str))
+            except Exception:
+                pass
+    return gdf
 
 
 def _auto_calcular_campos(gdf):
@@ -98,6 +115,10 @@ class GeneradorPlanos:
         self.dpi_guardado = None  # None = same as dpi_figura
         self.ruta_raster_general = ""       # Ráster local para fondo de mapa
         self.ruta_raster_localizacion = ""  # Ráster local para mapa de localización
+        self._df_excel = None               # DataFrame con datos de Excel para tabla
+        self._campo_enlace_shp = ""
+        self._campo_enlace_excel = ""
+        self._columnas_excel = None
         self._cancelar = threading.Event()
 
     def cancelar_generacion(self):
@@ -117,6 +138,76 @@ class GeneradorPlanos:
     def set_plantilla(self, plantilla: dict):
         self._plantilla = plantilla or {}
 
+    def cargar_excel_tabla(self, ruta: str, hoja: str = None,
+                           campo_enlace_shp: str = None,
+                           campo_enlace_excel: str = None,
+                           columnas_activas: list = None):
+        """Carga un archivo Excel para usar sus datos en la tabla lateral.
+
+        Args:
+            ruta: Ruta al archivo .xlsx
+            hoja: Nombre de la hoja a leer
+            campo_enlace_shp: Campo del shapefile para hacer el enlace
+            campo_enlace_excel: Campo del Excel para hacer el enlace
+            columnas_activas: Lista de columnas del Excel a incluir
+        """
+        import pandas as pd
+        kwargs = {}
+        if hoja:
+            kwargs["sheet_name"] = hoja
+        self._df_excel = pd.read_excel(ruta, engine="openpyxl", **kwargs)
+        self._campo_enlace_shp = campo_enlace_shp or ""
+        self._campo_enlace_excel = campo_enlace_excel or ""
+        self._columnas_excel = columnas_activas  # None = todas
+
+    def limpiar_excel_tabla(self):
+        """Elimina los datos Excel cargados (vuelve a usar shapefile)."""
+        self._df_excel = None
+        self._campo_enlace_shp = ""
+        self._campo_enlace_excel = ""
+        self._columnas_excel = None
+
+    def _obtener_filas_tabla(self, rows_shp, idx_fila=None):
+        """Devuelve las filas para la tabla: de Excel si hay, o del shapefile.
+
+        Si hay campo de enlace configurado, busca en el Excel la fila cuyo
+        valor en campo_enlace_excel coincida con el valor de campo_enlace_shp
+        de la fila del shapefile. Solo devuelve las columnas seleccionadas.
+        """
+        if self._df_excel is None:
+            return rows_shp
+
+        df = self._df_excel
+        # Filtrar columnas seleccionadas
+        if self._columnas_excel:
+            # Siempre incluir el campo enlace para poder buscar
+            cols = list(self._columnas_excel)
+            if (self._campo_enlace_excel
+                    and self._campo_enlace_excel not in cols):
+                cols.insert(0, self._campo_enlace_excel)
+            cols_validas = [c for c in cols if c in df.columns]
+            df = df[cols_validas]
+
+        # Sin campo enlace: fallback por índice
+        if not self._campo_enlace_shp or not self._campo_enlace_excel:
+            if idx_fila is not None and idx_fila < len(df):
+                return [df.iloc[idx_fila]]
+            return [df.iloc[i] for i in range(len(df))]
+
+        # Buscar por campo enlace
+        resultado = []
+        for row_shp in rows_shp:
+            valor_shp = row_shp.get(self._campo_enlace_shp, None)
+            if valor_shp is None:
+                continue
+            # Buscar coincidencia en el Excel
+            mask = df[self._campo_enlace_excel].astype(str) == str(valor_shp)
+            coincidencias = df[mask]
+            for _, fila_excel in coincidencias.iterrows():
+                resultado.append(fila_excel)
+
+        return resultado if resultado else rows_shp
+
     # ── Carga de capas ───────────────────────────────────────────────────
 
     def cargar_infraestructuras(self, ruta: str, layer: str = None) -> tuple:
@@ -126,6 +217,9 @@ class GeneradorPlanos:
             if gdf.crs is None:
                 gdf = gdf.set_crs("EPSG:4326")
             gdf = gdf.to_crs("EPSG:25830")
+
+            # Limpiar columnas con tipos mixtos (previene str<float TypeError)
+            gdf = _limpiar_tipos_mixtos(gdf)
 
             # Auto-calcular longitud/superficie si no existen
             gdf = _auto_calcular_campos(gdf)
@@ -158,6 +252,8 @@ class GeneradorPlanos:
             if gdf.crs is None:
                 gdf = gdf.set_crs("EPSG:4326")
             gdf = gdf.to_crs("EPSG:25830")
+            # Limpiar columnas con tipos mixtos
+            gdf = _limpiar_tipos_mixtos(gdf)
             # Construir índice espacial para consultas .cx[] rápidas
             gdf.sindex
             self.gdf_montes = gdf
@@ -234,15 +330,15 @@ class GeneradorPlanos:
                             continue
                         gdf_cat.plot(
                             ax=ax_map, facecolor=simb.facecolor,
-                            edgecolor=simb.color, linewidth=simb.linewidth,
-                            alpha=alpha, zorder=1,
+                            edgecolor=simb.color, linewidth=float(simb.linewidth),
+                            alpha=float(alpha), zorder=1,
                         )
                 else:
                     # Color fijo
-                    green = int(34 * alpha)
                     montes_clip.plot(
-                        ax=ax_map, facecolor=f"#{green:02x}9922",
-                        edgecolor="#1a5c10", linewidth=0.8, alpha=alpha,
+                        ax=ax_map, facecolor="#229922",
+                        edgecolor="#1a5c10", linewidth=0.8, alpha=float(alpha),
+                        zorder=1,
                     )
 
         # Capas extra
@@ -254,13 +350,13 @@ class GeneradorPlanos:
         if not infra_fondo.empty:
             infra_fondo.plot(
                 ax=ax_map, color="#999999", linewidth=0.6,
-                markersize=3, alpha=0.25,
+                markersize=3, alpha=0.25, zorder=3,
             )
 
         # Infraestructuras seleccionadas (resaltadas)
         ci = self.config_infra
-        lw = ci.get("linewidth", 2.5)
-        alpha_infra = max(0.0, min(1.0, ci.get("alpha", 0.35)))
+        lw = float(ci.get("linewidth", 2.5))
+        alpha_infra = max(0.0, min(1.0, float(ci.get("alpha", 0.35))))
         campo_cat = ci.get("campo_categoria")
 
         geom_type = ""
@@ -295,10 +391,12 @@ class GeneradorPlanos:
                                  linestyle=ls, zorder=5,
                                  alpha=alpha_infra)
                 else:
-                    gdf_cat.plot(ax=ax_map, facecolor=simb.facecolor,
-                                 edgecolor=c, linewidth=lw,
-                                 linestyle=ls, zorder=5,
-                                 alpha=alpha_infra)
+                    gdf_cat.plot(
+                        ax=ax_map, facecolor=simb.facecolor,
+                        edgecolor=c, linewidth=lw,
+                        linestyle=ls, zorder=5,
+                        alpha=alpha_infra,
+                    )
         else:
             # Sin categoría: color único
             if "point" in geom_type:
@@ -330,7 +428,9 @@ class GeneradorPlanos:
             campo_real = campo_cat
             if self._campo_mapeo and campo_cat in self._campo_mapeo:
                 campo_real = self._campo_mapeo[campo_cat]
-            valores_unicos = sorted(gdf_sel[campo_real].astype(str).unique())
+            valores_unicos = sorted(
+                str(v) for v in gdf_sel[campo_real].dropna().unique()
+            )
             for valor in valores_unicos:
                 simb = self.gestor_simbologia.obtener_simbologia_infra(
                     campo_cat, valor)
@@ -351,7 +451,9 @@ class GeneradorPlanos:
             if not montes_vis.empty:
                 if campo_cat_montes and campo_cat_montes in montes_vis.columns:
                     # Leyenda por categoría de montes
-                    valores_visibles = sorted(montes_vis[campo_cat_montes].astype(str).unique())
+                    valores_visibles = sorted(
+                        str(v) for v in montes_vis[campo_cat_montes].dropna().unique()
+                    )
                     for valor in valores_visibles:
                         simb = self.gestor_simbologia.obtener_simbologia_monte(
                             campo_cat_montes, valor)
@@ -359,7 +461,8 @@ class GeneradorPlanos:
                         items.append((label, simb.color, "polygon", "-",
                                       None, simb.facecolor))
                 else:
-                    items.append(("Montes", "#1a5c10", "polygon", "-", None, "#22992244"))
+                    items.append(("Montes", "#1a5c10", "polygon", "-", None,
+                                  "#22992244"))
 
         # Capas extra
         items.extend(self.gestor_capas.obtener_items_leyenda(self.gestor_simbologia))
@@ -385,7 +488,9 @@ class GeneradorPlanos:
             campo_real = self._campo_mapeo[campo_cat]
 
         # Solo categorías de las infraestructuras seleccionadas para el plano
-        valores_visibles = sorted(gdf_sel[campo_real].astype(str).unique())
+        valores_visibles = sorted(
+            str(v) for v in gdf_sel[campo_real].dropna().unique()
+        )
 
         for valor in valores_visibles:
             simb = self.gestor_simbologia.obtener_simbologia_infra(campo_cat, valor)
@@ -415,7 +520,9 @@ class GeneradorPlanos:
             campo_real = campo_cat
             if self._campo_mapeo and campo_cat in self._campo_mapeo:
                 campo_real = self._campo_mapeo[campo_cat]
-            valores_unicos = sorted(gdf_sel[campo_real].astype(str).unique())
+            valores_unicos = sorted(
+                str(v) for v in gdf_sel[campo_real].dropna().unique()
+            )
             for valor in valores_unicos:
                 simb = self.gestor_simbologia.obtener_simbologia_infra(
                     campo_cat, valor)
@@ -466,7 +573,9 @@ class GeneradorPlanos:
         row = self.gdf_infra.iloc[idx_fila]
         geom = row.geometry
 
-        escala = seleccionar_escala(geom, formato_key, escala_manual)
+        _es_lateral = self.layout_key == "Plantilla 2 (Panel lateral)"
+        escala = seleccionar_escala(geom, formato_key, escala_manual,
+                                    es_lateral=_es_lateral)
         log(f"  Escala elegida: 1:{escala:,}")
 
         maq = MaquetadorPlano(formato_key, escala, layout_key=self.layout_key, dpi=self.dpi_figura)
@@ -505,10 +614,13 @@ class GeneradorPlanos:
         # Leyenda y paneles según plantilla
         cx, cy = geom.centroid.x, geom.centroid.y
 
+        # Filas para tabla/panel: Excel si está cargado, si no shapefile
+        _filas_tabla = self._obtener_filas_tabla([row], idx_fila=idx_fila)
+
         if maq.es_lateral:
             # Plantilla 2: localización + tabla datos + leyenda + cajetín
             maq.dibujar_mapa_posicion(cx, cy, ruta_raster_loc=self.ruta_raster_localizacion)
-            maq.dibujar_tabla_infra([row], campos_visibles,
+            maq.dibujar_tabla_infra(_filas_tabla, campos_visibles,
                                      campo_mapeo=self._campo_mapeo)
             items_inf, items_mon = self._construir_items_leyenda_separados(
                 gdf_sel, color_infra, xmin, xmax, ymin, ymax)
@@ -522,7 +634,8 @@ class GeneradorPlanos:
             items_ley = self._construir_items_leyenda(gdf_sel, color_infra,
                                                        xmin, xmax, ymin, ymax)
             maq.dibujar_leyenda(items_ley)
-            maq.dibujar_panel_atributos(row, campos_visibles,
+            _fila_panel = _filas_tabla[0] if _filas_tabla else row
+            maq.dibujar_panel_atributos(_fila_panel, campos_visibles,
                                          campo_mapeo=self._campo_mapeo,
                                          campo_encabezado=campo_encabezado)
             maq.dibujar_mapa_posicion(cx, cy, ruta_raster_loc=self.ruta_raster_localizacion)
@@ -577,7 +690,9 @@ class GeneradorPlanos:
         rows = [self.gdf_infra.iloc[idx] for idx in indices]
 
         geom_union = unary_union(gdf_grupo.geometry)
-        escala = seleccionar_escala(geom_union, formato_key, escala_manual)
+        _es_lateral = self.layout_key == "Plantilla 2 (Panel lateral)"
+        escala = seleccionar_escala(geom_union, formato_key, escala_manual,
+                                    es_lateral=_es_lateral)
         log(f"  Escala elegida: 1:{escala:,} ({len(indices)} infraestructuras)")
 
         maq = MaquetadorPlano(formato_key, escala, layout_key=self.layout_key, dpi=self.dpi_figura)
@@ -614,9 +729,12 @@ class GeneradorPlanos:
         # Leyenda y paneles según plantilla
         cx, cy = geom_union.centroid.x, geom_union.centroid.y
 
+        # Filas para tabla/panel: Excel si está cargado, si no shapefile
+        _filas_tabla = self._obtener_filas_tabla(rows)
+
         if maq.es_lateral:
             maq.dibujar_mapa_posicion(cx, cy, ruta_raster_loc=self.ruta_raster_localizacion)
-            maq.dibujar_tabla_infra(rows, campos_visibles,
+            maq.dibujar_tabla_infra(_filas_tabla, campos_visibles,
                                      campo_mapeo=self._campo_mapeo)
             items_inf, items_mon = self._construir_items_leyenda_separados(
                 gdf_grupo, color_infra, xmin, xmax, ymin, ymax)
@@ -631,7 +749,7 @@ class GeneradorPlanos:
                                                        xmin, xmax, ymin, ymax)
             stats = _calcular_stats_grupo(gdf_grupo)
             maq.dibujar_leyenda(items_ley, stats_resumen=stats)
-            maq.dibujar_panel_atributos_multi(rows, campos_visibles,
+            maq.dibujar_panel_atributos_multi(_filas_tabla, campos_visibles,
                                                campo_mapeo=self._campo_mapeo,
                                                campo_encabezado=campo_encabezado)
             maq.dibujar_mapa_posicion(cx, cy, ruta_raster_loc=self.ruta_raster_localizacion)
@@ -697,8 +815,9 @@ class GeneradorPlanos:
             except GeneracionCancelada:
                 raise
             except Exception as e:
+                tb = traceback.format_exc()
                 if callback_log:
-                    callback_log(f"  \u2717 Error: {e}")
+                    callback_log(f"  \u2717 Error: {e}\n{tb}")
             if callback_progreso:
                 callback_progreso(i + 1, total)
         return rutas
@@ -748,8 +867,9 @@ class GeneradorPlanos:
             except GeneracionCancelada:
                 raise
             except Exception as e:
+                tb = traceback.format_exc()
                 if callback_log:
-                    callback_log(f"  \u2717 Error: {e}")
+                    callback_log(f"  \u2717 Error: {e}\n{tb}")
             if callback_progreso:
                 callback_progreso(i + 1, total)
         return rutas
@@ -814,7 +934,9 @@ class GeneradorPlanos:
                     row = self.gdf_infra.iloc[idx]
                     geom = row.geometry
 
-                    escala = seleccionar_escala(geom, formato_key, escala_manual)
+                    _es_lateral = self.layout_key == "Plantilla 2 (Panel lateral)"
+                    escala = seleccionar_escala(geom, formato_key, escala_manual,
+                                                es_lateral=_es_lateral)
                     maq = MaquetadorPlano(formato_key, escala, layout_key=self.layout_key, dpi=self.dpi_figura)
                     fig, ax_map, ax_info, ax_mini, ax_esc = maq.crear_figura()
 
@@ -853,9 +975,12 @@ class GeneradorPlanos:
                     # Leyenda y paneles según plantilla
                     cx, cy = geom.centroid.x, geom.centroid.y
 
+                    # Filas para tabla/panel: Excel si está cargado, si no shapefile
+                    _filas_tabla = self._obtener_filas_tabla([row], idx_fila=idx)
+
                     if maq.es_lateral:
                         maq.dibujar_mapa_posicion(cx, cy, ruta_raster_loc=self.ruta_raster_localizacion)
-                        maq.dibujar_tabla_infra([row], campos,
+                        maq.dibujar_tabla_infra(_filas_tabla, campos,
                                                  campo_mapeo=self._campo_mapeo)
                         items_inf, items_mon = self._construir_items_leyenda_separados(
                             gdf_sel, color_infra, xmin, xmax, ymin, ymax)
@@ -867,7 +992,8 @@ class GeneradorPlanos:
                     else:
                         items_ley = self._construir_items_leyenda(gdf_sel, color_infra)
                         maq.dibujar_leyenda(items_ley)
-                        maq.dibujar_panel_atributos(row, campos,
+                        _fila_panel = _filas_tabla[0] if _filas_tabla else row
+                        maq.dibujar_panel_atributos(_fila_panel, campos,
                                                      campo_mapeo=self._campo_mapeo,
                                                      campo_encabezado=campo_encabezado)
                         maq.dibujar_mapa_posicion(cx, cy, ruta_raster_loc=self.ruta_raster_localizacion)
@@ -890,8 +1016,9 @@ class GeneradorPlanos:
                     if callback_log:
                         callback_log(f"  \u2713 P\u00e1gina {i + 1} a\u00f1adida")
                 except Exception as e:
+                    tb = traceback.format_exc()
                     if callback_log:
-                        callback_log(f"  \u2717 Error: {e}")
+                        callback_log(f"  \u2717 Error: {e}\n{tb}")
 
                 if callback_progreso:
                     callback_progreso(i + 1, total)
@@ -947,8 +1074,9 @@ class GeneradorPlanos:
                 )
                 rutas.extend(resultados)
             except Exception as e:
+                tb = traceback.format_exc()
                 if callback_log:
-                    callback_log(f"  \u2717 Error en lote: {e}", "error")
+                    callback_log(f"  \u2717 Error en lote: {e}\n{tb}", "error")
 
             if callback_progreso:
                 callback_progreso(i + 1, total)

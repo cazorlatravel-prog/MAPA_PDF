@@ -75,11 +75,11 @@ class ConfigSimbologia:
                  alpha=1.0, marker="o", markersize=8, facecolor=None,
                  label=""):
         self.color = color
-        self.linewidth = linewidth
+        self.linewidth = float(linewidth)
         self.linestyle = linestyle
-        self.alpha = alpha
+        self.alpha = float(alpha)
         self.marker = marker
-        self.markersize = markersize
+        self.markersize = float(markersize)
         self.facecolor = facecolor or (color + "55")
         self.label = label
 
@@ -97,6 +97,7 @@ class ConfigSimbologia:
 
     @classmethod
     def from_dict(cls, d: dict) -> "ConfigSimbologia":
+        d = {k: v for k, v in d.items() if k != "hatch"}
         return cls(**d)
 
 
@@ -110,8 +111,8 @@ class GestorSimbologia:
         self.capas_extra = {}
         # Simbología de montes
         self.montes = ConfigSimbologia(
-            color="#1a5c10", linewidth=0.8, facecolor="#22992244",
-            alpha=0.5, label="Montes",
+            color="#1a5c10", linewidth=0.8, facecolor="#229922",
+            alpha=0.3, label="Montes",
         )
         # Simbología por categoría de montes (campo -> {valor: ConfigSimbologia})
         self.categorias_montes = {}
@@ -142,8 +143,8 @@ class GestorSimbologia:
         for i, valor in enumerate(valores):
             color = paleta_montes[i % len(paleta_montes)]
             self.categorias_montes[campo][str(valor)] = ConfigSimbologia(
-                color=color, linewidth=0.8, facecolor=color + "66",
-                alpha=0.7, label=str(valor),
+                color=color, linewidth=0.8, facecolor=color,
+                alpha=0.3, label=str(valor),
             )
 
     def obtener_simbologia_monte(self, campo_cat: str, valor: str) -> ConfigSimbologia:

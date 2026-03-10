@@ -272,6 +272,8 @@ class App(tk.Tk):
         # Actualizar checkboxes de campos con las columnas reales del shapefile
         self.panel_campos.actualizar_campos(columnas)
         self.panel_cajetin.actualizar_campos_subtitulo(columnas)
+        # Actualizar combo de campo enlace SHP para Excel
+        self.panel_config.actualizar_campos_shp_enlace(columnas)
 
         # Restaurar campos visibles del proyecto si se acaba de cargar uno
         if hasattr(self, "_campos_visibles_proyecto") and self._campos_visibles_proyecto:
@@ -310,6 +312,20 @@ class App(tk.Tk):
         # Rutas de ráster local
         self.motor.ruta_raster_general = self.panel_config.ruta_raster_general
         self.motor.ruta_raster_localizacion = self.panel_config.ruta_raster_localizacion
+        # Datos de tabla desde Excel
+        if self.panel_config.usa_excel and self.panel_config.ruta_excel:
+            try:
+                self.motor.cargar_excel_tabla(
+                    self.panel_config.ruta_excel,
+                    hoja=self.panel_config.hoja_excel or None,
+                    campo_enlace_shp=self.panel_config.campo_enlace_shp,
+                    campo_enlace_excel=self.panel_config.campo_enlace_excel,
+                    columnas_activas=self.panel_config.columnas_excel_activas)
+            except Exception as e:
+                self._escribir_log(f"Error al cargar Excel: {e}", "error")
+                self.motor.limpiar_excel_tabla()
+        else:
+            self.motor.limpiar_excel_tabla()
 
     def _get_config(self) -> dict:
         return {
@@ -359,6 +375,13 @@ class App(tk.Tk):
         p.plantilla = self.panel_cajetin.obtener_plantilla()
         p.simbologia = self.motor.gestor_simbologia.to_dict()
         p.capas_extra = self.motor.gestor_capas.to_dict()
+        # Origen datos tabla
+        p.origen_datos_tabla = self.panel_config._origen_datos.get()
+        p.ruta_excel_tabla = self.panel_config.ruta_excel
+        p.hoja_excel_tabla = self.panel_config.hoja_excel
+        p.campo_enlace_shp = self.panel_config.campo_enlace_shp
+        p.campo_enlace_excel = self.panel_config.campo_enlace_excel
+        p.columnas_excel_activas = self.panel_config.columnas_excel_activas
 
         # Generación
         p.modo_gen = self.panel_gen._modo_gen.get()
@@ -449,6 +472,40 @@ class App(tk.Tk):
             # Aplicar cajetín y plantilla al motor
             self.motor.set_cajetin(p.cajetin)
             self.motor.set_plantilla(p.plantilla)
+
+            # ── Origen datos tabla ──
+            if hasattr(p, "origen_datos_tabla") and p.origen_datos_tabla:
+                self.panel_config._origen_datos.set(p.origen_datos_tabla)
+                self.panel_config._on_origen_datos_changed()
+            if hasattr(p, "ruta_excel_tabla") and p.ruta_excel_tabla:
+                self.panel_config._ruta_excel.set(p.ruta_excel_tabla)
+                self.panel_config._lbl_excel.configure(
+                    text=os.path.basename(p.ruta_excel_tabla))
+                # Recargar hojas y columnas del Excel
+                hoja = getattr(p, "hoja_excel_tabla", "") or ""
+                try:
+                    import openpyxl
+                    wb = openpyxl.load_workbook(
+                        p.ruta_excel_tabla, read_only=True, data_only=True)
+                    self.panel_config._cb_hoja.configure(values=wb.sheetnames)
+                    wb.close()
+                    if hoja:
+                        self.panel_config._hoja_excel.set(hoja)
+                    self.panel_config._cargar_columnas_excel(
+                        p.ruta_excel_tabla, hoja or wb.sheetnames[0])
+                except Exception:
+                    pass
+            if hasattr(p, "hoja_excel_tabla") and p.hoja_excel_tabla:
+                self.panel_config._hoja_excel.set(p.hoja_excel_tabla)
+            if hasattr(p, "campo_enlace_shp") and p.campo_enlace_shp:
+                self.panel_config._campo_enlace_shp.set(p.campo_enlace_shp)
+            if hasattr(p, "campo_enlace_excel") and p.campo_enlace_excel:
+                self.panel_config._campo_enlace_excel.set(p.campo_enlace_excel)
+            # Restaurar columnas Excel seleccionadas
+            if hasattr(p, "columnas_excel_activas") and p.columnas_excel_activas:
+                cols_proy = p.columnas_excel_activas
+                for col, var in self.panel_config._check_cols_excel.items():
+                    var.set(col in cols_proy)
 
             # ── Simbología ──
             if p.simbologia:

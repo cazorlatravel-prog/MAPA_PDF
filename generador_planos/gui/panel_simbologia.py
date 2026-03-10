@@ -22,7 +22,8 @@ class PanelSimbologia:
         self.motor = motor
         self.callback_log = callback_log
         self._widgets_capas = []
-        self._widgets_categorias = []  # [(valor, color_var, lbl_color), ...]
+        # [(valor, color_var, lbl_color, trazo_var, marcador_var)]
+        self._widgets_categorias = []
 
         f = crear_frame_seccion(parent, "\U0001f3a8  SIMBOLOG\u00cdA")
 
@@ -192,7 +193,7 @@ class PanelSimbologia:
             self._widgets_capas.append((capa.nombre, capa.tipo, color_var))
 
     def _on_campo_cat_changed(self, event=None):
-        """Cuando cambia el campo de categorización, genera colores por valor único."""
+        """Cuando cambia el campo de categorización, genera colores/estilos por valor."""
         self._widgets_categorias.clear()
         for w in self._frame_categorias.winfo_children():
             w.destroy()
@@ -211,9 +212,10 @@ class PanelSimbologia:
         # Generar simbología automática
         self.motor.gestor_simbologia.generar_por_categoria(campo, valores)
 
-        # Mostrar cada valor con su color editable (max 20 visibles)
         for i, valor in enumerate(valores[:20]):
             color = PALETA_CATEGORIAS[i % len(PALETA_CATEGORIAS)]
+
+            # Fila principal: color + nombre
             row_f = tk.Frame(self._frame_categorias, bg=COLOR_PANEL)
             row_f.pack(fill="x", pady=1)
 
@@ -229,16 +231,18 @@ class PanelSimbologia:
                     cv["color"] = c
                     lbl.configure(bg=c)
 
-            tk.Button(row_f, text=str(valor)[:30], command=_elegir_cat,
+            tk.Button(row_f, text=str(valor)[:22], command=_elegir_cat,
                       font=FONT_SMALL, bg=COLOR_BORDE, fg=COLOR_TEXTO,
                       relief="flat", cursor="hand2", anchor="w").pack(
                       side="left", fill="x", expand=True)
 
-            self._widgets_categorias.append((str(valor), color_var, lbl_color))
+
+            self._widgets_categorias.append(
+                (str(valor), color_var, lbl_color))
 
         if len(valores) > 20:
             tk.Label(self._frame_categorias,
-                     text=f"... +{len(valores) - 20} valores m\u00e1s (colores auto)",
+                     text=f"... +{len(valores) - 20} valores m\u00e1s (estilos auto)",
                      font=FONT_SMALL, bg=COLOR_PANEL,
                      fg=COLOR_TEXTO_GRIS).pack(anchor="w")
 
@@ -246,7 +250,7 @@ class PanelSimbologia:
             f"Categor\u00eda por '{campo}': {len(valores)} valores \u00fanicos.", "info")
 
     def _on_campo_cat_montes_changed(self, event=None):
-        """Cuando cambia el campo de categorización de montes, genera colores por valor."""
+        """Cuando cambia el campo de categorización de montes, genera estilos por valor."""
         self._widgets_cat_montes.clear()
         for w in self._frame_cat_montes.winfo_children():
             w.destroy()
@@ -271,7 +275,6 @@ class PanelSimbologia:
         # Generar simbología automática
         self.motor.gestor_simbologia.generar_por_categoria_montes(campo, valores)
 
-        # Paleta de montes (misma que en simbologia.py)
         paleta_montes = [
             "#1a5c10", "#2E7D32", "#388E3C", "#43A047", "#4CAF50",
             "#66BB6A", "#81C784", "#A5D6A7", "#558B2F", "#33691E",
@@ -280,6 +283,7 @@ class PanelSimbologia:
 
         for i, valor in enumerate(valores[:20]):
             color = paleta_montes[i % len(paleta_montes)]
+
             row_f = tk.Frame(self._frame_cat_montes, bg=COLOR_PANEL)
             row_f.pack(fill="x", pady=1)
 
@@ -295,16 +299,17 @@ class PanelSimbologia:
                     cv["color"] = c
                     lbl.configure(bg=c)
 
-            tk.Button(row_f, text=str(valor)[:30], command=_elegir_cat,
+            tk.Button(row_f, text=str(valor)[:22], command=_elegir_cat,
                       font=FONT_SMALL, bg=COLOR_BORDE, fg=COLOR_TEXTO,
                       relief="flat", cursor="hand2", anchor="w").pack(
                       side="left", fill="x", expand=True)
 
-            self._widgets_cat_montes.append((str(valor), color_var, lbl_color))
+            self._widgets_cat_montes.append(
+                (str(valor), color_var, lbl_color))
 
         if len(valores) > 20:
             tk.Label(self._frame_cat_montes,
-                     text=f"... +{len(valores) - 20} valores m\u00e1s (colores auto)",
+                     text=f"... +{len(valores) - 20} valores m\u00e1s (estilos auto)",
                      font=FONT_SMALL, bg=COLOR_PANEL,
                      fg=COLOR_TEXTO_GRIS).pack(anchor="w")
 
@@ -342,7 +347,7 @@ class PanelSimbologia:
 
         # Montes
         gs.montes.color = self._color_montes
-        gs.montes.facecolor = self._color_montes + "44"
+        gs.montes.facecolor = self._color_montes
 
         # Capas extra
         for nombre, tipo, color_var in self._widgets_capas:
@@ -351,10 +356,11 @@ class PanelSimbologia:
             simb.facecolor = color_var["color"] + "44"
             gs.set_simbologia_capa(tipo, simb)
 
-        # Categorización por campo: actualizar colores editados por el usuario
+        # Categorización por campo: actualizar colores y estilos editados
         campo_cat = self._campo_categoria.get()
         if campo_cat != "(ninguno)" and self._widgets_categorias:
-            for valor, color_var, _ in self._widgets_categorias:
+            for entry in self._widgets_categorias:
+                valor, color_var, _ = entry
                 if campo_cat in gs.categorias and valor in gs.categorias[campo_cat]:
                     simb = gs.categorias[campo_cat][valor]
                     simb.color = color_var["color"]
@@ -363,12 +369,13 @@ class PanelSimbologia:
         # Categorización de montes por campo
         campo_cat_montes = self._campo_cat_montes.get()
         if campo_cat_montes != "(ninguno)" and self._widgets_cat_montes:
-            for valor, color_var, _ in self._widgets_cat_montes:
+            for entry in self._widgets_cat_montes:
+                valor, color_var, _ = entry
                 if (campo_cat_montes in gs.categorias_montes and
                         valor in gs.categorias_montes[campo_cat_montes]):
                     simb = gs.categorias_montes[campo_cat_montes][valor]
                     simb.color = color_var["color"]
-                    simb.facecolor = color_var["color"] + "66"
+                    simb.facecolor = color_var["color"]
 
         # Configuración infraestructuras (grosor, transparencia, trazo, marcador)
         self.motor.config_infra = self.obtener_config_infra()

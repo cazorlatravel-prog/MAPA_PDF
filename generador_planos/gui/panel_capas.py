@@ -104,7 +104,7 @@ class PanelCapas:
                                      bg=COLOR_PANEL, fg=COLOR_ACENTO)
         self._lbl_transp.pack(side="right")
 
-        self.transparencia = tk.DoubleVar(value=0.5)
+        self.transparencia = tk.DoubleVar(value=0.3)
         self.transparencia.trace_add("write", lambda *_: self._lbl_transp.configure(
             text=f"{self.transparencia.get():.2f}"))
         ttk.Scale(f, from_=0.0, to=1.0, variable=self.transparencia,

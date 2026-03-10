@@ -28,18 +28,18 @@ LAYOUTS = {
         "wspace": 0.005,
     },
     "Plantilla 2 (Panel lateral)": {
-        "descripcion": "Mapa izquierda (72%), panel lateral derecho con minimapa, datos, leyenda y cajetín",
+        "descripcion": "Mapa izquierda (80%), panel lateral derecho con minimapa, datos, leyenda y cajetín",
         "tipo": "lateral",
         # GridSpec: 1 fila x 2 columnas (panel derecho se subdivide internamente)
         "nrows": 1,
         "ncols": 2,
-        "width_ratios": [0.72, 0.28],
+        "width_ratios": [0.80, 0.20],
         "height_ratios_fn": None,
         "mapa_pos": (0, 0),                # fila 0, col 0
         "panel_lateral_pos": (0, 1),        # fila 0, col 1 (se subdivide)
         "hspace": 0.02,
         "wspace": 0.008,
         # Subdivisiones del panel lateral (proporciones verticales)
-        "lateral_ratios": [0.28, 0.32, 0.40],  # minimapa, datos, cajetín+escala
+        "lateral_ratios": [0.22, 0.08, 0.28, 0.42],  # minimapa, tabla, leyenda, cajetín
     },
 }

@@ -122,9 +122,80 @@ class PanelConfig:
                      state="readonly", font=FONT_LABEL).grid(
                      row=13, column=0, sticky="ew", pady=(2, 8))
 
+        # ── Origen datos tabla ──
+        tk.Label(f, text="Datos de tabla:", font=FONT_BOLD,
+                 bg=COLOR_PANEL, fg=COLOR_TEXTO).grid(row=14, column=0, sticky="w")
+        self._origen_datos = tk.StringVar(value="Shapefile (capa cargada)")
+        cb_origen = ttk.Combobox(
+            f, textvariable=self._origen_datos,
+            values=["Shapefile (capa cargada)", "Archivo Excel (.xlsx)"],
+            state="readonly", font=FONT_LABEL)
+        cb_origen.grid(row=15, column=0, sticky="ew", pady=(2, 4))
+        cb_origen.bind("<<ComboboxSelected>>", self._on_origen_datos_changed)
+
+        self._ruta_excel = tk.StringVar(value="")
+        self._frame_excel = tk.Frame(f, bg=COLOR_PANEL)
+        self._frame_excel.grid(row=16, column=0, sticky="ew", pady=(0, 4))
+        crear_boton(self._frame_excel, "Seleccionar Excel...",
+                    self._elegir_excel,
+                    icono="\U0001f4ca").pack(side="top", fill="x")
+        self._lbl_excel = tk.Label(self._frame_excel, text="Sin archivo seleccionado",
+                                    font=FONT_SMALL, bg=COLOR_PANEL,
+                                    fg=COLOR_TEXTO_GRIS, anchor="w",
+                                    wraplength=240)
+        self._lbl_excel.pack(side="top", fill="x", pady=(2, 0))
+
+        # Selector de hoja del Excel
+        self._frame_hoja = tk.Frame(self._frame_excel, bg=COLOR_PANEL)
+        self._frame_hoja.pack(side="top", fill="x", pady=(2, 0))
+        tk.Label(self._frame_hoja, text="Hoja:", font=FONT_SMALL,
+                 bg=COLOR_PANEL, fg=COLOR_TEXTO).pack(side="left")
+        self._hoja_excel = tk.StringVar(value="")
+        self._cb_hoja = ttk.Combobox(self._frame_hoja,
+                                      textvariable=self._hoja_excel,
+                                      state="readonly", font=FONT_SMALL, width=20)
+        self._cb_hoja.pack(side="left", padx=(4, 0))
+        self._cb_hoja.bind("<<ComboboxSelected>>", self._on_hoja_changed)
+
+        # Campo enlace: SHP ↔ Excel
+        self._frame_enlace = tk.Frame(self._frame_excel, bg=COLOR_PANEL)
+        self._frame_enlace.pack(side="top", fill="x", pady=(4, 0))
+
+        tk.Label(self._frame_enlace, text="Campo enlace SHP:",
+                 font=FONT_SMALL, bg=COLOR_PANEL, fg=COLOR_TEXTO
+                 ).grid(row=0, column=0, sticky="w")
+        self._campo_enlace_shp = tk.StringVar(value="")
+        self._cb_enlace_shp = ttk.Combobox(
+            self._frame_enlace, textvariable=self._campo_enlace_shp,
+            state="readonly", font=FONT_SMALL, width=18)
+        self._cb_enlace_shp.grid(row=0, column=1, sticky="ew", padx=(4, 0))
+
+        tk.Label(self._frame_enlace, text="Campo enlace Excel:",
+                 font=FONT_SMALL, bg=COLOR_PANEL, fg=COLOR_TEXTO
+                 ).grid(row=1, column=0, sticky="w", pady=(2, 0))
+        self._campo_enlace_excel = tk.StringVar(value="")
+        self._cb_enlace_excel = ttk.Combobox(
+            self._frame_enlace, textvariable=self._campo_enlace_excel,
+            state="readonly", font=FONT_SMALL, width=18)
+        self._cb_enlace_excel.grid(row=1, column=1, sticky="ew", padx=(4, 0),
+                                    pady=(2, 0))
+        self._frame_enlace.columnconfigure(1, weight=1)
+
+        # Checkboxes de columnas Excel a incluir
+        tk.Label(self._frame_excel, text="Columnas a incluir:",
+                 font=FONT_SMALL, bg=COLOR_PANEL, fg=COLOR_TEXTO
+                 ).pack(side="top", anchor="w", pady=(4, 2))
+
+        self._frame_cols_excel = tk.Frame(self._frame_excel, bg=COLOR_PANEL)
+        self._frame_cols_excel.pack(side="top", fill="x")
+        self._check_cols_excel = {}  # {nombre_col: BooleanVar}
+        self._widgets_cols_excel = []
+
+        self._frame_excel.grid_remove()  # Oculto por defecto
+
         # ── Nombre de archivo ──
         tk.Label(f, text="Nombre de archivo:", font=FONT_BOLD,
-                 bg=COLOR_PANEL, fg=COLOR_TEXTO).grid(row=14, column=0, sticky="w")
+                 bg=COLOR_PANEL, fg=COLOR_TEXTO).grid(row=17, column=0, sticky="w")
 
         # Presets
         self._presets_nombre = {
@@ -139,30 +210,30 @@ class PanelConfig:
             values=list(self._presets_nombre.values()),
             state="readonly", font=FONT_SMALL,
         )
-        cb_preset.grid(row=15, column=0, sticky="ew", pady=(2, 2))
+        cb_preset.grid(row=18, column=0, sticky="ew", pady=(2, 2))
         cb_preset.bind("<<ComboboxSelected>>", self._on_preset_nombre)
 
         self.patron_nombre = tk.StringVar(value="plano_{num}_{nombre}")
         tk.Entry(f, textvariable=self.patron_nombre, font=FONT_SMALL,
                  bg=COLOR_ENTRY, fg=COLOR_TEXTO, insertbackground="white",
-                 relief="flat").grid(row=16, column=0, sticky="ew", pady=(2, 0))
+                 relief="flat").grid(row=19, column=0, sticky="ew", pady=(2, 0))
 
         # Preview
         self._lbl_preview_nombre = tk.Label(
             f, text="Ej: plano_0001_CortafuegosNorte.pdf",
             font=("Helvetica", 8), bg=COLOR_PANEL, fg=COLOR_TEXTO_GRIS)
-        self._lbl_preview_nombre.grid(row=17, column=0, sticky="w", pady=(0, 8))
+        self._lbl_preview_nombre.grid(row=20, column=0, sticky="w", pady=(0, 8))
         self.patron_nombre.trace_add("write", self._actualizar_preview_nombre)
 
         # ── Carpeta de salida ──
         tk.Label(f, text="Carpeta de salida:", font=FONT_BOLD,
-                 bg=COLOR_PANEL, fg=COLOR_TEXTO).grid(row=18, column=0, sticky="w")
+                 bg=COLOR_PANEL, fg=COLOR_TEXTO).grid(row=21, column=0, sticky="w")
         self.salida = tk.StringVar(value=str(Path.home() / "Planos_Forestales"))
         tk.Label(f, textvariable=self.salida, font=FONT_SMALL,
                  bg=COLOR_PANEL, fg=COLOR_TEXTO_GRIS,
-                 wraplength=240, justify="left").grid(row=19, column=0, sticky="w")
+                 wraplength=240, justify="left").grid(row=22, column=0, sticky="w")
         crear_boton(f, "Seleccionar carpeta", self._elegir_carpeta,
-                    icono="\U0001f4c1").grid(row=20, column=0, sticky="ew", pady=(4, 4))
+                    icono="\U0001f4c1").grid(row=23, column=0, sticky="ew", pady=(4, 4))
 
         f.columnconfigure(0, weight=1)
 
@@ -274,6 +345,112 @@ class PanelConfig:
         if ruta:
             self._ruta_raster_loc.set(ruta)
             self._lbl_raster_loc.configure(text=Path(ruta).name)
+
+    # ── Origen datos tabla (Excel) ─────────────────────────────────────
+
+    def _on_origen_datos_changed(self, event=None):
+        if self._origen_datos.get() == "Archivo Excel (.xlsx)":
+            self._frame_excel.grid()
+        else:
+            self._frame_excel.grid_remove()
+
+    def _elegir_excel(self):
+        ruta = filedialog.askopenfilename(
+            title="Seleccionar archivo Excel",
+            filetypes=[("Excel", "*.xlsx *.xls"), ("Todos", "*.*")])
+        if ruta:
+            self._ruta_excel.set(ruta)
+            self._lbl_excel.configure(text=Path(ruta).name)
+            # Leer nombres de hojas y poblar combobox
+            try:
+                import openpyxl
+                wb = openpyxl.load_workbook(ruta, read_only=True, data_only=True)
+                hojas = wb.sheetnames
+                wb.close()
+                self._cb_hoja.configure(values=hojas)
+                if hojas:
+                    self._hoja_excel.set(hojas[0])
+                    self._cargar_columnas_excel(ruta, hojas[0])
+            except Exception:
+                self._cb_hoja.configure(values=[])
+                self._hoja_excel.set("")
+                self._poblar_columnas_excel([])
+
+    def _on_hoja_changed(self, event=None):
+        """Al cambiar de hoja, recargar columnas."""
+        ruta = self._ruta_excel.get()
+        hoja = self._hoja_excel.get()
+        if ruta and hoja:
+            self._cargar_columnas_excel(ruta, hoja)
+
+    def _cargar_columnas_excel(self, ruta: str, hoja: str):
+        """Lee las columnas de la hoja seleccionada y actualiza checkboxes y combos."""
+        try:
+            import pandas as pd
+            df = pd.read_excel(ruta, sheet_name=hoja, engine="openpyxl", nrows=0)
+            cols = list(df.columns)
+        except Exception:
+            cols = []
+        self._poblar_columnas_excel(cols)
+        # Actualizar combo enlace Excel
+        self._cb_enlace_excel.configure(values=cols)
+        if cols:
+            self._campo_enlace_excel.set(cols[0])
+        else:
+            self._campo_enlace_excel.set("")
+
+    def _poblar_columnas_excel(self, columnas: list):
+        """Crea checkboxes para seleccionar qué columnas del Excel incluir."""
+        for w in self._widgets_cols_excel:
+            w.destroy()
+        self._widgets_cols_excel.clear()
+        self._check_cols_excel.clear()
+
+        for col in columnas:
+            var = tk.BooleanVar(value=True)
+            cb = tk.Checkbutton(
+                self._frame_cols_excel, text=col, variable=var,
+                font=FONT_SMALL, bg=COLOR_PANEL, fg=COLOR_TEXTO,
+                selectcolor=COLOR_BORDE, activebackground=COLOR_PANEL,
+                cursor="hand2",
+            )
+            cb.pack(anchor="w", pady=1)
+            self._check_cols_excel[col] = var
+            self._widgets_cols_excel.append(cb)
+
+    def actualizar_campos_shp_enlace(self, columnas: list):
+        """Actualiza el combo de campo enlace SHP con las columnas del shapefile."""
+        cols = [c for c in columnas if c.lower() != "geometry"]
+        self._cb_enlace_shp.configure(values=cols)
+        if cols and not self._campo_enlace_shp.get():
+            self._campo_enlace_shp.set(cols[0])
+
+    @property
+    def usa_excel(self) -> bool:
+        return self._origen_datos.get() == "Archivo Excel (.xlsx)"
+
+    @property
+    def ruta_excel(self) -> str:
+        if self.usa_excel:
+            return self._ruta_excel.get()
+        return ""
+
+    @property
+    def hoja_excel(self) -> str:
+        return self._hoja_excel.get()
+
+    @property
+    def campo_enlace_shp(self) -> str:
+        return self._campo_enlace_shp.get()
+
+    @property
+    def campo_enlace_excel(self) -> str:
+        return self._campo_enlace_excel.get()
+
+    @property
+    def columnas_excel_activas(self) -> list:
+        """Devuelve la lista de columnas del Excel seleccionadas por el usuario."""
+        return [c for c, v in self._check_cols_excel.items() if v.get()]
 
     @property
     def ruta_raster_general(self) -> str:

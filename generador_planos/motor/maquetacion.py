@@ -80,7 +80,7 @@ CALIDADES_PDF = {
     "Media (200 DPI)": (200, 150),
     "Baja (100 DPI)": (100, 100),
 }
-_CABECERA_MM = 8
+_CABECERA_MM = 6
 
 def _etiqueta_campo(campo):
     """Devuelve una etiqueta embellecida o el nombre del campo tal cual."""
@@ -139,7 +139,7 @@ class MaquetadorPlano:
             top=gs_top, bottom=inf,
             width_ratios=[0.28, 0.42, 0.30],
             height_ratios=[RATIO_MAPA_ALTO, 1 - RATIO_MAPA_ALTO],
-            hspace=0.04, wspace=0.005,
+            hspace=0.025, wspace=0.005,
         )
 
         # Mapa principal: fila 0, ancho completo (3 columnas)
@@ -179,18 +179,18 @@ class MaquetadorPlano:
             1, 2, figure=self.fig,
             left=izq, right=1 - der,
             top=gs_top, bottom=inf,
-            width_ratios=[0.72, 0.28],
-            hspace=0.02, wspace=0.008,
+            width_ratios=[0.78, 0.22],
+            hspace=0.02, wspace=0.025,
         )
 
         # Mapa principal: columna izquierda
         self.ax_map = self.fig.add_subplot(gs[0, 0])
 
         # Panel lateral derecho: subdividido en 4 filas
-        # Minimapa (grande) | Tabla datos (compacta) | Leyenda | Cajetín
+        # Minimapa (pequeño) | Tabla datos (compacta) | Leyenda | Cajetín
         gs_lateral = gridspec.GridSpecFromSubplotSpec(
             4, 1, subplot_spec=gs[0, 1],
-            height_ratios=[0.40, 0.06, 0.16, 0.38],
+            height_ratios=[0.27, 0.08, 0.25, 0.40],
             hspace=0.01,
         )
 
@@ -198,6 +198,17 @@ class MaquetadorPlano:
         self.ax_tabla = self.fig.add_subplot(gs_lateral[1, 0])   # tabla datos
         self.ax_info = self.fig.add_subplot(gs_lateral[2, 0])    # leyenda
         self.ax_esc = self.fig.add_subplot(gs_lateral[3, 0])     # cajetín
+
+        # ── Alinear la base del cajetín con la base del mapa ──
+        # Forzar el layout para obtener posiciones reales
+        self.fig.canvas.draw_idle()
+        pos_map = self.ax_map.get_position()
+        pos_esc = self.ax_esc.get_position()
+        # Mover ax_esc para que su borde inferior coincida con el del mapa
+        new_bottom = pos_map.y0
+        new_height = pos_esc.height
+        self.ax_esc.set_position([pos_esc.x0, new_bottom,
+                                   pos_esc.width, new_height])
 
         return self.fig, self.ax_map, self.ax_info, self.ax_mini, self.ax_esc
 
@@ -208,8 +219,8 @@ class MaquetadorPlano:
         ancho_util = self.fmt_mm[0] - MARGENES_MM["izq"] - MARGENES_MM["der"]
         alto_util = self.fmt_mm[1] - MARGENES_MM["sup"] - MARGENES_MM["inf"]
         if self.es_lateral:
-            # Plantilla 2: mapa ocupa 72% del ancho y toda la altura
-            ancho_mm = ancho_util * 0.72
+            # Plantilla 2: mapa ocupa 78% del ancho y toda la altura
+            ancho_mm = ancho_util * 0.78
             alto_mm = (alto_util - _CABECERA_MM)
         else:
             ancho_mm = ancho_util * RATIO_MAPA_ANCHO
@@ -267,7 +278,8 @@ class MaquetadorPlano:
         ax.set_xticklabels([self._formato_coord(x) for x in xs_filt],
                            fontsize=4.5, color="#2C3E50", rotation=0, ha="center")
         ax.set_yticklabels([self._formato_coord(y) for y in ys_filt],
-                           fontsize=4.5, color="#2C3E50")
+                           fontsize=4.5, color="#2C3E50", rotation=90,
+                           va="center")
 
         # Etiquetas en los cuatro lados del mapa, fuera del marco
         ax.tick_params(which="major", length=4, width=0.6, color="#2C3E50",
@@ -386,10 +398,10 @@ class MaquetadorPlano:
 
             # Centrada horizontalmente, desplazada encima de la geometría
             txt = self.ax_map.annotate(
-                texto, xy=(cx, cy + offset_y), fontsize=4.5, fontweight="bold",
+                texto, xy=(cx, cy + offset_y), fontsize=5.5, fontweight="bold",
                 color="#1A1A2E", ha="center", va="bottom", zorder=8,
-                bbox=dict(boxstyle="round,pad=0.15", facecolor="white",
-                          edgecolor="#666666", linewidth=0.3, alpha=0.85),
+                bbox=dict(boxstyle="round,pad=0.2", facecolor="white",
+                          edgecolor="#2C3E50", linewidth=0.5, alpha=0.90),
             )
             textos_anotados.append(txt)
 
@@ -447,8 +459,8 @@ class MaquetadorPlano:
             try:
                 from adjustText import adjust_text
                 adjust_text(textos_anotados, ax=self.ax_map,
-                            arrowprops=dict(arrowstyle="-", color="#C2185B",
-                                            lw=0.4))
+                            arrowprops=dict(arrowstyle="-", color="none",
+                                            lw=0))
             except Exception:
                 pass
 
@@ -494,8 +506,10 @@ class MaquetadorPlano:
     # ── Leyenda ────────────────────────────────────────────────────────
 
     def dibujar_leyenda(self, items_leyenda, stats_resumen=None):  # noqa: ARG002
+        from matplotlib.patches import Patch
         handles = []
-        for label, color, geom_type, linestyle, marker, facecolor in items_leyenda:
+        for item in items_leyenda:
+            label, color, geom_type, linestyle, marker, facecolor = item[:6]
             if "point" in geom_type:
                 h = Line2D([0], [0], marker=marker or "o", color="w",
                            markerfacecolor=color, markersize=5, label=label)
@@ -503,15 +517,15 @@ class MaquetadorPlano:
                 h = Line2D([0], [0], color=color, linewidth=1.5,
                            linestyle=linestyle or "-", label=label)
             else:
-                h = Line2D([0], [0], marker="s", color="w",
-                           markerfacecolor=facecolor or color, markersize=8,
-                           markeredgecolor=color, markeredgewidth=0.8,
-                           label=label)
+                h = Patch(facecolor=facecolor or color,
+                          edgecolor=color, linewidth=0.8,
+                          label=label)
             handles.append(h)
 
         if handles:
             leg = self.ax_map.legend(
                 handles=handles, loc="lower left", fontsize=4.5,
+                bbox_to_anchor=(0.0, 0.045),
                 title="LEYENDA", title_fontsize=5,
                 frameon=True, framealpha=0.92, facecolor="white",
                 edgecolor="#2C3E50", borderpad=0.6, labelspacing=0.5,
@@ -746,14 +760,14 @@ class MaquetadorPlano:
         for w in col_widths:
             col_x.append(col_x[-1] + w)
 
-        # La tabla se ancla arriba del axes (y=1.0 hacia abajo)
+        # Calcular altura de fila para que la tabla ocupe todo el axes
         total_rows = n_rows_data + 1  # +1 cabecera
-        row_h = 1.0 / max(total_rows, 1)
+        row_h = 1.0 / total_rows
 
         lw_h = 0.8   # linewidth cabecera
         lw_d = 0.4   # linewidth datos (más fino)
-        fsz_h = 2.5  # fontsize cabecera
-        fsz_d = 2.0  # fontsize datos
+        fsz_h = 4.0  # fontsize cabecera
+        fsz_d = 3.5  # fontsize datos
 
         # ── Cabecera (fondo verde institucional, texto blanco) ──
         for ci, campo in enumerate(campos):
@@ -763,10 +777,16 @@ class MaquetadorPlano:
                                     facecolor=C_HDR_BG, edgecolor=C_BORDER,
                                     linewidth=lw_h, zorder=1))
             etiq = _etiqueta_campo(campo)
-            if len(etiq) > 12:
-                etiq = etiq[:11] + "."
+            # Truncar según ancho relativo de la columna
+            max_chars = max(3, int(cw * 80))  # ~80 chars caben en ancho=1
+            if len(etiq) > max_chars:
+                etiq = etiq[:max_chars - 1] + "."
+            # Reducir fuente si el texto aún es largo respecto al ancho
+            _fsz = fsz_h
+            if len(etiq) > max_chars * 0.7:
+                _fsz = max(2.5, fsz_h * 0.75)
             ax.text(x0 + cw / 2, 1 - row_h / 2, etiq.upper(),
-                    ha="center", va="center", fontsize=fsz_h,
+                    ha="center", va="center", fontsize=_fsz,
                     fontweight="bold", color=C_HDR_TXT, zorder=2)
 
         # ── Filas de datos (zebra: alternas blanco / verde tenue) ──
@@ -781,10 +801,14 @@ class MaquetadorPlano:
                                         linewidth=lw_d, zorder=1))
                 campo_real = _resolver(campo)
                 valor = _fmt_valor(r.get(campo_real, None))
-                if len(valor) > 20:
-                    valor = valor[:19] + "\u2026"
+                max_chars_d = max(3, int(cw * 80))
+                if len(valor) > max_chars_d:
+                    valor = valor[:max_chars_d - 1] + "\u2026"
+                _fsz_d = fsz_d
+                if len(valor) > max_chars_d * 0.7:
+                    _fsz_d = max(2.2, fsz_d * 0.75)
                 ax.text(x0 + cw / 2, y + row_h / 2, valor,
-                        ha="center", va="center", fontsize=fsz_d,
+                        ha="center", va="center", fontsize=_fsz_d,
                         color=C_TXT_LIGHT, zorder=2)
 
     # ── Mapa de localización (panel inferior derecho) ──────────────────
@@ -800,9 +824,9 @@ class MaquetadorPlano:
         alto_util = (self.fmt_mm[1] - MARGENES_MM["sup"] - MARGENES_MM["inf"]
                      - _CABECERA_MM)
         if self.es_lateral:
-            # Panel lateral: 28% del ancho, ~38% del alto (minimapa grande)
-            panel_w_mm = ancho_util * 0.28 * 0.90
-            panel_h_mm = alto_util * 0.38 * 0.90
+            # Panel lateral: 20% del ancho, ~22% del alto (minimapa pequeño)
+            panel_w_mm = ancho_util * 0.20 * 0.90
+            panel_h_mm = alto_util * 0.22 * 0.90
         else:
             panel_w_mm = ancho_util * 0.30 * 0.95   # col 2 ratio, menos wspace
             panel_h_mm = alto_util * (1 - RATIO_MAPA_ALTO) * 0.90  # menos hspace
@@ -855,9 +879,9 @@ class MaquetadorPlano:
                 pass
 
         # Punto de localización
-        ax.plot(cx, cy, "o", color="white", markersize=7, zorder=5)
-        ax.plot(cx, cy, "o", color="#E74C3C", markersize=4.5, zorder=6,
-                markeredgecolor="white", markeredgewidth=0.4)
+        ax.plot(cx, cy, "o", color="white", markersize=5, zorder=5)
+        ax.plot(cx, cy, "o", color="#E74C3C", markersize=3.5, zorder=6,
+                markeredgecolor="white", markeredgewidth=0.3)
 
         # Recuadro extensión del mapa principal
         try:
@@ -867,7 +891,7 @@ class MaquetadorPlano:
             rh = ylims[1] - ylims[0]
             ax.add_patch(Rectangle(
                 (xlims[0], ylims[0]), rw, rh,
-                fill=False, edgecolor="#E74C3C", linewidth=1.0, zorder=7,
+                fill=False, edgecolor="#E74C3C", linewidth=0.7, zorder=7,
                 linestyle="--"))
         except Exception:
             pass
@@ -948,9 +972,12 @@ class MaquetadorPlano:
                 from PIL import Image as PILImage
                 img = PILImage.open(logo_path)
                 # Calcular posición del logo dentro del axes
-                logo_size = header_h * 0.75
-                logo_ax = ax.inset_axes([0.02, header_y + header_h * 0.12,
-                                          0.10, logo_size],
+                iw, ih = img.size
+                aspect_img = iw / max(ih, 1)
+                logo_size = header_h * 0.80
+                logo_w = min(0.15, logo_size * aspect_img * 0.6)
+                logo_ax = ax.inset_axes([0.02, header_y + header_h * 0.10,
+                                          logo_w, logo_size],
                                          transform=ax.transAxes)
                 logo_ax.imshow(img, aspect="equal")
                 logo_ax.axis("off")
@@ -1188,109 +1215,98 @@ class MaquetadorPlano:
         ax.axis("off")
 
         C_BORDER = "#2C2C2C"
-        C_TXT = "#1A1A2E"
         C_GREEN = "#007932"
         C_GREEN_DARK = "#368f3f"
-        C_LABEL = "#007932"
-        C_BG_LEYENDA = "#FAFCFA"     # Fondo general leyenda
-        C_DIVIDER = "#CCCCCC"         # Líneas divisorias internas
+        C_BG_LEYENDA = "#FAFCFA"
+        C_DIVIDER = "#CCCCCC"
 
-        # ── Calcular altura real del contenido ──
+        # ── Calcular contenido ──
         items_inf = items_leyenda_infra or []
         items_mon = items_leyenda_montes or []
         n_inf = min(len(items_inf), 12)
         n_mon = min(len(items_mon), 8)
-        mid = (n_inf + 1) // 2  # filas en sub-columna más larga
+        mid = (n_inf + 1) // 2
 
-        # Cada fila de items mide row_h; calcular cuántas filas máx
+        # ── Espaciado fijo compacto ──
+        title_h = 0.06
+        slot_h = 0.055           # altura fija por fila
+        pad_top = 0.015          # margen bajo título
+        pad_bot = 0.02           # margen inferior
+
         n_rows_max = max(mid, n_mon, 1)
-        row_h = min(0.10, 0.65 / max(n_rows_max, 1))
-
-        # Altura usada: título(0.08) + subtítulo(0.06) + filas*row_h + margen(0.04)
-        content_h = 0.08 + 0.06 + n_rows_max * row_h + 0.04
+        # Altura total del contenido (título + subtítulo + filas + márgenes)
+        content_h = title_h + pad_top + slot_h * (1 + n_rows_max) + pad_bot
         content_h = min(content_h, 1.0)
 
-        # y_top: borde superior del recuadro (contenido pegado arriba)
         y_top = 1.0
-        y_bot = y_top - content_h
+        y_box_bot = y_top - content_h
 
-        # Borde del panel ajustado al contenido
-        ax.add_patch(Rectangle((0, y_bot), 1, content_h, facecolor=C_BG_LEYENDA,
+        # Fondo ajustado al contenido
+        ax.add_patch(Rectangle((0, y_box_bot), 1, content_h,
+                                facecolor=C_BG_LEYENDA,
                                 edgecolor=C_BORDER, linewidth=1.0, zorder=0))
 
-        # Barra de título LEYENDA (fondo verde, texto blanco)
-        title_h = 0.07
+        # Barra de título LEYENDA
         ax.add_patch(Rectangle((0, y_top - title_h), 1, title_h,
                                 facecolor=C_GREEN, edgecolor=C_BORDER,
                                 linewidth=1.0, zorder=1))
-        t_y = y_top - title_h / 2
-        ax.text(0.5, t_y, "LEYENDA", ha="center", va="center",
-                fontsize=7, fontweight="bold", color="white",
+        ax.text(0.5, y_top - title_h / 2, "LEYENDA", ha="center", va="center",
+                fontsize=5, fontweight="bold", color="white",
                 transform=ax.transAxes, zorder=2)
 
-        # Línea divisoria vertical entre infraestructura y montes
-        ax.plot([0.65, 0.65], [y_top - title_h, y_bot],
+        # Divisoria vertical entre infra y montes
+        ax.plot([0.65, 0.65], [y_top - title_h, y_box_bot],
                 color=C_DIVIDER, linewidth=0.5,
                 transform=ax.transAxes, zorder=1)
 
         # ── helper para dibujar un símbolo + texto ──
         def _dibujar_item(x_sym0, x_sym1, x_txt, y, item, rh):
-            label, color, geom_type, linestyle, marker, facecolor = item
+            label, color, geom_type, linestyle, marker, facecolor = item[:6]
             if "point" in geom_type:
                 ax.plot((x_sym0 + x_sym1) / 2, y, marker=marker or "o",
-                        color=color, markersize=3.5, markeredgecolor="white",
+                        color=color, markersize=2.5, markeredgecolor="white",
                         markeredgewidth=0.2, transform=ax.transAxes, zorder=3)
             elif "line" in geom_type or "string" in geom_type:
                 ax.plot([x_sym0, x_sym1], [y, y], color=color,
-                        linewidth=2.0, linestyle=linestyle or "-",
+                        linewidth=1.3, linestyle=linestyle or "-",
                         transform=ax.transAxes, zorder=3, solid_capstyle="round")
             else:
                 rect_w = x_sym1 - x_sym0
-                rect_h = rh * 0.50
+                rect_h = rh * 0.45
                 ax.add_patch(Rectangle(
                     (x_sym0, y - rect_h / 2), rect_w, rect_h,
                     facecolor=facecolor or (color + "55"),
-                    edgecolor=color, linewidth=0.6,
+                    edgecolor=color, linewidth=0.5,
                     transform=ax.transAxes, zorder=3))
-            ax.text(x_txt, y, str(label)[:22], ha="left", va="center",
-                    fontsize=3.5, color="#3A3A4A", transform=ax.transAxes, zorder=3)
+            ax.text(x_txt, y, str(label)[:16], ha="left", va="center",
+                    fontsize=2.8, color="#3A3A4A", transform=ax.transAxes, zorder=3)
 
-        # ── Posición Y del subtítulo y primer item ──
-        sub_y = t_y - 0.09   # subtítulos de sección
-        first_y = sub_y - 0.06  # primer item
+        # ── Posiciones verticales compactas ──
+        sub_y = y_top - title_h - pad_top - slot_h * 0.5
+        first_y = sub_y - slot_h
 
-        # ── Sección izquierda: TIPO INFRAESTRUCTURA (2 sub-columnas) ──
-        ax.text(0.02, sub_y, "TIPO INFRAESTRUCTURA", ha="left", va="center",
-                fontsize=4, fontweight="bold", color=C_GREEN_DARK, zorder=2)
-        # Subrayado del subtítulo
-        ax.plot([0.02, 0.40], [sub_y - 0.02, sub_y - 0.02],
-                color=C_GREEN, linewidth=0.5, transform=ax.transAxes, zorder=2)
+        # ── Sección izquierda: INFRAESTRUCTURA (2 sub-columnas) ──
+        ax.text(0.02, sub_y, "INFRAESTRUCTURA", ha="left", va="center",
+                fontsize=3.5, fontweight="bold", color=C_GREEN_DARK, zorder=2)
 
         col_left = items_inf[:mid]
         col_right = items_inf[mid:n_inf]
 
-        # Sub-columna izquierda (x: 0.02-0.35)
         for i, item in enumerate(col_left):
-            y = first_y - i * row_h
-            _dibujar_item(0.02, 0.09, 0.10, y, item, row_h)
+            y = first_y - i * slot_h
+            _dibujar_item(0.02, 0.08, 0.09, y, item, slot_h)
 
-        # Sub-columna derecha (x: 0.35-0.65)
         for i, item in enumerate(col_right):
-            y = first_y - i * row_h
-            _dibujar_item(0.35, 0.42, 0.43, y, item, row_h)
+            y = first_y - i * slot_h
+            _dibujar_item(0.35, 0.41, 0.42, y, item, slot_h)
 
         # ── Sección derecha: MONTES PÚBLICOS ──
         ax.text(0.80, sub_y, "MONTES PÚBLICOS", ha="center", va="center",
-                fontsize=4, fontweight="bold", color=C_GREEN_DARK, zorder=2)
-        # Subrayado del subtítulo
-        ax.plot([0.68, 0.92], [sub_y - 0.02, sub_y - 0.02],
-                color=C_GREEN, linewidth=0.5, transform=ax.transAxes, zorder=2)
-
-        row_h_m = row_h  # misma altura de fila para alinear
+                fontsize=3.5, fontweight="bold", color=C_GREEN_DARK, zorder=2)
 
         for i, item in enumerate(items_mon[:n_mon]):
-            y = first_y - i * row_h_m
-            _dibujar_item(0.67, 0.74, 0.75, y, item, row_h_m)
+            y = first_y - i * slot_h
+            _dibujar_item(0.67, 0.73, 0.74, y, item, slot_h)
 
     # ── Cajetín lateral (Plantilla 2: ax_esc) ────────────────────────
 
@@ -1329,15 +1345,15 @@ class MaquetadorPlano:
         C_LABEL = "#007932"           # Color etiquetas (verde)
         LW = 0.8  # linewidth de celdas
 
-        # ── Alturas de cada fila (de arriba a abajo) ──
-        # Compactas: ajustadas al contenido de texto
-        org_h = 0.16
-        proy_h = 0.12
+        # ── Alturas de cada fila (de arriba a abajo, compactas) ──
+        org_h = 0.12
+        proy_h = 0.10
         monte_h = 0.12
-        aut_h = 0.12
-        total_h = org_h + proy_h + monte_h + aut_h  # 0.52
+        aut_h = 0.14
+        total_h = org_h + proy_h + monte_h + aut_h
 
-        # Posiciones calculadas desde la parte inferior (y=0)
+        # Posiciones calculadas desde abajo (y=0) hacia arriba,
+        # para que el cajetín quede pegado al borde inferior del panel
         aut_y = 0.0
         monte_y = aut_y + aut_h
         proy_y = monte_y + monte_h
@@ -1361,10 +1377,10 @@ class MaquetadorPlano:
                 img = PILImage.open(logo_path)
                 iw, ih = img.size
                 aspect_img = iw / max(ih, 1)
-                logo_h_frac = org_h * 0.80
-                logo_w_frac = min(0.35, logo_h_frac * aspect_img * 0.7)
+                logo_h_frac = org_h * 0.90
+                logo_w_frac = min(0.40, logo_h_frac * aspect_img)
                 logo_ax = ax.inset_axes(
-                    [0.02, org_y + org_h * 0.10, logo_w_frac, logo_h_frac],
+                    [0.01, org_y + org_h * 0.05, logo_w_frac, logo_h_frac],
                     transform=ax.transAxes)
                 logo_ax.imshow(img, aspect="equal")
                 logo_ax.axis("off")
@@ -1374,30 +1390,25 @@ class MaquetadorPlano:
 
         if org:
             lineas = org.split("\n")
-            # Espacio disponible para texto (desde después del logo hasta el borde)
             x_centro = x_txt + (1.0 - x_txt) / 2
 
             if len(lineas) >= 2:
-                # 2 líneas explícitas del usuario
                 linea1 = lineas[0].upper()
                 linea2 = lineas[1]
-                # Reducir fuente si la línea 1 es muy larga
-                fsz1 = 8 if len(linea1) <= 30 else (6.5 if len(linea1) <= 45 else 5.5)
+                fsz1 = 7.5 if len(linea1) <= 30 else (6.5 if len(linea1) <= 45 else 5.5)
                 ax.text(x_centro, org_y + org_h * 0.62,
                         linea1, ha="center", va="center",
                         fontsize=fsz1, fontweight="bold", color="white", zorder=3)
                 ax.text(x_centro, org_y + org_h * 0.28,
                         linea2, ha="center", va="center",
-                        fontsize=4.5, color="#E0F0E0", zorder=3)
+                        fontsize=6.0, fontweight="bold", color="#E0F0E0", zorder=3)
             else:
                 texto = org.upper()
-                # Si cabe en 1 línea (~30 chars), ponerlo en una sola
                 if len(texto) <= 30:
                     ax.text(x_centro, org_y + org_h * 0.50, texto,
                             ha="center", va="center",
-                            fontsize=7, fontweight="bold", color="white", zorder=3)
+                            fontsize=6.5, fontweight="bold", color="white", zorder=3)
                 else:
-                    # Partir en 2 líneas por el espacio más cercano al centro
                     mid = len(texto) // 2
                     pos = texto.rfind(" ", 0, mid + 8)
                     if pos < 5:
@@ -1408,8 +1419,8 @@ class MaquetadorPlano:
                     else:
                         linea1 = texto
                         linea2 = ""
-                    fsz = 7 if len(linea1) <= 35 else (6 if len(linea1) <= 45 else 5)
-                    ax.text(x_centro, org_y + org_h * 0.62,
+                    fsz = 6.0 if len(linea1) <= 35 else (5.0 if len(linea1) <= 45 else 4.5)
+                    ax.text(x_centro, org_y + org_h * 0.65,
                             linea1, ha="center", va="center",
                             fontsize=fsz, fontweight="bold", color="white", zorder=3)
                     if linea2:
@@ -1445,7 +1456,7 @@ class MaquetadorPlano:
             if space_pos > 10:
                 texto_proy = texto_proy[:space_pos] + "\n" + texto_proy[space_pos + 1:]
 
-        fsz_proy = 8 if len(texto_proy) <= 40 else 6.5
+        fsz_proy = 6 if len(texto_proy) <= 40 else 5
         ax.text(0.5, proy_y + proy_h * 0.50, texto_proy.upper(),
                 ha="center", va="center", fontsize=fsz_proy, fontweight="bold",
                 color=C_GREEN_DARK, zorder=3, linespacing=1.4)
@@ -1491,15 +1502,18 @@ class MaquetadorPlano:
 
         if monte_txt:
             ax.text(0.03, monte_y + monte_h * 0.65, monte_txt,
-                    ha="left", va="center", fontsize=6, color=C_TXT,
+                    ha="left", va="center", fontsize=4.5, color=C_TXT,
                     fontweight="bold", zorder=3)
         if tm_txt:
             ax.text(0.03, monte_y + monte_h * 0.30, tm_txt,
-                    ha="left", va="center", fontsize=6, color=C_TXT,
+                    ha="left", va="center", fontsize=4.5, color=C_TXT,
                     fontweight="bold", zorder=3)
 
         # Nº de plano
-        num_inicio = caj.get("num_plano_inicio", 1)
+        try:
+            num_inicio = int(caj.get("num_plano_inicio", 1))
+        except (ValueError, TypeError):
+            num_inicio = 1
         if num_plano is not None:
             n_plano = num_plano
         else:
@@ -1508,12 +1522,14 @@ class MaquetadorPlano:
             n_plano = idx + num_inicio
 
         mid_r = col_r + (1 - col_r) / 2
-        # Escalar fuentes del Nº de plano según formato de papel
-        # Base: A4 (210mm ancho). Escalar proporcionalmente al ancho.
+        # Escalar fuentes del Nº de plano según ancho real del panel
+        # Panel lateral = 20% del ancho útil del papel
         _ancho_mm = self.fmt_mm[0]
-        _factor = _ancho_mm / 210.0  # 1.0 para A4, ~1.41 para A3, ~2.0 para A2
+        _panel_mm = _ancho_mm * 0.22  # ancho físico del panel lateral
+        _factor = _panel_mm / 60.0  # base: ~60mm (A3 × 20%)
+        _factor = min(_factor, 1.5)  # limitar para formatos grandes
         fsz_label_np = 3.5 * _factor
-        fsz_num_np = 9 * _factor
+        fsz_num_np = 7 * _factor
         ax.text(mid_r, monte_y + monte_h * 0.78,
                 "Nº DE PLANO:", ha="center", va="center",
                 fontsize=fsz_label_np, color=C_LABEL, fontweight="bold", zorder=3)
@@ -1605,7 +1621,7 @@ class MaquetadorPlano:
         escala_txt = f"1:{self.escala:,}".replace(",", ".")
         ax.text(mid_x, aut_y + aut_h * 0.70,
                 escala_txt, ha="center", va="center",
-                fontsize=6, fontweight="bold", color=C_GREEN_DARK, zorder=3)
+                fontsize=4.5, fontweight="bold", color=C_GREEN_DARK, zorder=3)
         # Fecha (tercio medio)
         ax.text(mid_x, aut_y + aut_h * 0.50,
                 "FECHA:", ha="center", va="center",
@@ -1708,7 +1724,10 @@ class MaquetadorPlano:
             titulo_proy = cajetin.get("proyecto", "")
             titulo_mapa = cajetin.get("titulo_mapa", "")
             logo_path = cajetin.get("logo_path", "")
-            num_inicio = cajetin.get("num_plano_inicio", 1)
+            try:
+                num_inicio = int(cajetin.get("num_plano_inicio", 1))
+            except (ValueError, TypeError):
+                num_inicio = 1
             # Subtítulo dinámico desde un campo de la tabla de atributos
             campo_sub = cajetin.get("campo_subtitulo", "")
             if campo_sub and row is not None:
@@ -1740,21 +1759,25 @@ class MaquetadorPlano:
             try:
                 from PIL import Image as PILImage
                 img = PILImage.open(logo_path)
-                # Encajar logo en el 12% izquierdo de la cabecera
+                # Encajar logo ajustado a la altura de la cabecera
+                iw, ih = img.size
+                aspect_img = iw / max(ih, 1)
+                logo_h_f = h_cab * 0.84
+                logo_w_f = max(0.04, logo_h_f * aspect_img * 0.5)
                 logo_ax = self.fig.add_axes([
                     izq_f + 0.003,
-                    1 - sup_f - h_cab + h_cab * 0.10,
-                    0.04,
-                    h_cab * 0.80,
+                    1 - sup_f - h_cab + h_cab * 0.08,
+                    logo_w_f,
+                    logo_h_f,
                 ], zorder=30)
                 logo_ax.imshow(img, aspect="equal")
                 logo_ax.axis("off")
-                x_org = 0.065
+                x_org = izq_f + 0.003 + logo_w_f + 0.008
             except Exception:
                 pass
 
-        ax_cab.text(x_org, 0.55, org, ha="left", va="center", fontsize=4.5,
-                    fontweight="bold", color=c_acento, linespacing=1.1)
+        ax_cab.text(x_org, 0.52, org, ha="left", va="center", fontsize=4.2,
+                    fontweight="bold", color=c_acento, linespacing=1.05)
 
         # ── Centro: título mapa + subtítulo ──
         titulo_final = ""
