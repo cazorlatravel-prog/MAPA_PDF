@@ -1319,11 +1319,11 @@ class MaquetadorPlano:
 
         # ── Alturas de cada fila (de arriba a abajo) ──
         # Compactas: ajustadas al contenido de texto
-        org_h = 0.16
+        org_h = 0.10
         proy_h = 0.12
         monte_h = 0.12
         aut_h = 0.12
-        total_h = org_h + proy_h + monte_h + aut_h  # 0.52
+        total_h = org_h + proy_h + monte_h + aut_h  # 0.46
 
         # Posiciones calculadas desde la parte inferior (y=0)
         aut_y = 0.0
@@ -1349,10 +1349,10 @@ class MaquetadorPlano:
                 img = PILImage.open(logo_path)
                 iw, ih = img.size
                 aspect_img = iw / max(ih, 1)
-                logo_h_frac = org_h * 0.80
+                logo_h_frac = org_h * 0.90
                 logo_w_frac = min(0.35, logo_h_frac * aspect_img * 0.7)
                 logo_ax = ax.inset_axes(
-                    [0.02, org_y + org_h * 0.10, logo_w_frac, logo_h_frac],
+                    [0.02, org_y + org_h * 0.05, logo_w_frac, logo_h_frac],
                     transform=ax.transAxes)
                 logo_ax.imshow(img, aspect="equal")
                 logo_ax.axis("off")
@@ -1362,30 +1362,25 @@ class MaquetadorPlano:
 
         if org:
             lineas = org.split("\n")
-            # Espacio disponible para texto (desde después del logo hasta el borde)
             x_centro = x_txt + (1.0 - x_txt) / 2
 
             if len(lineas) >= 2:
-                # 2 líneas explícitas del usuario
                 linea1 = lineas[0].upper()
                 linea2 = lineas[1]
-                # Reducir fuente si la línea 1 es muy larga
-                fsz1 = 6 if len(linea1) <= 30 else (5 if len(linea1) <= 45 else 4)
-                ax.text(x_centro, org_y + org_h * 0.62,
+                fsz1 = 5 if len(linea1) <= 30 else (4.5 if len(linea1) <= 45 else 3.8)
+                ax.text(x_centro, org_y + org_h * 0.65,
                         linea1, ha="center", va="center",
                         fontsize=fsz1, fontweight="bold", color="white", zorder=3)
                 ax.text(x_centro, org_y + org_h * 0.28,
                         linea2, ha="center", va="center",
-                        fontsize=3.5, color="#E0F0E0", zorder=3)
+                        fontsize=3.2, color="#E0F0E0", zorder=3)
             else:
                 texto = org.upper()
-                # Si cabe en 1 línea (~30 chars), ponerlo en una sola
                 if len(texto) <= 30:
                     ax.text(x_centro, org_y + org_h * 0.50, texto,
                             ha="center", va="center",
-                            fontsize=5.5, fontweight="bold", color="white", zorder=3)
+                            fontsize=5, fontweight="bold", color="white", zorder=3)
                 else:
-                    # Partir en 2 líneas por el espacio más cercano al centro
                     mid = len(texto) // 2
                     pos = texto.rfind(" ", 0, mid + 8)
                     if pos < 5:
@@ -1396,8 +1391,8 @@ class MaquetadorPlano:
                     else:
                         linea1 = texto
                         linea2 = ""
-                    fsz = 5.5 if len(linea1) <= 35 else (4.5 if len(linea1) <= 45 else 4)
-                    ax.text(x_centro, org_y + org_h * 0.62,
+                    fsz = 5 if len(linea1) <= 35 else (4.2 if len(linea1) <= 45 else 3.8)
+                    ax.text(x_centro, org_y + org_h * 0.65,
                             linea1, ha="center", va="center",
                             fontsize=fsz, fontweight="bold", color="white", zorder=3)
                     if linea2:
