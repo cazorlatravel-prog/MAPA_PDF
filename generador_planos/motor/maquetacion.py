@@ -1349,10 +1349,10 @@ class MaquetadorPlano:
                 img = PILImage.open(logo_path)
                 iw, ih = img.size
                 aspect_img = iw / max(ih, 1)
-                logo_h_frac = org_h * 0.90
+                logo_h_frac = org_h * 0.96
                 logo_w_frac = min(0.35, logo_h_frac * aspect_img * 0.7)
                 logo_ax = ax.inset_axes(
-                    [0.02, org_y + org_h * 0.05, logo_w_frac, logo_h_frac],
+                    [0.02, org_y + org_h * 0.02, logo_w_frac, logo_h_frac],
                     transform=ax.transAxes)
                 logo_ax.imshow(img, aspect="equal")
                 logo_ax.axis("off")
