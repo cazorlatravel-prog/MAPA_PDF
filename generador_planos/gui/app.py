@@ -272,6 +272,8 @@ class App(tk.Tk):
         # Actualizar checkboxes de campos con las columnas reales del shapefile
         self.panel_campos.actualizar_campos(columnas)
         self.panel_cajetin.actualizar_campos_subtitulo(columnas)
+        # Actualizar combo de campo enlace SHP para Excel
+        self.panel_config.actualizar_campos_shp_enlace(columnas)
 
         # Restaurar campos visibles del proyecto si se acaba de cargar uno
         if hasattr(self, "_campos_visibles_proyecto") and self._campos_visibles_proyecto:
@@ -315,7 +317,10 @@ class App(tk.Tk):
             try:
                 self.motor.cargar_excel_tabla(
                     self.panel_config.ruta_excel,
-                    self.panel_config.hoja_excel or None)
+                    hoja=self.panel_config.hoja_excel or None,
+                    campo_enlace_shp=self.panel_config.campo_enlace_shp,
+                    campo_enlace_excel=self.panel_config.campo_enlace_excel,
+                    columnas_activas=self.panel_config.columnas_excel_activas)
             except Exception as e:
                 self._escribir_log(f"Error al cargar Excel: {e}", "error")
                 self.motor.limpiar_excel_tabla()
@@ -374,6 +379,9 @@ class App(tk.Tk):
         p.origen_datos_tabla = self.panel_config._origen_datos.get()
         p.ruta_excel_tabla = self.panel_config.ruta_excel
         p.hoja_excel_tabla = self.panel_config.hoja_excel
+        p.campo_enlace_shp = self.panel_config.campo_enlace_shp
+        p.campo_enlace_excel = self.panel_config.campo_enlace_excel
+        p.columnas_excel_activas = self.panel_config.columnas_excel_activas
 
         # Generación
         p.modo_gen = self.panel_gen._modo_gen.get()
@@ -473,17 +481,31 @@ class App(tk.Tk):
                 self.panel_config._ruta_excel.set(p.ruta_excel_tabla)
                 self.panel_config._lbl_excel.configure(
                     text=os.path.basename(p.ruta_excel_tabla))
-                # Recargar hojas del Excel
+                # Recargar hojas y columnas del Excel
+                hoja = getattr(p, "hoja_excel_tabla", "") or ""
                 try:
                     import openpyxl
                     wb = openpyxl.load_workbook(
                         p.ruta_excel_tabla, read_only=True, data_only=True)
                     self.panel_config._cb_hoja.configure(values=wb.sheetnames)
                     wb.close()
+                    if hoja:
+                        self.panel_config._hoja_excel.set(hoja)
+                    self.panel_config._cargar_columnas_excel(
+                        p.ruta_excel_tabla, hoja or wb.sheetnames[0])
                 except Exception:
                     pass
             if hasattr(p, "hoja_excel_tabla") and p.hoja_excel_tabla:
                 self.panel_config._hoja_excel.set(p.hoja_excel_tabla)
+            if hasattr(p, "campo_enlace_shp") and p.campo_enlace_shp:
+                self.panel_config._campo_enlace_shp.set(p.campo_enlace_shp)
+            if hasattr(p, "campo_enlace_excel") and p.campo_enlace_excel:
+                self.panel_config._campo_enlace_excel.set(p.campo_enlace_excel)
+            # Restaurar columnas Excel seleccionadas
+            if hasattr(p, "columnas_excel_activas") and p.columnas_excel_activas:
+                cols_proy = p.columnas_excel_activas
+                for col, var in self.panel_config._check_cols_excel.items():
+                    var.set(col in cols_proy)
 
             # ── Simbología ──
             if p.simbologia:

@@ -155,6 +155,41 @@ class PanelConfig:
                                       textvariable=self._hoja_excel,
                                       state="readonly", font=FONT_SMALL, width=20)
         self._cb_hoja.pack(side="left", padx=(4, 0))
+        self._cb_hoja.bind("<<ComboboxSelected>>", self._on_hoja_changed)
+
+        # Campo enlace: SHP ↔ Excel
+        self._frame_enlace = tk.Frame(self._frame_excel, bg=COLOR_PANEL)
+        self._frame_enlace.pack(side="top", fill="x", pady=(4, 0))
+
+        tk.Label(self._frame_enlace, text="Campo enlace SHP:",
+                 font=FONT_SMALL, bg=COLOR_PANEL, fg=COLOR_TEXTO
+                 ).grid(row=0, column=0, sticky="w")
+        self._campo_enlace_shp = tk.StringVar(value="")
+        self._cb_enlace_shp = ttk.Combobox(
+            self._frame_enlace, textvariable=self._campo_enlace_shp,
+            state="readonly", font=FONT_SMALL, width=18)
+        self._cb_enlace_shp.grid(row=0, column=1, sticky="ew", padx=(4, 0))
+
+        tk.Label(self._frame_enlace, text="Campo enlace Excel:",
+                 font=FONT_SMALL, bg=COLOR_PANEL, fg=COLOR_TEXTO
+                 ).grid(row=1, column=0, sticky="w", pady=(2, 0))
+        self._campo_enlace_excel = tk.StringVar(value="")
+        self._cb_enlace_excel = ttk.Combobox(
+            self._frame_enlace, textvariable=self._campo_enlace_excel,
+            state="readonly", font=FONT_SMALL, width=18)
+        self._cb_enlace_excel.grid(row=1, column=1, sticky="ew", padx=(4, 0),
+                                    pady=(2, 0))
+        self._frame_enlace.columnconfigure(1, weight=1)
+
+        # Checkboxes de columnas Excel a incluir
+        tk.Label(self._frame_excel, text="Columnas a incluir:",
+                 font=FONT_SMALL, bg=COLOR_PANEL, fg=COLOR_TEXTO
+                 ).pack(side="top", anchor="w", pady=(4, 2))
+
+        self._frame_cols_excel = tk.Frame(self._frame_excel, bg=COLOR_PANEL)
+        self._frame_cols_excel.pack(side="top", fill="x")
+        self._check_cols_excel = {}  # {nombre_col: BooleanVar}
+        self._widgets_cols_excel = []
 
         self._frame_excel.grid_remove()  # Oculto por defecto
 
@@ -335,9 +370,60 @@ class PanelConfig:
                 self._cb_hoja.configure(values=hojas)
                 if hojas:
                     self._hoja_excel.set(hojas[0])
+                    self._cargar_columnas_excel(ruta, hojas[0])
             except Exception:
                 self._cb_hoja.configure(values=[])
                 self._hoja_excel.set("")
+                self._poblar_columnas_excel([])
+
+    def _on_hoja_changed(self, event=None):
+        """Al cambiar de hoja, recargar columnas."""
+        ruta = self._ruta_excel.get()
+        hoja = self._hoja_excel.get()
+        if ruta and hoja:
+            self._cargar_columnas_excel(ruta, hoja)
+
+    def _cargar_columnas_excel(self, ruta: str, hoja: str):
+        """Lee las columnas de la hoja seleccionada y actualiza checkboxes y combos."""
+        try:
+            import pandas as pd
+            df = pd.read_excel(ruta, sheet_name=hoja, engine="openpyxl", nrows=0)
+            cols = list(df.columns)
+        except Exception:
+            cols = []
+        self._poblar_columnas_excel(cols)
+        # Actualizar combo enlace Excel
+        self._cb_enlace_excel.configure(values=cols)
+        if cols:
+            self._campo_enlace_excel.set(cols[0])
+        else:
+            self._campo_enlace_excel.set("")
+
+    def _poblar_columnas_excel(self, columnas: list):
+        """Crea checkboxes para seleccionar qué columnas del Excel incluir."""
+        for w in self._widgets_cols_excel:
+            w.destroy()
+        self._widgets_cols_excel.clear()
+        self._check_cols_excel.clear()
+
+        for col in columnas:
+            var = tk.BooleanVar(value=True)
+            cb = tk.Checkbutton(
+                self._frame_cols_excel, text=col, variable=var,
+                font=FONT_SMALL, bg=COLOR_PANEL, fg=COLOR_TEXTO,
+                selectcolor=COLOR_BORDE, activebackground=COLOR_PANEL,
+                cursor="hand2",
+            )
+            cb.pack(anchor="w", pady=1)
+            self._check_cols_excel[col] = var
+            self._widgets_cols_excel.append(cb)
+
+    def actualizar_campos_shp_enlace(self, columnas: list):
+        """Actualiza el combo de campo enlace SHP con las columnas del shapefile."""
+        cols = [c for c in columnas if c.lower() != "geometry"]
+        self._cb_enlace_shp.configure(values=cols)
+        if cols and not self._campo_enlace_shp.get():
+            self._campo_enlace_shp.set(cols[0])
 
     @property
     def usa_excel(self) -> bool:
@@ -352,6 +438,19 @@ class PanelConfig:
     @property
     def hoja_excel(self) -> str:
         return self._hoja_excel.get()
+
+    @property
+    def campo_enlace_shp(self) -> str:
+        return self._campo_enlace_shp.get()
+
+    @property
+    def campo_enlace_excel(self) -> str:
+        return self._campo_enlace_excel.get()
+
+    @property
+    def columnas_excel_activas(self) -> list:
+        """Devuelve la lista de columnas del Excel seleccionadas por el usuario."""
+        return [c for c, v in self._check_cols_excel.items() if v.get()]
 
     @property
     def ruta_raster_general(self) -> str:

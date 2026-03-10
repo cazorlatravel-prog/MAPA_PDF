@@ -116,6 +116,9 @@ class GeneradorPlanos:
         self.ruta_raster_general = ""       # Ráster local para fondo de mapa
         self.ruta_raster_localizacion = ""  # Ráster local para mapa de localización
         self._df_excel = None               # DataFrame con datos de Excel para tabla
+        self._campo_enlace_shp = ""
+        self._campo_enlace_excel = ""
+        self._columnas_excel = None
         self._cancelar = threading.Event()
 
     def cancelar_generacion(self):
@@ -135,26 +138,75 @@ class GeneradorPlanos:
     def set_plantilla(self, plantilla: dict):
         self._plantilla = plantilla or {}
 
-    def cargar_excel_tabla(self, ruta: str, hoja: str = None):
-        """Carga un archivo Excel para usar sus datos en la tabla lateral."""
+    def cargar_excel_tabla(self, ruta: str, hoja: str = None,
+                           campo_enlace_shp: str = None,
+                           campo_enlace_excel: str = None,
+                           columnas_activas: list = None):
+        """Carga un archivo Excel para usar sus datos en la tabla lateral.
+
+        Args:
+            ruta: Ruta al archivo .xlsx
+            hoja: Nombre de la hoja a leer
+            campo_enlace_shp: Campo del shapefile para hacer el enlace
+            campo_enlace_excel: Campo del Excel para hacer el enlace
+            columnas_activas: Lista de columnas del Excel a incluir
+        """
         import pandas as pd
         kwargs = {}
         if hoja:
             kwargs["sheet_name"] = hoja
         self._df_excel = pd.read_excel(ruta, engine="openpyxl", **kwargs)
+        self._campo_enlace_shp = campo_enlace_shp or ""
+        self._campo_enlace_excel = campo_enlace_excel or ""
+        self._columnas_excel = columnas_activas  # None = todas
 
     def limpiar_excel_tabla(self):
         """Elimina los datos Excel cargados (vuelve a usar shapefile)."""
         self._df_excel = None
+        self._campo_enlace_shp = ""
+        self._campo_enlace_excel = ""
+        self._columnas_excel = None
 
     def _obtener_filas_tabla(self, rows_shp, idx_fila=None):
-        """Devuelve las filas para la tabla: de Excel si hay, o del shapefile."""
-        if self._df_excel is not None:
-            if idx_fila is not None and idx_fila < len(self._df_excel):
-                return [self._df_excel.iloc[idx_fila]]
-            # Si hay más filas en Excel, devolver todas
-            return [self._df_excel.iloc[i] for i in range(len(self._df_excel))]
-        return rows_shp
+        """Devuelve las filas para la tabla: de Excel si hay, o del shapefile.
+
+        Si hay campo de enlace configurado, busca en el Excel la fila cuyo
+        valor en campo_enlace_excel coincida con el valor de campo_enlace_shp
+        de la fila del shapefile. Solo devuelve las columnas seleccionadas.
+        """
+        if self._df_excel is None:
+            return rows_shp
+
+        df = self._df_excel
+        # Filtrar columnas seleccionadas
+        if self._columnas_excel:
+            # Siempre incluir el campo enlace para poder buscar
+            cols = list(self._columnas_excel)
+            if (self._campo_enlace_excel
+                    and self._campo_enlace_excel not in cols):
+                cols.insert(0, self._campo_enlace_excel)
+            cols_validas = [c for c in cols if c in df.columns]
+            df = df[cols_validas]
+
+        # Sin campo enlace: fallback por índice
+        if not self._campo_enlace_shp or not self._campo_enlace_excel:
+            if idx_fila is not None and idx_fila < len(df):
+                return [df.iloc[idx_fila]]
+            return [df.iloc[i] for i in range(len(df))]
+
+        # Buscar por campo enlace
+        resultado = []
+        for row_shp in rows_shp:
+            valor_shp = row_shp.get(self._campo_enlace_shp, None)
+            if valor_shp is None:
+                continue
+            # Buscar coincidencia en el Excel
+            mask = df[self._campo_enlace_excel].astype(str) == str(valor_shp)
+            coincidencias = df[mask]
+            for _, fila_excel in coincidencias.iterrows():
+                resultado.append(fila_excel)
+
+        return resultado if resultado else rows_shp
 
     # ── Carga de capas ───────────────────────────────────────────────────
 

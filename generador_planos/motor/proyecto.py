@@ -60,6 +60,9 @@ class Proyecto:
         self.origen_datos_tabla = "Shapefile (capa cargada)"
         self.ruta_excel_tabla = ""
         self.hoja_excel_tabla = ""
+        self.campo_enlace_shp = ""
+        self.campo_enlace_excel = ""
+        self.columnas_excel_activas = []
 
         # Cajetín
         self.cajetin = {
@@ -127,6 +130,9 @@ class Proyecto:
             "origen_datos_tabla": self.origen_datos_tabla,
             "ruta_excel_tabla": self.ruta_excel_tabla,
             "hoja_excel_tabla": self.hoja_excel_tabla,
+            "campo_enlace_shp": self.campo_enlace_shp,
+            "campo_enlace_excel": self.campo_enlace_excel,
+            "columnas_excel_activas": self.columnas_excel_activas,
         }
 
     @classmethod
@@ -144,6 +150,7 @@ class Proyecto:
             "multipagina", "incluir_portada",
             "cajetin", "plantilla", "capas_extra", "simbologia",
             "origen_datos_tabla", "ruta_excel_tabla", "hoja_excel_tabla",
+            "campo_enlace_shp", "campo_enlace_excel", "columnas_excel_activas",
         ]:
             if key in d:
                 setattr(p, key, d[key])
