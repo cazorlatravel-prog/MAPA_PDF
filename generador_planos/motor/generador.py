@@ -239,9 +239,8 @@ class GeneradorPlanos:
                         )
                 else:
                     # Color fijo
-                    green = int(34 * alpha)
                     montes_clip.plot(
-                        ax=ax_map, facecolor=f"#{green:02x}9922",
+                        ax=ax_map, facecolor="#229922",
                         edgecolor="#1a5c10", linewidth=0.8, alpha=alpha,
                         zorder=1,
                     )
