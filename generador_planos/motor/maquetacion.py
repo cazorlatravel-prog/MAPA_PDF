@@ -1334,19 +1334,18 @@ class MaquetadorPlano:
         C_LABEL = "#007932"           # Color etiquetas (verde)
         LW = 0.8  # linewidth de celdas
 
-        # ── Alturas de cada fila (de arriba a abajo) ──
-        # Compactas: ajustadas al contenido de texto
-        org_h = 0.18
-        proy_h = 0.14
-        monte_h = 0.14
-        aut_h = 0.16
+        # ── Alturas de cada fila (de arriba a abajo, compactas) ──
+        org_h = 0.12
+        proy_h = 0.10
+        monte_h = 0.12
+        aut_h = 0.14
         total_h = org_h + proy_h + monte_h + aut_h
 
-        # Posiciones calculadas desde la parte inferior (y=0)
-        aut_y = 0.0
-        monte_y = aut_y + aut_h
-        proy_y = monte_y + monte_h
-        org_y = proy_y + proy_h
+        # Posiciones calculadas desde arriba (y=1) hacia abajo
+        org_y = 1.0 - org_h
+        proy_y = org_y - proy_h
+        monte_y = proy_y - monte_h
+        aut_y = monte_y - aut_h
 
         # ═══════════════════════════════════════════════════════════════
         # 1. BARRA ORGANIZACIÓN (fondo VERDE institucional, texto BLANCO)
@@ -1384,19 +1383,19 @@ class MaquetadorPlano:
             if len(lineas) >= 2:
                 linea1 = lineas[0].upper()
                 linea2 = lineas[1]
-                fsz1 = 6.5 if len(linea1) <= 30 else (5.5 if len(linea1) <= 45 else 4.8)
-                ax.text(x_centro, org_y + org_h * 0.60,
+                fsz1 = 7.5 if len(linea1) <= 30 else (6.5 if len(linea1) <= 45 else 5.5)
+                ax.text(x_centro, org_y + org_h * 0.62,
                         linea1, ha="center", va="center",
                         fontsize=fsz1, fontweight="bold", color="white", zorder=3)
-                ax.text(x_centro, org_y + org_h * 0.30,
+                ax.text(x_centro, org_y + org_h * 0.28,
                         linea2, ha="center", va="center",
-                        fontsize=5.0, fontweight="bold", color="#E0F0E0", zorder=3)
+                        fontsize=6.0, fontweight="bold", color="#E0F0E0", zorder=3)
             else:
                 texto = org.upper()
                 if len(texto) <= 30:
                     ax.text(x_centro, org_y + org_h * 0.50, texto,
                             ha="center", va="center",
-                            fontsize=5, fontweight="bold", color="white", zorder=3)
+                            fontsize=6.5, fontweight="bold", color="white", zorder=3)
                 else:
                     mid = len(texto) // 2
                     pos = texto.rfind(" ", 0, mid + 8)
@@ -1408,7 +1407,7 @@ class MaquetadorPlano:
                     else:
                         linea1 = texto
                         linea2 = ""
-                    fsz = 5 if len(linea1) <= 35 else (4.2 if len(linea1) <= 45 else 3.8)
+                    fsz = 6.0 if len(linea1) <= 35 else (5.0 if len(linea1) <= 45 else 4.5)
                     ax.text(x_centro, org_y + org_h * 0.65,
                             linea1, ha="center", va="center",
                             fontsize=fsz, fontweight="bold", color="white", zorder=3)
