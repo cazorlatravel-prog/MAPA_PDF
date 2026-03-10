@@ -179,7 +179,7 @@ class MaquetadorPlano:
             1, 2, figure=self.fig,
             left=izq, right=1 - der,
             top=gs_top, bottom=inf,
-            width_ratios=[0.83, 0.17],
+            width_ratios=[0.78, 0.22],
             hspace=0.02, wspace=0.005,
         )
 
@@ -190,7 +190,7 @@ class MaquetadorPlano:
         # Minimapa (pequeño) | Tabla datos (compacta) | Leyenda | Cajetín
         gs_lateral = gridspec.GridSpecFromSubplotSpec(
             4, 1, subplot_spec=gs[0, 1],
-            height_ratios=[0.22, 0.13, 0.15, 0.50],
+            height_ratios=[0.27, 0.08, 0.35, 0.30],
             hspace=0.01,
         )
 
@@ -208,8 +208,8 @@ class MaquetadorPlano:
         ancho_util = self.fmt_mm[0] - MARGENES_MM["izq"] - MARGENES_MM["der"]
         alto_util = self.fmt_mm[1] - MARGENES_MM["sup"] - MARGENES_MM["inf"]
         if self.es_lateral:
-            # Plantilla 2: mapa ocupa 83% del ancho y toda la altura
-            ancho_mm = ancho_util * 0.83
+            # Plantilla 2: mapa ocupa 78% del ancho y toda la altura
+            ancho_mm = ancho_util * 0.78
             alto_mm = (alto_util - _CABECERA_MM)
         else:
             ancho_mm = ancho_util * RATIO_MAPA_ANCHO
@@ -1330,10 +1330,10 @@ class MaquetadorPlano:
 
         # ── Alturas de cada fila (de arriba a abajo) ──
         # Compactas: ajustadas al contenido de texto
-        org_h = 0.12
-        proy_h = 0.08
-        monte_h = 0.08
-        aut_h = 0.10
+        org_h = 0.18
+        proy_h = 0.14
+        monte_h = 0.14
+        aut_h = 0.16
         total_h = org_h + proy_h + monte_h + aut_h
 
         # Posiciones calculadas desde la parte inferior (y=0)
@@ -1508,7 +1508,7 @@ class MaquetadorPlano:
         # Escalar fuentes del Nº de plano según ancho real del panel
         # Panel lateral = 20% del ancho útil del papel
         _ancho_mm = self.fmt_mm[0]
-        _panel_mm = _ancho_mm * 0.20  # ancho físico del panel lateral
+        _panel_mm = _ancho_mm * 0.22  # ancho físico del panel lateral
         _factor = _panel_mm / 60.0  # base: ~60mm (A3 × 20%)
         _factor = min(_factor, 1.5)  # limitar para formatos grandes
         fsz_label_np = 3.5 * _factor
