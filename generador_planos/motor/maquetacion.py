@@ -1319,11 +1319,11 @@ class MaquetadorPlano:
 
         # ── Alturas de cada fila (de arriba a abajo) ──
         # Compactas: ajustadas al contenido de texto
-        org_h = 0.10
-        proy_h = 0.12
-        monte_h = 0.12
-        aut_h = 0.12
-        total_h = org_h + proy_h + monte_h + aut_h  # 0.46
+        org_h = 0.07
+        proy_h = 0.08
+        monte_h = 0.08
+        aut_h = 0.10
+        total_h = org_h + proy_h + monte_h + aut_h
 
         # Posiciones calculadas desde la parte inferior (y=0)
         aut_y = 0.0
