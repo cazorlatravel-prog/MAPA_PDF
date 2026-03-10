@@ -387,10 +387,10 @@ class MaquetadorPlano:
 
             # Centrada horizontalmente, desplazada encima de la geometría
             txt = self.ax_map.annotate(
-                texto, xy=(cx, cy + offset_y), fontsize=4.5, fontweight="bold",
+                texto, xy=(cx, cy + offset_y), fontsize=5.5, fontweight="bold",
                 color="#1A1A2E", ha="center", va="bottom", zorder=8,
-                bbox=dict(boxstyle="round,pad=0.15", facecolor="white",
-                          edgecolor="#666666", linewidth=0.3, alpha=0.85),
+                bbox=dict(boxstyle="round,pad=0.2", facecolor="white",
+                          edgecolor="#2C3E50", linewidth=0.5, alpha=0.90),
             )
             textos_anotados.append(txt)
 
