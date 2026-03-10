@@ -746,10 +746,9 @@ class MaquetadorPlano:
         for w in col_widths:
             col_x.append(col_x[-1] + w)
 
-        # La tabla se ancla arriba del axes (y=1.0 hacia abajo)
+        # Calcular altura de fila para que la tabla ocupe todo el axes
         total_rows = n_rows_data + 1  # +1 cabecera
-        # Altura fija por fila para mantener espaciado uniforme siempre
-        row_h = 0.06
+        row_h = 1.0 / total_rows
 
         lw_h = 0.8   # linewidth cabecera
         lw_d = 0.4   # linewidth datos (más fino)
