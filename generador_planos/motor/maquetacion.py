@@ -748,9 +748,8 @@ class MaquetadorPlano:
 
         # La tabla se ancla arriba del axes (y=1.0 hacia abajo)
         total_rows = n_rows_data + 1  # +1 cabecera
-        # Altura máxima por fila: limitar para evitar celdas con mucho blanco
-        max_row_h = 0.06
-        row_h = min(1.0 / max(total_rows, 1), max_row_h)
+        # Altura fija por fila para mantener espaciado uniforme siempre
+        row_h = 0.06
 
         lw_h = 0.8   # linewidth cabecera
         lw_d = 0.4   # linewidth datos (más fino)
