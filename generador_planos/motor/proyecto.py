@@ -56,6 +56,11 @@ class Proyecto:
         self.multipagina = False
         self.incluir_portada = False
 
+        # Origen datos tabla
+        self.origen_datos_tabla = "Shapefile (capa cargada)"
+        self.ruta_excel_tabla = ""
+        self.hoja_excel_tabla = ""
+
         # Cajetín
         self.cajetin = {
             "autor": "",
@@ -119,6 +124,9 @@ class Proyecto:
             "plantilla": self.plantilla,
             "capas_extra": self.capas_extra,
             "simbologia": self.simbologia,
+            "origen_datos_tabla": self.origen_datos_tabla,
+            "ruta_excel_tabla": self.ruta_excel_tabla,
+            "hoja_excel_tabla": self.hoja_excel_tabla,
         }
 
     @classmethod
@@ -135,6 +143,7 @@ class Proyecto:
             "modo_gen", "rango_desde", "rango_hasta", "campo_agrupacion",
             "multipagina", "incluir_portada",
             "cajetin", "plantilla", "capas_extra", "simbologia",
+            "origen_datos_tabla", "ruta_excel_tabla", "hoja_excel_tabla",
         ]:
             if key in d:
                 setattr(p, key, d[key])

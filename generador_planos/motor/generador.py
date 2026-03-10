@@ -115,6 +115,7 @@ class GeneradorPlanos:
         self.dpi_guardado = None  # None = same as dpi_figura
         self.ruta_raster_general = ""       # Ráster local para fondo de mapa
         self.ruta_raster_localizacion = ""  # Ráster local para mapa de localización
+        self._df_excel = None               # DataFrame con datos de Excel para tabla
         self._cancelar = threading.Event()
 
     def cancelar_generacion(self):
@@ -133,6 +134,27 @@ class GeneradorPlanos:
 
     def set_plantilla(self, plantilla: dict):
         self._plantilla = plantilla or {}
+
+    def cargar_excel_tabla(self, ruta: str, hoja: str = None):
+        """Carga un archivo Excel para usar sus datos en la tabla lateral."""
+        import pandas as pd
+        kwargs = {}
+        if hoja:
+            kwargs["sheet_name"] = hoja
+        self._df_excel = pd.read_excel(ruta, engine="openpyxl", **kwargs)
+
+    def limpiar_excel_tabla(self):
+        """Elimina los datos Excel cargados (vuelve a usar shapefile)."""
+        self._df_excel = None
+
+    def _obtener_filas_tabla(self, rows_shp, idx_fila=None):
+        """Devuelve las filas para la tabla: de Excel si hay, o del shapefile."""
+        if self._df_excel is not None:
+            if idx_fila is not None and idx_fila < len(self._df_excel):
+                return [self._df_excel.iloc[idx_fila]]
+            # Si hay más filas en Excel, devolver todas
+            return [self._df_excel.iloc[i] for i in range(len(self._df_excel))]
+        return rows_shp
 
     # ── Carga de capas ───────────────────────────────────────────────────
 
@@ -537,10 +559,13 @@ class GeneradorPlanos:
         # Leyenda y paneles según plantilla
         cx, cy = geom.centroid.x, geom.centroid.y
 
+        # Filas para tabla/panel: Excel si está cargado, si no shapefile
+        _filas_tabla = self._obtener_filas_tabla([row], idx_fila=idx_fila)
+
         if maq.es_lateral:
             # Plantilla 2: localización + tabla datos + leyenda + cajetín
             maq.dibujar_mapa_posicion(cx, cy, ruta_raster_loc=self.ruta_raster_localizacion)
-            maq.dibujar_tabla_infra([row], campos_visibles,
+            maq.dibujar_tabla_infra(_filas_tabla, campos_visibles,
                                      campo_mapeo=self._campo_mapeo)
             items_inf, items_mon = self._construir_items_leyenda_separados(
                 gdf_sel, color_infra, xmin, xmax, ymin, ymax)
@@ -554,7 +579,8 @@ class GeneradorPlanos:
             items_ley = self._construir_items_leyenda(gdf_sel, color_infra,
                                                        xmin, xmax, ymin, ymax)
             maq.dibujar_leyenda(items_ley)
-            maq.dibujar_panel_atributos(row, campos_visibles,
+            _fila_panel = _filas_tabla[0] if _filas_tabla else row
+            maq.dibujar_panel_atributos(_fila_panel, campos_visibles,
                                          campo_mapeo=self._campo_mapeo,
                                          campo_encabezado=campo_encabezado)
             maq.dibujar_mapa_posicion(cx, cy, ruta_raster_loc=self.ruta_raster_localizacion)
@@ -648,9 +674,12 @@ class GeneradorPlanos:
         # Leyenda y paneles según plantilla
         cx, cy = geom_union.centroid.x, geom_union.centroid.y
 
+        # Filas para tabla/panel: Excel si está cargado, si no shapefile
+        _filas_tabla = self._obtener_filas_tabla(rows)
+
         if maq.es_lateral:
             maq.dibujar_mapa_posicion(cx, cy, ruta_raster_loc=self.ruta_raster_localizacion)
-            maq.dibujar_tabla_infra(rows, campos_visibles,
+            maq.dibujar_tabla_infra(_filas_tabla, campos_visibles,
                                      campo_mapeo=self._campo_mapeo)
             items_inf, items_mon = self._construir_items_leyenda_separados(
                 gdf_grupo, color_infra, xmin, xmax, ymin, ymax)
@@ -665,7 +694,7 @@ class GeneradorPlanos:
                                                        xmin, xmax, ymin, ymax)
             stats = _calcular_stats_grupo(gdf_grupo)
             maq.dibujar_leyenda(items_ley, stats_resumen=stats)
-            maq.dibujar_panel_atributos_multi(rows, campos_visibles,
+            maq.dibujar_panel_atributos_multi(_filas_tabla, campos_visibles,
                                                campo_mapeo=self._campo_mapeo,
                                                campo_encabezado=campo_encabezado)
             maq.dibujar_mapa_posicion(cx, cy, ruta_raster_loc=self.ruta_raster_localizacion)
@@ -891,9 +920,12 @@ class GeneradorPlanos:
                     # Leyenda y paneles según plantilla
                     cx, cy = geom.centroid.x, geom.centroid.y
 
+                    # Filas para tabla/panel: Excel si está cargado, si no shapefile
+                    _filas_tabla = self._obtener_filas_tabla([row], idx_fila=idx)
+
                     if maq.es_lateral:
                         maq.dibujar_mapa_posicion(cx, cy, ruta_raster_loc=self.ruta_raster_localizacion)
-                        maq.dibujar_tabla_infra([row], campos,
+                        maq.dibujar_tabla_infra(_filas_tabla, campos,
                                                  campo_mapeo=self._campo_mapeo)
                         items_inf, items_mon = self._construir_items_leyenda_separados(
                             gdf_sel, color_infra, xmin, xmax, ymin, ymax)
@@ -905,7 +937,8 @@ class GeneradorPlanos:
                     else:
                         items_ley = self._construir_items_leyenda(gdf_sel, color_infra)
                         maq.dibujar_leyenda(items_ley)
-                        maq.dibujar_panel_atributos(row, campos,
+                        _fila_panel = _filas_tabla[0] if _filas_tabla else row
+                        maq.dibujar_panel_atributos(_fila_panel, campos,
                                                      campo_mapeo=self._campo_mapeo,
                                                      campo_encabezado=campo_encabezado)
                         maq.dibujar_mapa_posicion(cx, cy, ruta_raster_loc=self.ruta_raster_localizacion)
