@@ -31,6 +31,22 @@ from .proyecto import cargar_lotes_csv
 CAMPOS_ATRIBUTOS = list(ETIQUETAS_CAMPOS.keys())
 
 
+def _limpiar_tipos_mixtos(gdf):
+    """Convierte columnas con tipos mixtos (str + float) a str para evitar TypeError."""
+    import numpy as np
+    for col in gdf.columns:
+        if col == "geometry":
+            continue
+        if gdf[col].dtype == object:
+            # Columna con tipo 'object' puede tener mezcla de str, float, int, None
+            # Intentar convertir a numérico; si no se puede, forzar a str
+            try:
+                gdf[col] = gdf[col].where(gdf[col].isna(), gdf[col].astype(str))
+            except Exception:
+                pass
+    return gdf
+
+
 def _auto_calcular_campos(gdf):
     """Calcula longitud/superficie automáticamente si no existen en el GDF."""
     if "Longitud" not in gdf.columns:
@@ -128,6 +144,9 @@ class GeneradorPlanos:
                 gdf = gdf.set_crs("EPSG:4326")
             gdf = gdf.to_crs("EPSG:25830")
 
+            # Limpiar columnas con tipos mixtos (previene str<float TypeError)
+            gdf = _limpiar_tipos_mixtos(gdf)
+
             # Auto-calcular longitud/superficie si no existen
             gdf = _auto_calcular_campos(gdf)
 
@@ -159,6 +178,8 @@ class GeneradorPlanos:
             if gdf.crs is None:
                 gdf = gdf.set_crs("EPSG:4326")
             gdf = gdf.to_crs("EPSG:25830")
+            # Limpiar columnas con tipos mixtos
+            gdf = _limpiar_tipos_mixtos(gdf)
             # Construir índice espacial para consultas .cx[] rápidas
             gdf.sindex
             self.gdf_montes = gdf
@@ -242,7 +263,7 @@ class GeneradorPlanos:
                     # Color fijo
                     montes_clip.plot(
                         ax=ax_map, facecolor="#229922",
-                        edgecolor="#1a5c10", linewidth=0.8, alpha=alpha,
+                        edgecolor="#1a5c10", linewidth=0.8, alpha=float(alpha),
                         zorder=1,
                     )
 
