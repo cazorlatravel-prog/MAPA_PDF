@@ -190,7 +190,7 @@ class MaquetadorPlano:
         # Minimapa (pequeño) | Tabla datos (compacta) | Leyenda | Cajetín
         gs_lateral = gridspec.GridSpecFromSubplotSpec(
             4, 1, subplot_spec=gs[0, 1],
-            height_ratios=[0.27, 0.08, 0.35, 0.30],
+            height_ratios=[0.27, 0.08, 0.25, 0.40],
             hspace=0.01,
         )
 
@@ -1276,11 +1276,17 @@ class MaquetadorPlano:
                     fontsize=2.8, color="#3A3A4A", transform=ax.transAxes, zorder=3)
 
         # ── Distribuir items compactos, pegados al título ──
-        content_top = y_top - title_h - 0.02
-        slot_h = 0.07  # altura fija compacta por fila
+        n_rows_max = max(mid, n_mon, 1)
+        # Calcular slot_h para ocupar todo el espacio disponible sin huecos
+        content_top = y_top - title_h - 0.01
+        content_bot = y_bot + 0.01
+        avail = content_top - content_bot
+        # 1 slot para subtítulo + n_rows para items
+        total_slots = 1 + n_rows_max
+        slot_h = avail / max(total_slots, 1)
 
-        sub_y = content_top - slot_h * 0.4
-        first_y = sub_y - slot_h * 0.85
+        sub_y = content_top - slot_h * 0.5
+        first_y = sub_y - slot_h
 
         # ── Sección izquierda: INFRAESTRUCTURA (2 sub-columnas) ──
         ax.text(0.02, sub_y, "INFRAESTRUCTURA", ha="left", va="center",
@@ -1394,13 +1400,13 @@ class MaquetadorPlano:
             if len(lineas) >= 2:
                 linea1 = lineas[0].upper()
                 linea2 = lineas[1]
-                fsz1 = 5 if len(linea1) <= 30 else (4.5 if len(linea1) <= 45 else 3.8)
-                ax.text(x_centro, org_y + org_h * 0.65,
+                fsz1 = 6.5 if len(linea1) <= 30 else (5.5 if len(linea1) <= 45 else 4.8)
+                ax.text(x_centro, org_y + org_h * 0.60,
                         linea1, ha="center", va="center",
                         fontsize=fsz1, fontweight="bold", color="white", zorder=3)
-                ax.text(x_centro, org_y + org_h * 0.28,
+                ax.text(x_centro, org_y + org_h * 0.30,
                         linea2, ha="center", va="center",
-                        fontsize=3.2, color="#E0F0E0", zorder=3)
+                        fontsize=5.0, fontweight="bold", color="#E0F0E0", zorder=3)
             else:
                 texto = org.upper()
                 if len(texto) <= 30:
