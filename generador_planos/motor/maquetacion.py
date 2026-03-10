@@ -267,7 +267,8 @@ class MaquetadorPlano:
         ax.set_xticklabels([self._formato_coord(x) for x in xs_filt],
                            fontsize=4.5, color="#2C3E50", rotation=0, ha="center")
         ax.set_yticklabels([self._formato_coord(y) for y in ys_filt],
-                           fontsize=4.5, color="#2C3E50")
+                           fontsize=4.5, color="#2C3E50", rotation=90,
+                           va="center")
 
         # Etiquetas en los cuatro lados del mapa, fuera del marco
         ax.tick_params(which="major", length=4, width=0.6, color="#2C3E50",
