@@ -1341,11 +1341,12 @@ class MaquetadorPlano:
         aut_h = 0.14
         total_h = org_h + proy_h + monte_h + aut_h
 
-        # Posiciones calculadas desde arriba (y=1) hacia abajo
-        org_y = 1.0 - org_h
-        proy_y = org_y - proy_h
-        monte_y = proy_y - monte_h
-        aut_y = monte_y - aut_h
+        # Posiciones calculadas desde abajo (y=0) hacia arriba,
+        # para que el cajetín quede pegado al borde inferior del panel
+        aut_y = 0.0
+        monte_y = aut_y + aut_h
+        proy_y = monte_y + monte_h
+        org_y = proy_y + proy_h
 
         # ═══════════════════════════════════════════════════════════════
         # 1. BARRA ORGANIZACIÓN (fondo VERDE institucional, texto BLANCO)
