@@ -753,8 +753,8 @@ class MaquetadorPlano:
 
         lw_h = 0.8   # linewidth cabecera
         lw_d = 0.4   # linewidth datos (más fino)
-        fsz_h = 2.5  # fontsize cabecera
-        fsz_d = 2.0  # fontsize datos
+        fsz_h = 4.0  # fontsize cabecera
+        fsz_d = 3.5  # fontsize datos
 
         # ── Cabecera (fondo verde institucional, texto blanco) ──
         for ci, campo in enumerate(campos):
