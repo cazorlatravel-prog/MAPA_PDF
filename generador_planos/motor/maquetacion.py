@@ -867,7 +867,7 @@ class MaquetadorPlano:
             rh = ylims[1] - ylims[0]
             ax.add_patch(Rectangle(
                 (xlims[0], ylims[0]), rw, rh,
-                fill=False, edgecolor="#E74C3C", linewidth=1.0, zorder=7,
+                fill=False, edgecolor="#E74C3C", linewidth=0.7, zorder=7,
                 linestyle="--"))
         except Exception:
             pass
@@ -1238,11 +1238,11 @@ class MaquetadorPlano:
             label, color, geom_type, linestyle, marker, facecolor = item
             if "point" in geom_type:
                 ax.plot((x_sym0 + x_sym1) / 2, y, marker=marker or "o",
-                        color=color, markersize=3.5, markeredgecolor="white",
+                        color=color, markersize=2.8, markeredgecolor="white",
                         markeredgewidth=0.2, transform=ax.transAxes, zorder=3)
             elif "line" in geom_type or "string" in geom_type:
                 ax.plot([x_sym0, x_sym1], [y, y], color=color,
-                        linewidth=2.0, linestyle=linestyle or "-",
+                        linewidth=1.5, linestyle=linestyle or "-",
                         transform=ax.transAxes, zorder=3, solid_capstyle="round")
             else:
                 rect_w = x_sym1 - x_sym0
@@ -1252,8 +1252,8 @@ class MaquetadorPlano:
                     facecolor=facecolor or (color + "55"),
                     edgecolor=color, linewidth=0.6,
                     transform=ax.transAxes, zorder=3))
-            ax.text(x_txt, y, str(label)[:18], ha="left", va="center",
-                    fontsize=3.2, color="#3A3A4A", transform=ax.transAxes, zorder=3)
+            ax.text(x_txt, y, str(label)[:16], ha="left", va="center",
+                    fontsize=3.0, color="#3A3A4A", transform=ax.transAxes, zorder=3)
 
         # ── Posición Y del subtítulo y primer item ──
         sub_y = t_y - 0.09   # subtítulos de sección
