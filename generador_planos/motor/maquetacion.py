@@ -764,10 +764,16 @@ class MaquetadorPlano:
                                     facecolor=C_HDR_BG, edgecolor=C_BORDER,
                                     linewidth=lw_h, zorder=1))
             etiq = _etiqueta_campo(campo)
-            if len(etiq) > 12:
-                etiq = etiq[:11] + "."
+            # Truncar según ancho relativo de la columna
+            max_chars = max(3, int(cw * 80))  # ~80 chars caben en ancho=1
+            if len(etiq) > max_chars:
+                etiq = etiq[:max_chars - 1] + "."
+            # Reducir fuente si el texto aún es largo respecto al ancho
+            _fsz = fsz_h
+            if len(etiq) > max_chars * 0.7:
+                _fsz = max(2.5, fsz_h * 0.75)
             ax.text(x0 + cw / 2, 1 - row_h / 2, etiq.upper(),
-                    ha="center", va="center", fontsize=fsz_h,
+                    ha="center", va="center", fontsize=_fsz,
                     fontweight="bold", color=C_HDR_TXT, zorder=2)
 
         # ── Filas de datos (zebra: alternas blanco / verde tenue) ──
@@ -782,10 +788,14 @@ class MaquetadorPlano:
                                         linewidth=lw_d, zorder=1))
                 campo_real = _resolver(campo)
                 valor = _fmt_valor(r.get(campo_real, None))
-                if len(valor) > 20:
-                    valor = valor[:19] + "\u2026"
+                max_chars_d = max(3, int(cw * 80))
+                if len(valor) > max_chars_d:
+                    valor = valor[:max_chars_d - 1] + "\u2026"
+                _fsz_d = fsz_d
+                if len(valor) > max_chars_d * 0.7:
+                    _fsz_d = max(2.2, fsz_d * 0.75)
                 ax.text(x0 + cw / 2, y + row_h / 2, valor,
-                        ha="center", va="center", fontsize=fsz_d,
+                        ha="center", va="center", fontsize=_fsz_d,
                         color=C_TXT_LIGHT, zorder=2)
 
     # ── Mapa de localización (panel inferior derecho) ──────────────────
