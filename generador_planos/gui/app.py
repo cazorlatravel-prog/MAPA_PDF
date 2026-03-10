@@ -312,6 +312,15 @@ class App(tk.Tk):
         # Rutas de ráster local
         self.motor.ruta_raster_general = self.panel_config.ruta_raster_general
         self.motor.ruta_raster_localizacion = self.panel_config.ruta_raster_localizacion
+        self.motor.ruta_capa_localizacion = self.panel_config.ruta_capa_localizacion
+        # WMS/WFS personalizados
+        self.motor.wms_custom_general = self.panel_config.wms_custom_general
+        self.motor.wfs_custom_general = self.panel_config.wfs_custom_general
+        self.motor.wms_custom_localizacion = self.panel_config.wms_custom_localizacion
+        self.motor.wfs_custom_localizacion = self.panel_config.wfs_custom_localizacion
+        # Escala y proveedor localización
+        self.motor.escala_localizacion = self.panel_config.escala_localizacion
+        self.motor.prov_localizacion = self.panel_config._prov_localizacion.get()
         # Datos de tabla desde Excel
         if self.panel_config.usa_excel and self.panel_config.ruta_excel:
             try:
@@ -361,6 +370,12 @@ class App(tk.Tk):
         p.ruta_raster_general = self.panel_config.ruta_raster_general
         p.ruta_raster_localizacion = self.panel_config.ruta_raster_localizacion
         p.prov_localizacion = self.panel_config._prov_localizacion.get()
+        p.escala_localizacion = self.panel_config.escala_localizacion
+        p.ruta_capa_localizacion = self.panel_config.ruta_capa_localizacion
+        p.wms_custom_general = self.panel_config.wms_custom_general
+        p.wfs_custom_general = self.panel_config.wfs_custom_general
+        p.wms_custom_localizacion = self.panel_config.wms_custom_localizacion
+        p.wfs_custom_localizacion = self.panel_config.wfs_custom_localizacion
         p.escala_manual = self.panel_config.escala_manual
         p.transparencia_montes = self.panel_capas.transparencia.get()
         p.transparencia_infra = self.panel_capas.transparencia_infra.get()
@@ -429,7 +444,38 @@ class App(tk.Tk):
                     text=os.path.basename(p.ruta_raster_localizacion))
             if hasattr(p, "prov_localizacion") and p.prov_localizacion:
                 self.panel_config._prov_localizacion.set(p.prov_localizacion)
-            # Mostrar/ocultar frames de ráster según proveedor
+            # Escala localización
+            if hasattr(p, "escala_localizacion") and p.escala_localizacion:
+                self.panel_config._escala_localizacion.set(
+                    f"{p.escala_localizacion:,}")
+            # Capa propia localización
+            if hasattr(p, "ruta_capa_localizacion") and p.ruta_capa_localizacion:
+                self.panel_config._ruta_capa_loc.set(p.ruta_capa_localizacion)
+                self.panel_config._lbl_capa_loc.configure(
+                    text=os.path.basename(p.ruta_capa_localizacion))
+            # WMS/WFS personalizados mapa general
+            if hasattr(p, "wms_custom_general") and p.wms_custom_general:
+                self.panel_config._wms_url.set(p.wms_custom_general.get("url", ""))
+                self.panel_config._wms_capa.set(p.wms_custom_general.get("capa", ""))
+                self.panel_config._wms_formato.set(
+                    p.wms_custom_general.get("formato", "image/png"))
+            if hasattr(p, "wfs_custom_general") and p.wfs_custom_general:
+                self.panel_config._wfs_url.set(p.wfs_custom_general.get("url", ""))
+                self.panel_config._wfs_capa.set(p.wfs_custom_general.get("capa", ""))
+            # WMS/WFS personalizados localización
+            if hasattr(p, "wms_custom_localizacion") and p.wms_custom_localizacion:
+                self.panel_config._wms_loc_url.set(
+                    p.wms_custom_localizacion.get("url", ""))
+                self.panel_config._wms_loc_capa.set(
+                    p.wms_custom_localizacion.get("capa", ""))
+                self.panel_config._wms_loc_formato.set(
+                    p.wms_custom_localizacion.get("formato", "image/png"))
+            if hasattr(p, "wfs_custom_localizacion") and p.wfs_custom_localizacion:
+                self.panel_config._wfs_loc_url.set(
+                    p.wfs_custom_localizacion.get("url", ""))
+                self.panel_config._wfs_loc_capa.set(
+                    p.wfs_custom_localizacion.get("capa", ""))
+            # Mostrar/ocultar frames según proveedor
             self.panel_config._on_proveedor_changed()
             self.panel_config._on_prov_loc_changed()
             self.panel_config.salida.set(p.carpeta_salida)

@@ -352,6 +352,115 @@ def añadir_fondo_raster_local(ax, ruta_raster: str, xmin, xmax, ymin, ymax):
     return True
 
 
+def descargar_wfs(url: str, capa: str, xmin, ymin, xmax, ymax,
+                  crs_epsg: int = 25830, max_features: int = 50000):
+    """Descarga features de un servicio WFS y devuelve un GeoDataFrame.
+
+    Soporta WFS 2.0.0 con filtro BBOX.
+    """
+    import geopandas as gpd
+
+    # Construir petición GetFeature con BBOX
+    params = {
+        "SERVICE": "WFS",
+        "REQUEST": "GetFeature",
+        "VERSION": "2.0.0",
+        "TYPENAMES": capa,
+        "SRSNAME": f"EPSG:{crs_epsg}",
+        "BBOX": f"{xmin},{ymin},{xmax},{ymax},EPSG:{crs_epsg}",
+        "OUTPUTFORMAT": "application/json",
+        "COUNT": str(max_features),
+    }
+    # Construir URL limpiamente
+    base_url = url.split("?")[0]
+    resp = requests.get(base_url, params=params, timeout=60,
+                        headers={"User-Agent": "GeneradorPlanosForestales/1.0"})
+    resp.raise_for_status()
+
+    gdf = gpd.read_file(io.BytesIO(resp.content), driver="GeoJSON")
+    if gdf.crs is None:
+        gdf = gdf.set_crs(f"EPSG:{crs_epsg}")
+    elif gdf.crs.to_epsg() != crs_epsg:
+        gdf = gdf.to_crs(f"EPSG:{crs_epsg}")
+    return gdf
+
+
+def descargar_wms_custom(ax, url: str, capa: str, xmin, xmax, ymin, ymax,
+                         crs_epsg: int = 25830, formato: str = "image/png"):
+    """Descarga una imagen WMS GetMap de un servicio personalizado del usuario."""
+    extent_x = xmax - xmin
+    extent_y = ymax - ymin
+    aspect = extent_x / max(extent_y, 1)
+
+    height = min(4096, max(512, int(extent_y / 2)))
+    width = min(4096, max(512, int(height * aspect)))
+
+    bbox_str = f"{xmin},{ymin},{xmax},{ymax}"
+    base_url = url.split("?")[0]
+    params = {
+        "SERVICE": "WMS",
+        "REQUEST": "GetMap",
+        "VERSION": "1.3.0",
+        "LAYERS": capa,
+        "STYLES": "",
+        "CRS": f"EPSG:{crs_epsg}",
+        "FORMAT": formato,
+        "WIDTH": str(width),
+        "HEIGHT": str(height),
+        "BBOX": bbox_str,
+    }
+
+    # Caché
+    import urllib.parse
+    full_url = f"{base_url}?{urllib.parse.urlencode(params)}"
+    cache_key = hashlib.md5(full_url.encode()).hexdigest()
+    cache_path = _TILE_CACHE_DIR / f"wms_custom_{cache_key}.png"
+
+    if cache_path.exists():
+        try:
+            img = Image.open(cache_path).copy()
+        except Exception:
+            cache_path.unlink(missing_ok=True)
+            img = None
+    else:
+        img = None
+
+    if img is None:
+        resp = requests.get(base_url, params=params, timeout=60,
+                            headers={"User-Agent": "GeneradorPlanosForestales/1.0"})
+        resp.raise_for_status()
+        img = Image.open(io.BytesIO(resp.content))
+
+        try:
+            _TILE_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+            img.save(cache_path, "PNG")
+        except Exception:
+            pass
+
+    ax.imshow(
+        np.array(img),
+        extent=[xmin, xmax, ymin, ymax],
+        aspect="auto",
+        zorder=0,
+        interpolation="bilinear",
+    )
+    return True
+
+
+def dibujar_wfs_en_eje(ax, gdf, estilo: dict = None):
+    """Dibuja un GeoDataFrame WFS en un eje matplotlib."""
+    if gdf is None or gdf.empty:
+        return
+    est = estilo or {}
+    color = est.get("color", "#3498DB")
+    linewidth = est.get("linewidth", 0.8)
+    alpha = est.get("alpha", 0.6)
+    facecolor = est.get("facecolor", "none")
+
+    gdf.plot(ax=ax, color=facecolor, edgecolor=color,
+             linewidth=linewidth, alpha=alpha, zorder=2)
+
+
 def añadir_fondo_cartografico(ax, gdf_view, proveedor_key: str, xmin=None, xmax=None,
                                ymin=None, ymax=None):
     """Añade capa base de teselas o WMS al eje matplotlib.

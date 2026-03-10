@@ -115,6 +115,13 @@ class GeneradorPlanos:
         self.dpi_guardado = None  # None = same as dpi_figura
         self.ruta_raster_general = ""       # Ráster local para fondo de mapa
         self.ruta_raster_localizacion = ""  # Ráster local para mapa de localización
+        self.ruta_capa_localizacion = ""   # SHP/GDB propio para mapa de localización
+        self.wms_custom_general = {}       # {"url":..., "capa":..., "formato":...}
+        self.wfs_custom_general = {}       # {"url":..., "capa":...}
+        self.wms_custom_localizacion = {}  # {"url":..., "capa":..., "formato":...}
+        self.wfs_custom_localizacion = {}  # {"url":..., "capa":...}
+        self.escala_localizacion = 250_000  # Escala configurable del mapa localización
+        self.prov_localizacion = "WMS IGN (online)"
         self._df_excel = None               # DataFrame con datos de Excel para tabla
         self._campo_enlace_shp = ""
         self._campo_enlace_excel = ""
@@ -294,7 +301,33 @@ class GeneradorPlanos:
     # ── Helpers internos ─────────────────────────────────────────────────
 
     def _añadir_fondo(self, ax_map, gdf_view, proveedor, xmin, xmax, ymin, ymax):
-        """Añade fondo cartográfico usando ráster local o WMS/tiles."""
+        """Añade fondo cartográfico usando ráster local, WMS/WFS propio o tiles."""
+        # WMS propio
+        if self.wms_custom_general:
+            try:
+                from .cartografia import descargar_wms_custom
+                descargar_wms_custom(
+                    ax_map, self.wms_custom_general["url"],
+                    self.wms_custom_general["capa"],
+                    xmin, xmax, ymin, ymax,
+                    formato=self.wms_custom_general.get("formato", "image/png"))
+                return
+            except Exception:
+                pass
+        # WFS propio
+        if self.wfs_custom_general:
+            try:
+                from .cartografia import descargar_wfs, dibujar_wfs_en_eje
+                gdf_wfs = descargar_wfs(
+                    self.wfs_custom_general["url"],
+                    self.wfs_custom_general["capa"],
+                    xmin, ymin, xmax, ymax)
+                ax_map.set_facecolor("#E8E8E0")
+                dibujar_wfs_en_eje(ax_map, gdf_wfs)
+                return
+            except Exception:
+                pass
+        # Ráster local
         if self.ruta_raster_general and os.path.isfile(self.ruta_raster_general):
             try:
                 añadir_fondo_raster_local(ax_map, self.ruta_raster_general,
@@ -619,7 +652,14 @@ class GeneradorPlanos:
 
         if maq.es_lateral:
             # Plantilla 2: localización + tabla datos + leyenda + cajetín
-            maq.dibujar_mapa_posicion(cx, cy, ruta_raster_loc=self.ruta_raster_localizacion)
+            maq.dibujar_mapa_posicion(
+                                cx, cy,
+                                ruta_raster_loc=self.ruta_raster_localizacion,
+                                escala_loc=self.escala_localizacion,
+                                prov_localizacion=self.prov_localizacion,
+                                wms_custom=self.wms_custom_localizacion,
+                                wfs_custom=self.wfs_custom_localizacion,
+                                ruta_capa_loc=self.ruta_capa_localizacion)
             maq.dibujar_tabla_infra(_filas_tabla, campos_visibles,
                                      campo_mapeo=self._campo_mapeo)
             items_inf, items_mon = self._construir_items_leyenda_separados(
@@ -638,7 +678,14 @@ class GeneradorPlanos:
             maq.dibujar_panel_atributos(_fila_panel, campos_visibles,
                                          campo_mapeo=self._campo_mapeo,
                                          campo_encabezado=campo_encabezado)
-            maq.dibujar_mapa_posicion(cx, cy, ruta_raster_loc=self.ruta_raster_localizacion)
+            maq.dibujar_mapa_posicion(
+                                cx, cy,
+                                ruta_raster_loc=self.ruta_raster_localizacion,
+                                escala_loc=self.escala_localizacion,
+                                prov_localizacion=self.prov_localizacion,
+                                wms_custom=self.wms_custom_localizacion,
+                                wfs_custom=self.wfs_custom_localizacion,
+                                ruta_capa_loc=self.ruta_capa_localizacion)
             items_cat = self._construir_items_categoria(gdf_sel,
                                                          xmin, xmax, ymin, ymax)
             maq.dibujar_barra_escala(proveedor, cx_utm=cx, cy_utm=cy,
@@ -733,7 +780,14 @@ class GeneradorPlanos:
         _filas_tabla = self._obtener_filas_tabla(rows)
 
         if maq.es_lateral:
-            maq.dibujar_mapa_posicion(cx, cy, ruta_raster_loc=self.ruta_raster_localizacion)
+            maq.dibujar_mapa_posicion(
+                                cx, cy,
+                                ruta_raster_loc=self.ruta_raster_localizacion,
+                                escala_loc=self.escala_localizacion,
+                                prov_localizacion=self.prov_localizacion,
+                                wms_custom=self.wms_custom_localizacion,
+                                wfs_custom=self.wfs_custom_localizacion,
+                                ruta_capa_loc=self.ruta_capa_localizacion)
             maq.dibujar_tabla_infra(_filas_tabla, campos_visibles,
                                      campo_mapeo=self._campo_mapeo)
             items_inf, items_mon = self._construir_items_leyenda_separados(
@@ -752,7 +806,14 @@ class GeneradorPlanos:
             maq.dibujar_panel_atributos_multi(_filas_tabla, campos_visibles,
                                                campo_mapeo=self._campo_mapeo,
                                                campo_encabezado=campo_encabezado)
-            maq.dibujar_mapa_posicion(cx, cy, ruta_raster_loc=self.ruta_raster_localizacion)
+            maq.dibujar_mapa_posicion(
+                                cx, cy,
+                                ruta_raster_loc=self.ruta_raster_localizacion,
+                                escala_loc=self.escala_localizacion,
+                                prov_localizacion=self.prov_localizacion,
+                                wms_custom=self.wms_custom_localizacion,
+                                wfs_custom=self.wfs_custom_localizacion,
+                                ruta_capa_loc=self.ruta_capa_localizacion)
             items_cat = self._construir_items_categoria(gdf_grupo,
                                                          xmin, xmax, ymin, ymax)
             maq.dibujar_barra_escala(proveedor, cx_utm=cx, cy_utm=cy,
@@ -979,7 +1040,14 @@ class GeneradorPlanos:
                     _filas_tabla = self._obtener_filas_tabla([row], idx_fila=idx)
 
                     if maq.es_lateral:
-                        maq.dibujar_mapa_posicion(cx, cy, ruta_raster_loc=self.ruta_raster_localizacion)
+                        maq.dibujar_mapa_posicion(
+                                cx, cy,
+                                ruta_raster_loc=self.ruta_raster_localizacion,
+                                escala_loc=self.escala_localizacion,
+                                prov_localizacion=self.prov_localizacion,
+                                wms_custom=self.wms_custom_localizacion,
+                                wfs_custom=self.wfs_custom_localizacion,
+                                ruta_capa_loc=self.ruta_capa_localizacion)
                         maq.dibujar_tabla_infra(_filas_tabla, campos,
                                                  campo_mapeo=self._campo_mapeo)
                         items_inf, items_mon = self._construir_items_leyenda_separados(
@@ -996,7 +1064,14 @@ class GeneradorPlanos:
                         maq.dibujar_panel_atributos(_fila_panel, campos,
                                                      campo_mapeo=self._campo_mapeo,
                                                      campo_encabezado=campo_encabezado)
-                        maq.dibujar_mapa_posicion(cx, cy, ruta_raster_loc=self.ruta_raster_localizacion)
+                        maq.dibujar_mapa_posicion(
+                                cx, cy,
+                                ruta_raster_loc=self.ruta_raster_localizacion,
+                                escala_loc=self.escala_localizacion,
+                                prov_localizacion=self.prov_localizacion,
+                                wms_custom=self.wms_custom_localizacion,
+                                wfs_custom=self.wfs_custom_localizacion,
+                                ruta_capa_loc=self.ruta_capa_localizacion)
                         items_cat = self._construir_items_categoria(gdf_sel)
                         maq.dibujar_barra_escala(proveedor, cx_utm=cx, cy_utm=cy,
                                                   cajetin=self._cajetin,

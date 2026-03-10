@@ -813,25 +813,27 @@ class MaquetadorPlano:
 
     # ── Mapa de localización (panel inferior derecho) ──────────────────
 
-    def dibujar_mapa_posicion(self, cx, cy, ruta_raster_loc=""):
+    def dibujar_mapa_posicion(self, cx, cy, ruta_raster_loc="",
+                             escala_loc=250_000,
+                             prov_localizacion="WMS IGN (online)",
+                             wms_custom=None, wfs_custom=None,
+                             ruta_capa_loc=""):
         ax = self.ax_mini
-
-        # ── Escala fija 1:250.000 ──
-        escala_loc = 250_000
+        wms_custom = wms_custom or {}
+        wfs_custom = wfs_custom or {}
 
         # Tamaño físico aproximado del panel de localización (mm)
         ancho_util = self.fmt_mm[0] - MARGENES_MM["izq"] - MARGENES_MM["der"]
         alto_util = (self.fmt_mm[1] - MARGENES_MM["sup"] - MARGENES_MM["inf"]
                      - _CABECERA_MM)
         if self.es_lateral:
-            # Panel lateral: 20% del ancho, ~22% del alto (minimapa pequeño)
             panel_w_mm = ancho_util * 0.20 * 0.90
             panel_h_mm = alto_util * 0.22 * 0.90
         else:
-            panel_w_mm = ancho_util * 0.30 * 0.95   # col 2 ratio, menos wspace
-            panel_h_mm = alto_util * (1 - RATIO_MAPA_ALTO) * 0.90  # menos hspace
+            panel_w_mm = ancho_util * 0.30 * 0.95
+            panel_h_mm = alto_util * (1 - RATIO_MAPA_ALTO) * 0.90
 
-        # Extensión real a 1:250.000
+        # Extensión real según escala configurada
         semi_x = (panel_w_mm / 1000.0) * escala_loc / 2
         semi_y = (panel_h_mm / 1000.0) * escala_loc / 2
 
@@ -849,8 +851,10 @@ class MaquetadorPlano:
         ax.tick_params(labelbottom=False, labelleft=False,
                        bottom=False, left=False)
 
-        # Fondo: ráster local o WMS IGN
+        # ── Fondo del mapa de localización ──
         _fondo_ok = False
+
+        # 1) Ráster local
         if ruta_raster_loc:
             try:
                 import os
@@ -863,6 +867,74 @@ class MaquetadorPlano:
                     _fondo_ok = True
             except Exception:
                 pass
+
+        # 2) WMS propio
+        if not _fondo_ok and wms_custom:
+            try:
+                from .cartografia import descargar_wms_custom
+                descargar_wms_custom(
+                    ax, wms_custom["url"], wms_custom["capa"],
+                    xmin_m, xmax_m, ymin_m, ymax_m,
+                    formato=wms_custom.get("formato", "image/png"))
+                ax.set_xlim(xmin_m, xmax_m)
+                ax.set_ylim(ymin_m, ymax_m)
+                _fondo_ok = True
+            except Exception:
+                pass
+
+        # 3) WFS propio
+        if not _fondo_ok and wfs_custom:
+            try:
+                from .cartografia import descargar_wfs, dibujar_wfs_en_eje
+                gdf_wfs = descargar_wfs(
+                    wfs_custom["url"], wfs_custom["capa"],
+                    xmin_m, ymin_m, xmax_m, ymax_m)
+                dibujar_wfs_en_eje(ax, gdf_wfs)
+                ax.set_xlim(xmin_m, xmax_m)
+                ax.set_ylim(ymin_m, ymax_m)
+                _fondo_ok = True
+            except Exception:
+                pass
+
+        # 4) Capa SHP/GDB propia
+        if not _fondo_ok and ruta_capa_loc:
+            try:
+                import os
+                import geopandas as gpd
+                if os.path.isfile(ruta_capa_loc) or os.path.isdir(ruta_capa_loc):
+                    gdf_loc = gpd.read_file(ruta_capa_loc)
+                    if gdf_loc.crs and gdf_loc.crs.to_epsg() != 25830:
+                        gdf_loc = gdf_loc.to_crs("EPSG:25830")
+                    # Clip al extent
+                    gdf_clip = gdf_loc.cx[xmin_m:xmax_m, ymin_m:ymax_m]
+                    if not gdf_clip.empty:
+                        gdf_clip.plot(ax=ax, color="#C8D6C5", edgecolor="#2C3E50",
+                                      linewidth=0.5, alpha=0.7, zorder=1)
+                    ax.set_xlim(xmin_m, xmax_m)
+                    ax.set_ylim(ymin_m, ymax_m)
+                    _fondo_ok = True
+            except Exception:
+                pass
+
+        # 5) Proveedor predefinido (tiles/WMTS/WMS)
+        if not _fondo_ok and prov_localizacion not in ("WMS IGN (online)", ""):
+            try:
+                from .cartografia import añadir_fondo_cartografico
+                import geopandas as gpd
+                from shapely.geometry import box
+                gdf_dummy = gpd.GeoDataFrame(
+                    geometry=[box(xmin_m, ymin_m, xmax_m, ymax_m)],
+                    crs="EPSG:25830")
+                añadir_fondo_cartografico(ax, gdf_dummy, prov_localizacion,
+                                          xmin=xmin_m, xmax=xmax_m,
+                                          ymin=ymin_m, ymax=ymax_m)
+                ax.set_xlim(xmin_m, xmax_m)
+                ax.set_ylim(ymin_m, ymax_m)
+                _fondo_ok = True
+            except Exception:
+                pass
+
+        # 6) Fallback: WMS IGN por defecto
         if not _fondo_ok:
             try:
                 from .cartografia import _descargar_wms
@@ -896,7 +968,7 @@ class MaquetadorPlano:
         except Exception:
             pass
 
-        # Título dentro del panel (consistente con cajetín y datos)
+        # Título dentro del panel
         ax.text(0.5, 0.97, "LOCALIZACIÓN", ha="center", va="top",
                 fontsize=5, fontweight="bold", color="white",
                 transform=ax.transAxes, zorder=12,
@@ -905,7 +977,17 @@ class MaquetadorPlano:
 
         # ── Escala del mapa de localización ──
         extent_m = xmax_m - xmin_m
-        barra_loc_m = 5000  # 5 km
+        # Barra de escala adaptativa según escala
+        if escala_loc <= 100_000:
+            barra_loc_m = 2000
+        elif escala_loc <= 250_000:
+            barra_loc_m = 5000
+        elif escala_loc <= 500_000:
+            barra_loc_m = 10_000
+        elif escala_loc <= 1_000_000:
+            barra_loc_m = 25_000
+        else:
+            barra_loc_m = 50_000
         barra_frac = barra_loc_m / extent_m
 
         bar_x0 = 0.05
@@ -919,8 +1001,13 @@ class MaquetadorPlano:
                 (bar_x0 + i * seg_frac, bar_y), seg_frac, bar_h,
                 facecolor=c, edgecolor="#1A1A2E", linewidth=0.3,
                 transform=ax.transAxes, zorder=10))
+        # Texto de barra
+        if barra_loc_m >= 1000:
+            barra_txt = f"{barra_loc_m // 1000} km"
+        else:
+            barra_txt = f"{barra_loc_m} m"
         ax.text(bar_x0 + barra_frac + 0.02, bar_y + bar_h / 2,
-                f"{barra_loc_m // 1000} km", ha="left", va="center",
+                barra_txt, ha="left", va="center",
                 fontsize=3.5, color="#1A1A2E", fontweight="bold",
                 transform=ax.transAxes, zorder=10)
         # Texto de escala
