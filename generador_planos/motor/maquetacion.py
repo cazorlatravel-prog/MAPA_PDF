@@ -855,9 +855,9 @@ class MaquetadorPlano:
                 pass
 
         # Punto de localización
-        ax.plot(cx, cy, "o", color="white", markersize=7, zorder=5)
-        ax.plot(cx, cy, "o", color="#E74C3C", markersize=4.5, zorder=6,
-                markeredgecolor="white", markeredgewidth=0.4)
+        ax.plot(cx, cy, "o", color="white", markersize=5, zorder=5)
+        ax.plot(cx, cy, "o", color="#E74C3C", markersize=3.5, zorder=6,
+                markeredgecolor="white", markeredgewidth=0.3)
 
         # Recuadro extensión del mapa principal
         try:
@@ -1225,7 +1225,7 @@ class MaquetadorPlano:
                                 linewidth=1.0, zorder=1))
         t_y = y_top - title_h / 2
         ax.text(0.5, t_y, "LEYENDA", ha="center", va="center",
-                fontsize=7, fontweight="bold", color="white",
+                fontsize=5.5, fontweight="bold", color="white",
                 transform=ax.transAxes, zorder=2)
 
         # Línea divisoria vertical entre infraestructura y montes
@@ -1252,8 +1252,8 @@ class MaquetadorPlano:
                     facecolor=facecolor or (color + "55"),
                     edgecolor=color, linewidth=0.6,
                     transform=ax.transAxes, zorder=3))
-            ax.text(x_txt, y, str(label)[:22], ha="left", va="center",
-                    fontsize=3.5, color="#3A3A4A", transform=ax.transAxes, zorder=3)
+            ax.text(x_txt, y, str(label)[:18], ha="left", va="center",
+                    fontsize=3.2, color="#3A3A4A", transform=ax.transAxes, zorder=3)
 
         # ── Posición Y del subtítulo y primer item ──
         sub_y = t_y - 0.09   # subtítulos de sección
@@ -1382,20 +1382,20 @@ class MaquetadorPlano:
                 linea1 = lineas[0].upper()
                 linea2 = lineas[1]
                 # Reducir fuente si la línea 1 es muy larga
-                fsz1 = 8 if len(linea1) <= 30 else (6.5 if len(linea1) <= 45 else 5.5)
+                fsz1 = 6 if len(linea1) <= 30 else (5 if len(linea1) <= 45 else 4)
                 ax.text(x_centro, org_y + org_h * 0.62,
                         linea1, ha="center", va="center",
                         fontsize=fsz1, fontweight="bold", color="white", zorder=3)
                 ax.text(x_centro, org_y + org_h * 0.28,
                         linea2, ha="center", va="center",
-                        fontsize=4.5, color="#E0F0E0", zorder=3)
+                        fontsize=3.5, color="#E0F0E0", zorder=3)
             else:
                 texto = org.upper()
                 # Si cabe en 1 línea (~30 chars), ponerlo en una sola
                 if len(texto) <= 30:
                     ax.text(x_centro, org_y + org_h * 0.50, texto,
                             ha="center", va="center",
-                            fontsize=7, fontweight="bold", color="white", zorder=3)
+                            fontsize=5.5, fontweight="bold", color="white", zorder=3)
                 else:
                     # Partir en 2 líneas por el espacio más cercano al centro
                     mid = len(texto) // 2
@@ -1408,7 +1408,7 @@ class MaquetadorPlano:
                     else:
                         linea1 = texto
                         linea2 = ""
-                    fsz = 7 if len(linea1) <= 35 else (6 if len(linea1) <= 45 else 5)
+                    fsz = 5.5 if len(linea1) <= 35 else (4.5 if len(linea1) <= 45 else 4)
                     ax.text(x_centro, org_y + org_h * 0.62,
                             linea1, ha="center", va="center",
                             fontsize=fsz, fontweight="bold", color="white", zorder=3)
@@ -1445,7 +1445,7 @@ class MaquetadorPlano:
             if space_pos > 10:
                 texto_proy = texto_proy[:space_pos] + "\n" + texto_proy[space_pos + 1:]
 
-        fsz_proy = 8 if len(texto_proy) <= 40 else 6.5
+        fsz_proy = 6 if len(texto_proy) <= 40 else 5
         ax.text(0.5, proy_y + proy_h * 0.50, texto_proy.upper(),
                 ha="center", va="center", fontsize=fsz_proy, fontweight="bold",
                 color=C_GREEN_DARK, zorder=3, linespacing=1.4)
@@ -1491,11 +1491,11 @@ class MaquetadorPlano:
 
         if monte_txt:
             ax.text(0.03, monte_y + monte_h * 0.65, monte_txt,
-                    ha="left", va="center", fontsize=6, color=C_TXT,
+                    ha="left", va="center", fontsize=4.5, color=C_TXT,
                     fontweight="bold", zorder=3)
         if tm_txt:
             ax.text(0.03, monte_y + monte_h * 0.30, tm_txt,
-                    ha="left", va="center", fontsize=6, color=C_TXT,
+                    ha="left", va="center", fontsize=4.5, color=C_TXT,
                     fontweight="bold", zorder=3)
 
         # Nº de plano
@@ -1508,12 +1508,14 @@ class MaquetadorPlano:
             n_plano = idx + num_inicio
 
         mid_r = col_r + (1 - col_r) / 2
-        # Escalar fuentes del Nº de plano según formato de papel
-        # Base: A4 (210mm ancho). Escalar proporcionalmente al ancho.
+        # Escalar fuentes del Nº de plano según ancho real del panel
+        # Panel lateral = 20% del ancho útil del papel
         _ancho_mm = self.fmt_mm[0]
-        _factor = _ancho_mm / 210.0  # 1.0 para A4, ~1.41 para A3, ~2.0 para A2
+        _panel_mm = _ancho_mm * 0.20  # ancho físico del panel lateral
+        _factor = _panel_mm / 60.0  # base: ~60mm (A3 × 20%)
+        _factor = min(_factor, 1.5)  # limitar para formatos grandes
         fsz_label_np = 3.5 * _factor
-        fsz_num_np = 9 * _factor
+        fsz_num_np = 7 * _factor
         ax.text(mid_r, monte_y + monte_h * 0.78,
                 "Nº DE PLANO:", ha="center", va="center",
                 fontsize=fsz_label_np, color=C_LABEL, fontweight="bold", zorder=3)
@@ -1605,7 +1607,7 @@ class MaquetadorPlano:
         escala_txt = f"1:{self.escala:,}".replace(",", ".")
         ax.text(mid_x, aut_y + aut_h * 0.70,
                 escala_txt, ha="center", va="center",
-                fontsize=6, fontweight="bold", color=C_GREEN_DARK, zorder=3)
+                fontsize=4.5, fontweight="bold", color=C_GREEN_DARK, zorder=3)
         # Fecha (tercio medio)
         ax.text(mid_x, aut_y + aut_h * 0.50,
                 "FECHA:", ha="center", va="center",
