@@ -342,7 +342,7 @@ class PanelSimbologia:
 
         # Montes
         gs.montes.color = self._color_montes
-        gs.montes.facecolor = self._color_montes + "44"
+        gs.montes.facecolor = self._color_montes
 
         # Capas extra
         for nombre, tipo, color_var in self._widgets_capas:
@@ -368,7 +368,7 @@ class PanelSimbologia:
                         valor in gs.categorias_montes[campo_cat_montes]):
                     simb = gs.categorias_montes[campo_cat_montes][valor]
                     simb.color = color_var["color"]
-                    simb.facecolor = color_var["color"] + "66"
+                    simb.facecolor = color_var["color"]
 
         # Configuración infraestructuras (grosor, transparencia, trazo, marcador)
         self.motor.config_infra = self.obtener_config_infra()

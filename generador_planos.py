@@ -307,7 +307,7 @@ class GeneradorPlanos:
             if not montes_clip.empty:
                 montes_clip.plot(
                     ax=ax_map,
-                    facecolor=f"#{int(34*transparencia_montes):02x}9922",
+                    facecolor="#229922",
                     edgecolor="#1a5c10",
                     linewidth=0.8,
                     alpha=transparencia_montes,

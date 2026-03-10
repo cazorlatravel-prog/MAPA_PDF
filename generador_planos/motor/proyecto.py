@@ -35,7 +35,7 @@ class Proyecto:
         self.ruta_raster_localizacion = ""  # Ráster local para mapa de localización
         self.prov_localizacion = "WMS IGN (online)"
         self.escala_manual = None  # None = automática
-        self.transparencia_montes = 0.5
+        self.transparencia_montes = 0.3
         self.color_infra = "#E74C3C"
         self.campos_visibles = []
         self.campo_mapeo = {}
