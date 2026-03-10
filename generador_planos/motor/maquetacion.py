@@ -1256,8 +1256,8 @@ class MaquetadorPlano:
         sub_y = y_top - title_h - 0.06
         first_y = sub_y - 0.05
 
-        # ── Sección izquierda: TIPO INFRAESTRUCTURA (2 sub-columnas) ──
-        ax.text(0.02, sub_y, "TIPO INFRAESTRUCTURA", ha="left", va="center",
+        # ── Sección izquierda: INFRAESTRUCTURA (2 sub-columnas) ──
+        ax.text(0.02, sub_y, "INFRAESTRUCTURA", ha="left", va="center",
                 fontsize=3.5, fontweight="bold", color=C_GREEN_DARK, zorder=2)
 
         col_left = items_inf[:mid]
