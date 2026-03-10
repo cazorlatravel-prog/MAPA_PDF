@@ -150,9 +150,7 @@ class GeneradorPlanos:
 
     # Tamaños A3/A4 en mm → convertidos a pulgadas para matplotlib
     FORMATOS = {
-        "A4 Vertical":   (210, 297),
         "A4 Horizontal": (297, 210),
-        "A3 Vertical":   (297, 420),
         "A3 Horizontal": (420, 297),
     }
 

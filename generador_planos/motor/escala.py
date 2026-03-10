@@ -33,11 +33,8 @@ BARRA_ESCALA_M = {
 MARGENES_MM = {"izq": 10, "der": 10, "sup": 10, "inf": 12}
 
 FORMATOS = {
-    "A4 Vertical":   (210, 297),
     "A4 Horizontal": (297, 210),
-    "A3 Vertical":   (297, 420),
     "A3 Horizontal": (420, 297),
-    "A2 Vertical":   (420, 594),
     "A2 Horizontal": (594, 420),
 }
 
