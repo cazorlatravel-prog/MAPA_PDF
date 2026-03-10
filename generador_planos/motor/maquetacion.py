@@ -813,25 +813,27 @@ class MaquetadorPlano:
 
     # ── Mapa de localización (panel inferior derecho) ──────────────────
 
-    def dibujar_mapa_posicion(self, cx, cy, ruta_raster_loc=""):
+    def dibujar_mapa_posicion(self, cx, cy, ruta_raster_loc="",
+                             escala_loc=250_000,
+                             prov_localizacion="WMS IGN (online)",
+                             wms_custom=None, wfs_custom=None,
+                             ruta_capa_loc=""):
         ax = self.ax_mini
-
-        # ── Escala fija 1:250.000 ──
-        escala_loc = 250_000
+        wms_custom = wms_custom or {}
+        wfs_custom = wfs_custom or {}
 
         # Tamaño físico aproximado del panel de localización (mm)
         ancho_util = self.fmt_mm[0] - MARGENES_MM["izq"] - MARGENES_MM["der"]
         alto_util = (self.fmt_mm[1] - MARGENES_MM["sup"] - MARGENES_MM["inf"]
                      - _CABECERA_MM)
         if self.es_lateral:
-            # Panel lateral: 20% del ancho, ~22% del alto (minimapa pequeño)
             panel_w_mm = ancho_util * 0.20 * 0.90
             panel_h_mm = alto_util * 0.22 * 0.90
         else:
-            panel_w_mm = ancho_util * 0.30 * 0.95   # col 2 ratio, menos wspace
-            panel_h_mm = alto_util * (1 - RATIO_MAPA_ALTO) * 0.90  # menos hspace
+            panel_w_mm = ancho_util * 0.30 * 0.95
+            panel_h_mm = alto_util * (1 - RATIO_MAPA_ALTO) * 0.90
 
-        # Extensión real a 1:250.000
+        # Extensión real según escala configurada
         semi_x = (panel_w_mm / 1000.0) * escala_loc / 2
         semi_y = (panel_h_mm / 1000.0) * escala_loc / 2
 
@@ -849,8 +851,10 @@ class MaquetadorPlano:
         ax.tick_params(labelbottom=False, labelleft=False,
                        bottom=False, left=False)
 
-        # Fondo: ráster local o WMS IGN
+        # ── Fondo del mapa de localización ──
         _fondo_ok = False
+
+        # 1) Ráster local
         if ruta_raster_loc:
             try:
                 import os
@@ -863,6 +867,74 @@ class MaquetadorPlano:
                     _fondo_ok = True
             except Exception:
                 pass
+
+        # 2) WMS propio
+        if not _fondo_ok and wms_custom:
+            try:
+                from .cartografia import descargar_wms_custom
+                descargar_wms_custom(
+                    ax, wms_custom["url"], wms_custom["capa"],
+                    xmin_m, xmax_m, ymin_m, ymax_m,
+                    formato=wms_custom.get("formato", "image/png"))
+                ax.set_xlim(xmin_m, xmax_m)
+                ax.set_ylim(ymin_m, ymax_m)
+                _fondo_ok = True
+            except Exception:
+                pass
+
+        # 3) WFS propio
+        if not _fondo_ok and wfs_custom:
+            try:
+                from .cartografia import descargar_wfs, dibujar_wfs_en_eje
+                gdf_wfs = descargar_wfs(
+                    wfs_custom["url"], wfs_custom["capa"],
+                    xmin_m, ymin_m, xmax_m, ymax_m)
+                dibujar_wfs_en_eje(ax, gdf_wfs)
+                ax.set_xlim(xmin_m, xmax_m)
+                ax.set_ylim(ymin_m, ymax_m)
+                _fondo_ok = True
+            except Exception:
+                pass
+
+        # 4) Capa SHP/GDB propia
+        if not _fondo_ok and ruta_capa_loc:
+            try:
+                import os
+                import geopandas as gpd
+                if os.path.isfile(ruta_capa_loc) or os.path.isdir(ruta_capa_loc):
+                    gdf_loc = gpd.read_file(ruta_capa_loc)
+                    if gdf_loc.crs and gdf_loc.crs.to_epsg() != 25830:
+                        gdf_loc = gdf_loc.to_crs("EPSG:25830")
+                    # Clip al extent
+                    gdf_clip = gdf_loc.cx[xmin_m:xmax_m, ymin_m:ymax_m]
+                    if not gdf_clip.empty:
+                        gdf_clip.plot(ax=ax, color="#C8D6C5", edgecolor="#2C3E50",
+                                      linewidth=0.5, alpha=0.7, zorder=1)
+                    ax.set_xlim(xmin_m, xmax_m)
+                    ax.set_ylim(ymin_m, ymax_m)
+                    _fondo_ok = True
+            except Exception:
+                pass
+
+        # 5) Proveedor predefinido (tiles/WMTS/WMS)
+        if not _fondo_ok and prov_localizacion not in ("WMS IGN (online)", ""):
+            try:
+                from .cartografia import añadir_fondo_cartografico
+                import geopandas as gpd
+                from shapely.geometry import box
+                gdf_dummy = gpd.GeoDataFrame(
+                    geometry=[box(xmin_m, ymin_m, xmax_m, ymax_m)],
+                    crs="EPSG:25830")
+                añadir_fondo_cartografico(ax, gdf_dummy, prov_localizacion,
+                                          xmin=xmin_m, xmax=xmax_m,
+                                          ymin=ymin_m, ymax=ymax_m)
+                ax.set_xlim(xmin_m, xmax_m)
+                ax.set_ylim(ymin_m, ymax_m)
+                _fondo_ok = True
+            except Exception:
+                pass
+
+        # 6) Fallback: WMS IGN por defecto
         if not _fondo_ok:
             try:
                 from .cartografia import _descargar_wms
@@ -896,7 +968,7 @@ class MaquetadorPlano:
         except Exception:
             pass
 
-        # Título dentro del panel (consistente con cajetín y datos)
+        # Título dentro del panel
         ax.text(0.5, 0.97, "LOCALIZACIÓN", ha="center", va="top",
                 fontsize=5, fontweight="bold", color="white",
                 transform=ax.transAxes, zorder=12,
@@ -905,7 +977,17 @@ class MaquetadorPlano:
 
         # ── Escala del mapa de localización ──
         extent_m = xmax_m - xmin_m
-        barra_loc_m = 5000  # 5 km
+        # Barra de escala adaptativa según escala
+        if escala_loc <= 100_000:
+            barra_loc_m = 2000
+        elif escala_loc <= 250_000:
+            barra_loc_m = 5000
+        elif escala_loc <= 500_000:
+            barra_loc_m = 10_000
+        elif escala_loc <= 1_000_000:
+            barra_loc_m = 25_000
+        else:
+            barra_loc_m = 50_000
         barra_frac = barra_loc_m / extent_m
 
         bar_x0 = 0.05
@@ -919,8 +1001,13 @@ class MaquetadorPlano:
                 (bar_x0 + i * seg_frac, bar_y), seg_frac, bar_h,
                 facecolor=c, edgecolor="#1A1A2E", linewidth=0.3,
                 transform=ax.transAxes, zorder=10))
+        # Texto de barra
+        if barra_loc_m >= 1000:
+            barra_txt = f"{barra_loc_m // 1000} km"
+        else:
+            barra_txt = f"{barra_loc_m} m"
         ax.text(bar_x0 + barra_frac + 0.02, bar_y + bar_h / 2,
-                f"{barra_loc_m // 1000} km", ha="left", va="center",
+                barra_txt, ha="left", va="center",
                 fontsize=3.5, color="#1A1A2E", fontweight="bold",
                 transform=ax.transAxes, zorder=10)
         # Texto de escala
@@ -1336,7 +1423,7 @@ class MaquetadorPlano:
         C_TXT_LIGHT = "#4A4A5A"     # Texto secundario
         C_GREEN = "#007932"          # Verde Junta de Andalucía
         C_GREEN_DARK = "#368f3f"     # Verde oscuro para fondos
-        C_BG_ORG = "#007932"         # Fondo barra organización
+        C_BG_ORG = "#FFFFFF"         # Fondo barra organización (blanco)
         C_BG_PROY = "#F0F4F0"        # Fondo proyecto (verde muy tenue)
         C_BG_MONTE = "#FAFAFA"       # Fondo monte (gris casi blanco)
         C_BG_NUM = "#F5F7F5"         # Fondo nº de plano
@@ -1367,7 +1454,7 @@ class MaquetadorPlano:
                                 facecolor=C_BG_ORG, edgecolor=C_GREEN_DARK,
                                 linewidth=1.2, zorder=1))
 
-        org = caj.get("organizacion", "")
+        org = caj.get("organizacion", "").strip()
         logo_path = caj.get("logo_path", "")
 
         x_txt = 0.02
@@ -1377,14 +1464,29 @@ class MaquetadorPlano:
                 img = PILImage.open(logo_path)
                 iw, ih = img.size
                 aspect_img = iw / max(ih, 1)
-                logo_h_frac = org_h * 0.90
-                logo_w_frac = min(0.40, logo_h_frac * aspect_img)
-                logo_ax = ax.inset_axes(
-                    [0.01, org_y + org_h * 0.05, logo_w_frac, logo_h_frac],
-                    transform=ax.transAxes)
-                logo_ax.imshow(img, aspect="equal")
-                logo_ax.axis("off")
-                x_txt = 0.02 + logo_w_frac + 0.02
+
+                if org:
+                    # Logo + nombre: logo ocupa la parte izquierda
+                    logo_h_frac = org_h * 0.90
+                    logo_w_frac = min(0.40, logo_h_frac * aspect_img)
+                    logo_ax = ax.inset_axes(
+                        [0.01, org_y + org_h * 0.05,
+                         logo_w_frac, logo_h_frac],
+                        transform=ax.transAxes)
+                    logo_ax.imshow(img, aspect="equal")
+                    logo_ax.axis("off")
+                    x_txt = 0.02 + logo_w_frac + 0.02
+                else:
+                    # Solo logo: ocupa TODO el espacio de la celda
+                    logo_h_frac = org_h * 0.92
+                    logo_w_frac = min(0.98, logo_h_frac * aspect_img)
+                    logo_x = (1.0 - logo_w_frac) / 2  # centrado horizontal
+                    logo_ax = ax.inset_axes(
+                        [logo_x, org_y + org_h * 0.04,
+                         logo_w_frac, logo_h_frac],
+                        transform=ax.transAxes)
+                    logo_ax.imshow(img, aspect="equal")
+                    logo_ax.axis("off")
             except Exception:
                 pass
 
@@ -1398,16 +1500,16 @@ class MaquetadorPlano:
                 fsz1 = 7.5 if len(linea1) <= 30 else (6.5 if len(linea1) <= 45 else 5.5)
                 ax.text(x_centro, org_y + org_h * 0.62,
                         linea1, ha="center", va="center",
-                        fontsize=fsz1, fontweight="bold", color="white", zorder=3)
+                        fontsize=fsz1, fontweight="bold", color=C_GREEN, zorder=3)
                 ax.text(x_centro, org_y + org_h * 0.28,
                         linea2, ha="center", va="center",
-                        fontsize=6.0, fontweight="bold", color="#E0F0E0", zorder=3)
+                        fontsize=6.0, fontweight="bold", color=C_GREEN_DARK, zorder=3)
             else:
                 texto = org.upper()
                 if len(texto) <= 30:
                     ax.text(x_centro, org_y + org_h * 0.50, texto,
                             ha="center", va="center",
-                            fontsize=6.5, fontweight="bold", color="white", zorder=3)
+                            fontsize=6.5, fontweight="bold", color=C_GREEN, zorder=3)
                 else:
                     mid = len(texto) // 2
                     pos = texto.rfind(" ", 0, mid + 8)
@@ -1422,11 +1524,11 @@ class MaquetadorPlano:
                     fsz = 6.0 if len(linea1) <= 35 else (5.0 if len(linea1) <= 45 else 4.5)
                     ax.text(x_centro, org_y + org_h * 0.65,
                             linea1, ha="center", va="center",
-                            fontsize=fsz, fontweight="bold", color="white", zorder=3)
+                            fontsize=fsz, fontweight="bold", color=C_GREEN, zorder=3)
                     if linea2:
                         ax.text(x_centro, org_y + org_h * 0.28,
                                 linea2, ha="center", va="center",
-                                fontsize=fsz, fontweight="bold", color="white", zorder=3)
+                                fontsize=fsz, fontweight="bold", color=C_GREEN, zorder=3)
 
         # ═══════════════════════════════════════════════════════════════
         # 2. TÍTULO DEL PROYECTO
@@ -1953,5 +2055,166 @@ def crear_indice(formato_key: str, items: list,
         ax.text(0.5, 0.03, f"... y {len(items) - mx} planos más",
                 ha="center", va="center", fontsize=7, color="#999",
                 style="italic")
+
+    return fig
+
+
+def crear_mapa_guia(formato_key: str, gdf_infra, indices: list,
+                     gdf_montes=None, transparencia_montes: float = 0.3,
+                     plantilla: dict = None, cajetin: dict = None,
+                     titulo: str = "MAPA GUÍA",
+                     campo_nombre: str = "Nombre_Infra") -> plt.Figure:
+    """Crea un mapa guía/índice cartográfico mostrando todas las
+    infraestructuras numeradas sobre un fondo simplificado.
+
+    A diferencia de ``crear_indice`` (tabla textual), este genera un
+    plano cartográfico real con las geometrías dibujadas y etiquetadas
+    con su número de orden.
+    """
+    from shapely.ops import unary_union
+
+    pl = plantilla or {}
+    c_fondo = pl.get("color_cabecera_fondo", "#1C2333")
+    c_acento = pl.get("color_cabecera_acento", "#007932")
+
+    fmt = FORMATOS[formato_key]
+    fig_w = fmt[0] / 25.4
+    fig_h = fmt[1] / 25.4
+    fig = plt.figure(figsize=(fig_w, fig_h), dpi=DPI_DEFAULT,
+                      facecolor="white")
+
+    # Layout: cabecera + mapa + leyenda inferior
+    gs = gridspec.GridSpec(3, 1, figure=fig,
+                           height_ratios=[0.06, 0.78, 0.16],
+                           hspace=0.02,
+                           left=0.06, right=0.94, top=0.96, bottom=0.03)
+
+    ax_header = fig.add_subplot(gs[0])
+    ax_map = fig.add_subplot(gs[1])
+    ax_legend = fig.add_subplot(gs[2])
+
+    # ── Cabecera ──
+    ax_header.set_xlim(0, 1)
+    ax_header.set_ylim(0, 1)
+    ax_header.axis("off")
+    ax_header.add_patch(Rectangle((0, 0), 1, 1, facecolor=c_fondo,
+                                   edgecolor=c_acento, linewidth=1.0))
+    ax_header.text(0.5, 0.5, titulo.upper(), ha="center", va="center",
+                    fontsize=12, fontweight="bold", color=c_acento)
+
+    # ── Mapa principal ──
+    gdf_sel = gdf_infra.iloc[indices]
+    geom_union = unary_union(gdf_sel.geometry)
+    bounds = geom_union.bounds  # minx, miny, maxx, maxy
+    dx = bounds[2] - bounds[0]
+    dy = bounds[3] - bounds[1]
+    # Margen del 15 %
+    margin = max(dx, dy) * 0.15
+    if margin < 500:
+        margin = 500
+    xmin = bounds[0] - margin
+    xmax = bounds[2] + margin
+    ymin = bounds[1] - margin
+    ymax = bounds[3] + margin
+
+    ax_map.set_xlim(xmin, xmax)
+    ax_map.set_ylim(ymin, ymax)
+    ax_map.set_facecolor("#F5F5F0")
+    ax_map.set_aspect("equal", adjustable="datalim")
+
+    # Dibujar montes si existen
+    if gdf_montes is not None and not gdf_montes.empty:
+        try:
+            montes_vis = gdf_montes.cx[xmin:xmax, ymin:ymax]
+            if not montes_vis.empty:
+                montes_vis.plot(ax=ax_map, facecolor="#C8E6C9",
+                                edgecolor="#81C784", linewidth=0.3,
+                                alpha=transparencia_montes)
+        except Exception:
+            pass
+
+    # Colores para las infraestructuras
+    n = len(indices)
+    cmap = plt.cm.get_cmap("tab20", max(n, 1))
+
+    for i, idx in enumerate(indices):
+        row = gdf_infra.iloc[idx]
+        geom = row.geometry
+        color = cmap(i % 20)
+        gt = str(geom.geom_type).lower()
+        if "polygon" in gt:
+            ax_map.fill(*geom.exterior.xy, facecolor=color, edgecolor="black",
+                         linewidth=0.8, alpha=0.6)
+        elif "line" in gt:
+            ax_map.plot(*geom.xy, color=color, linewidth=2.0, alpha=0.8)
+        elif "point" in gt:
+            ax_map.plot(geom.x, geom.y, marker="o", color=color,
+                         markersize=8, markeredgecolor="black",
+                         markeredgewidth=0.5)
+        else:
+            # MultiGeometry
+            try:
+                gdf_infra.iloc[[idx]].plot(ax=ax_map, color=color,
+                                            linewidth=1.5, alpha=0.7)
+            except Exception:
+                pass
+
+        # Número en el centroide
+        cx, cy = geom.centroid.x, geom.centroid.y
+        ax_map.annotate(
+            str(i + 1), xy=(cx, cy), fontsize=6, fontweight="bold",
+            ha="center", va="center", color="white",
+            bbox=dict(boxstyle="round,pad=0.2", facecolor=c_fondo,
+                      edgecolor=c_acento, linewidth=0.5, alpha=0.85),
+            zorder=10,
+        )
+
+    # Ejes con coordenadas UTM simplificadas
+    ax_map.tick_params(labelsize=5, length=2)
+    ax_map.ticklabel_format(useOffset=False, style="plain")
+
+    # ── Leyenda inferior: lista numerada ──
+    ax_legend.set_xlim(0, 1)
+    ax_legend.set_ylim(0, 1)
+    ax_legend.axis("off")
+
+    # Calcular cuántas columnas caben
+    max_cols = 3
+    items_per_col = math.ceil(n / max_cols) if n > 0 else 1
+    col_width = 1.0 / max_cols
+
+    for i, idx in enumerate(indices):
+        row = gdf_infra.iloc[idx]
+        nombre = str(row.get(campo_nombre, f"Infra #{idx}"))
+        if nombre == "nan":
+            nombre = f"Infra #{idx}"
+        if len(nombre) > 35:
+            nombre = nombre[:34] + "\u2026"
+
+        col = i // items_per_col
+        row_in_col = i % items_per_col
+        x = col * col_width + 0.02
+        y = 0.92 - row_in_col * (0.85 / max(items_per_col, 1))
+
+        color = cmap(i % 20)
+        ax_legend.add_patch(Rectangle((x, y - 0.03), 0.02, 0.06,
+                                       facecolor=color, edgecolor="none"))
+        ax_legend.text(x + 0.03, y, f"{i + 1}. {nombre}",
+                        fontsize=5, va="center", color="#333")
+
+        if i + 1 >= items_per_col * max_cols:
+            # No hay espacio para más
+            if i + 1 < n:
+                ax_legend.text(0.5, 0.02,
+                                f"... y {n - i - 1} más",
+                                ha="center", fontsize=5, color="#999",
+                                style="italic")
+            break
+
+    # Marco exterior
+    for ax in [ax_map]:
+        for spine in ax.spines.values():
+            spine.set_edgecolor(c_fondo)
+            spine.set_linewidth(0.8)
 
     return fig

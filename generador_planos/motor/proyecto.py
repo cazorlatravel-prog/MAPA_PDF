@@ -34,6 +34,12 @@ class Proyecto:
         self.ruta_raster_general = ""       # Ráster local para fondo de mapa
         self.ruta_raster_localizacion = ""  # Ráster local para mapa de localización
         self.prov_localizacion = "WMS IGN (online)"
+        self.escala_localizacion = 250_000
+        self.ruta_capa_localizacion = ""   # SHP/GDB propio para localización
+        self.wms_custom_general = {}       # {"url":..., "capa":..., "formato":...}
+        self.wfs_custom_general = {}       # {"url":..., "capa":...}
+        self.wms_custom_localizacion = {}
+        self.wfs_custom_localizacion = {}
         self.escala_manual = None  # None = automática
         self.transparencia_montes = 0.3
         self.color_infra = "#E74C3C"
@@ -106,6 +112,12 @@ class Proyecto:
             "ruta_raster_general": self.ruta_raster_general,
             "ruta_raster_localizacion": self.ruta_raster_localizacion,
             "prov_localizacion": self.prov_localizacion,
+            "escala_localizacion": self.escala_localizacion,
+            "ruta_capa_localizacion": self.ruta_capa_localizacion,
+            "wms_custom_general": self.wms_custom_general,
+            "wfs_custom_general": self.wfs_custom_general,
+            "wms_custom_localizacion": self.wms_custom_localizacion,
+            "wfs_custom_localizacion": self.wfs_custom_localizacion,
             "escala_manual": self.escala_manual,
             "transparencia_montes": self.transparencia_montes,
             "color_infra": self.color_infra,
@@ -142,6 +154,9 @@ class Proyecto:
             "nombre", "fecha_creacion", "fecha_modificacion",
             "ruta_infra", "ruta_montes", "formato", "proveedor",
             "ruta_raster_general", "ruta_raster_localizacion", "prov_localizacion",
+            "escala_localizacion", "ruta_capa_localizacion",
+            "wms_custom_general", "wfs_custom_general",
+            "wms_custom_localizacion", "wfs_custom_localizacion",
             "escala_manual", "transparencia_montes", "color_infra",
             "campos_visibles", "campo_mapeo", "carpeta_salida", "patron_nombre",
             "layout_key",

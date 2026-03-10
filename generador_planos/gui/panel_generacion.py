@@ -162,13 +162,26 @@ class PanelGeneracion:
                                        bg=COLOR_PANEL, fg=COLOR_TEXTO_GRIS)
         self._lbl_progreso.grid(row=12, column=0, columnspan=2, pady=(0, 8))
 
+        # ── Botones Vista previa y Mapa guía ──
+        btn_preview_f = tk.Frame(f, bg=COLOR_PANEL)
+        btn_preview_f.grid(row=13, column=0, columnspan=2, sticky="ew", pady=(4, 2))
+        btn_preview_f.columnconfigure(0, weight=1)
+        btn_preview_f.columnconfigure(1, weight=1)
+
+        crear_boton(btn_preview_f, "Vista previa",
+                    self._vista_previa, icono="\U0001f50d").grid(
+                    row=0, column=0, sticky="ew", padx=(0, 2))
+        crear_boton(btn_preview_f, "Mapa gu\u00eda",
+                    self._mapa_guia, icono="\U0001f5fa").grid(
+                    row=0, column=1, sticky="ew", padx=(2, 0))
+
         # ── Botón GENERAR ──
         self._btn_generar = crear_boton(
             f, "  GENERAR PLANOS  ", self._iniciar_generacion,
             icono="\U0001f5a8", ancho=30,
             color_bg=COLOR_ACENTO, color_fg="#1A1A2E",
         )
-        self._btn_generar.grid(row=13, column=0, columnspan=2, sticky="ew", pady=4)
+        self._btn_generar.grid(row=14, column=0, columnspan=2, sticky="ew", pady=4)
 
         # ── Botón PARAR ──
         self._btn_parar = crear_boton(
@@ -176,18 +189,18 @@ class PanelGeneracion:
             icono="\u23f9", ancho=30,
             color_bg="#CC3333", color_fg="white",
         )
-        self._btn_parar.grid(row=14, column=0, columnspan=2, sticky="ew", pady=(0, 4))
+        self._btn_parar.grid(row=15, column=0, columnspan=2, sticky="ew", pady=(0, 4))
         self._btn_parar.configure(state="disabled")
 
         # ── Botón abrir carpeta ──
         crear_boton(f, "Abrir carpeta de salida",
                     self._abrir_carpeta, icono="\U0001f4c2").grid(
-                    row=15, column=0, columnspan=2, sticky="ew", pady=(0, 4))
+                    row=16, column=0, columnspan=2, sticky="ew", pady=(0, 4))
 
         # ── Botón vaciar caché ──
         crear_boton(f, "Vaciar cach\u00e9 de teselas",
                     self._vaciar_cache, icono="\U0001f5d1").grid(
-                    row=16, column=0, columnspan=2, sticky="ew", pady=(0, 4))
+                    row=17, column=0, columnspan=2, sticky="ew", pady=(0, 4))
 
         f.columnconfigure(0, weight=1)
         f.columnconfigure(1, weight=1)
@@ -766,6 +779,146 @@ class PanelGeneracion:
         else:
             self.callback_log("\nNo se encontr\u00f3 cach\u00e9 que eliminar.", "info")
             messagebox.showinfo("Cach\u00e9", "No se encontr\u00f3 cach\u00e9 de teselas.")
+
+    # ── Vista previa en miniatura ────────────────────────────────────────
+
+    def _vista_previa(self):
+        """Genera una vista previa del primer plano seleccionado y la
+        muestra en una ventana emergente."""
+        if self.motor.gdf_infra is None:
+            messagebox.showwarning("Aviso",
+                                    "Carga primero el shapefile.")
+            return
+
+        if self._auto_aplicar:
+            self._auto_aplicar()
+
+        cfg = self.get_config()
+        campos = cfg.get("campos", [])
+        if not campos:
+            messagebox.showwarning("Aviso", "Selecciona al menos un campo.")
+            return
+
+        modo = self._modo_gen.get()
+        if modo == "seleccion":
+            tabla = cfg.get("tabla")
+            sels = tabla.selection() if tabla else ()
+            if not sels:
+                messagebox.showinfo("Info",
+                                     "Selecciona una infraestructura en la tabla.")
+                return
+            idx = tabla.index(sels[0])
+        elif modo == "rango":
+            try:
+                idx = max(0, int(self._rango_desde.get()) - 1)
+            except ValueError:
+                idx = 0
+        else:
+            idx = 0
+
+        self.callback_log("Generando vista previa...", "info")
+
+        def _worker():
+            try:
+                fig = self.motor.generar_vista_previa(
+                    idx_fila=idx,
+                    formato_key=cfg["formato"],
+                    proveedor=cfg["proveedor"],
+                    transparencia_montes=cfg["transparencia"],
+                    campos_visibles=campos,
+                    color_infra=cfg["color_infra"],
+                    escala_manual=cfg.get("escala_manual"),
+                    campo_encabezado=cfg.get("campo_encabezado"),
+                )
+                self._parent_window.after(0, lambda: self._mostrar_preview(fig))
+            except Exception as e:
+                self._parent_window.after(
+                    0, lambda: self.callback_log(
+                        f"Error en vista previa: {e}", "error"))
+
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _mostrar_preview(self, fig):
+        """Muestra la figura matplotlib en una ventana emergente."""
+        import matplotlib
+        matplotlib.use("Agg")
+        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+
+        self.callback_log("Vista previa generada.", "ok")
+
+        popup = tk.Toplevel(self._parent_window)
+        popup.title("Vista previa del plano")
+        popup.geometry("900x650")
+        popup.configure(bg="#1C2333")
+        popup.transient(self._parent_window)
+
+        canvas = FigureCanvasTkAgg(fig, master=popup)
+        canvas.draw()
+        canvas.get_tk_widget().pack(fill="both", expand=True, padx=4, pady=4)
+
+        import matplotlib.pyplot as _plt
+
+        def _on_close():
+            _plt.close(fig)
+            popup.destroy()
+
+        popup.protocol("WM_DELETE_WINDOW", _on_close)
+
+        tk.Button(popup, text="Cerrar", command=_on_close,
+                  font=("Helvetica", 10), bg="#2C3E50", fg="#ECF0F1",
+                  relief="flat", cursor="hand2", padx=12, pady=4).pack(
+                  pady=(0, 8))
+
+    # ── Mapa guía ─────────────────────────────────────────────────────────
+
+    def _mapa_guia(self):
+        """Genera un mapa guía con todas las infraestructuras numeradas
+        y lo muestra en una ventana emergente."""
+        if self.motor.gdf_infra is None:
+            messagebox.showwarning("Aviso",
+                                    "Carga primero el shapefile.")
+            return
+
+        if self._auto_aplicar:
+            self._auto_aplicar()
+
+        cfg = self.get_config()
+
+        # Determinar índices según el modo actual
+        modo = self._modo_gen.get()
+        if modo == "agrupado":
+            indices = []
+            campo = self._campo_agrupacion.get()
+            for valor, var in self._check_valores.items():
+                if var.get():
+                    indices.extend(
+                        self.motor.obtener_indices_por_valor(campo, valor))
+        else:
+            indices = self._obtener_indices()
+
+        if not indices:
+            messagebox.showwarning("Aviso",
+                                    "No hay infraestructuras seleccionadas.")
+            return
+
+        self.callback_log(
+            f"Generando mapa gu\u00eda ({len(indices)} infraestructuras)...",
+            "info")
+
+        def _worker():
+            try:
+                fig = self.motor.generar_mapa_guia(
+                    indices=indices,
+                    formato_key=cfg["formato"],
+                    transparencia_montes=cfg["transparencia"],
+                )
+                self._parent_window.after(0, lambda: self._mostrar_preview(fig))
+            except Exception as e:
+                self._parent_window.after(
+                    0, lambda: self.callback_log(
+                        f"Error en mapa gu\u00eda: {e}", "error"))
+
+        threading.Thread(target=_worker, daemon=True).start()
 
     def _abrir_carpeta(self):
         cfg = self.get_config()
