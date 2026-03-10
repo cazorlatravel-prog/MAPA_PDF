@@ -199,6 +199,17 @@ class MaquetadorPlano:
         self.ax_info = self.fig.add_subplot(gs_lateral[2, 0])    # leyenda
         self.ax_esc = self.fig.add_subplot(gs_lateral[3, 0])     # cajetín
 
+        # ── Alinear la base del cajetín con la base del mapa ──
+        # Forzar el layout para obtener posiciones reales
+        self.fig.canvas.draw_idle()
+        pos_map = self.ax_map.get_position()
+        pos_esc = self.ax_esc.get_position()
+        # Mover ax_esc para que su borde inferior coincida con el del mapa
+        new_bottom = pos_map.y0
+        new_height = pos_esc.height
+        self.ax_esc.set_position([pos_esc.x0, new_bottom,
+                                   pos_esc.width, new_height])
+
         return self.fig, self.ax_map, self.ax_info, self.ax_mini, self.ax_esc
 
     # ── Extensión del mapa ─────────────────────────────────────────────
