@@ -190,7 +190,7 @@ class MaquetadorPlano:
         # Minimapa (pequeño) | Tabla datos (compacta) | Leyenda | Cajetín
         gs_lateral = gridspec.GridSpecFromSubplotSpec(
             4, 1, subplot_spec=gs[0, 1],
-            height_ratios=[0.22, 0.08, 0.28, 0.42],
+            height_ratios=[0.22, 0.08, 0.20, 0.50],
             hspace=0.01,
         )
 
@@ -1204,28 +1204,24 @@ class MaquetadorPlano:
 
         # Cada fila de items mide row_h; calcular cuántas filas máx
         n_rows_max = max(mid, n_mon, 1)
-        row_h = min(0.10, 0.65 / max(n_rows_max, 1))
+        row_h = min(0.07, 0.70 / max(n_rows_max, 1))
 
-        # Altura usada: título(0.08) + subtítulo(0.06) + filas*row_h + margen(0.04)
-        content_h = 0.08 + 0.06 + n_rows_max * row_h + 0.04
-        content_h = min(content_h, 1.0)
-
-        # y_top: borde superior del recuadro (contenido pegado arriba)
+        # Usar todo el axes disponible (ya dimensionado por gs_lateral)
         y_top = 1.0
-        y_bot = y_top - content_h
+        y_bot = 0.0
 
-        # Borde del panel ajustado al contenido
-        ax.add_patch(Rectangle((0, y_bot), 1, content_h, facecolor=C_BG_LEYENDA,
+        # Borde del panel
+        ax.add_patch(Rectangle((0, y_bot), 1, 1.0, facecolor=C_BG_LEYENDA,
                                 edgecolor=C_BORDER, linewidth=1.0, zorder=0))
 
-        # Barra de título LEYENDA (fondo verde, texto blanco)
-        title_h = 0.07
+        # Barra de título LEYENDA compacta
+        title_h = 0.10
         ax.add_patch(Rectangle((0, y_top - title_h), 1, title_h,
                                 facecolor=C_GREEN, edgecolor=C_BORDER,
                                 linewidth=1.0, zorder=1))
         t_y = y_top - title_h / 2
         ax.text(0.5, t_y, "LEYENDA", ha="center", va="center",
-                fontsize=5.5, fontweight="bold", color="white",
+                fontsize=5, fontweight="bold", color="white",
                 transform=ax.transAxes, zorder=2)
 
         # Línea divisoria vertical entre infraestructura y montes
@@ -1238,33 +1234,30 @@ class MaquetadorPlano:
             label, color, geom_type, linestyle, marker, facecolor = item
             if "point" in geom_type:
                 ax.plot((x_sym0 + x_sym1) / 2, y, marker=marker or "o",
-                        color=color, markersize=2.8, markeredgecolor="white",
+                        color=color, markersize=2.5, markeredgecolor="white",
                         markeredgewidth=0.2, transform=ax.transAxes, zorder=3)
             elif "line" in geom_type or "string" in geom_type:
                 ax.plot([x_sym0, x_sym1], [y, y], color=color,
-                        linewidth=1.5, linestyle=linestyle or "-",
+                        linewidth=1.3, linestyle=linestyle or "-",
                         transform=ax.transAxes, zorder=3, solid_capstyle="round")
             else:
                 rect_w = x_sym1 - x_sym0
-                rect_h = rh * 0.50
+                rect_h = rh * 0.45
                 ax.add_patch(Rectangle(
                     (x_sym0, y - rect_h / 2), rect_w, rect_h,
                     facecolor=facecolor or (color + "55"),
-                    edgecolor=color, linewidth=0.6,
+                    edgecolor=color, linewidth=0.5,
                     transform=ax.transAxes, zorder=3))
             ax.text(x_txt, y, str(label)[:16], ha="left", va="center",
-                    fontsize=3.0, color="#3A3A4A", transform=ax.transAxes, zorder=3)
+                    fontsize=2.8, color="#3A3A4A", transform=ax.transAxes, zorder=3)
 
-        # ── Posición Y del subtítulo y primer item ──
-        sub_y = t_y - 0.09   # subtítulos de sección
-        first_y = sub_y - 0.06  # primer item
+        # ── Posición Y del subtítulo y primer item (compacto) ──
+        sub_y = y_top - title_h - 0.06
+        first_y = sub_y - 0.05
 
         # ── Sección izquierda: TIPO INFRAESTRUCTURA (2 sub-columnas) ──
         ax.text(0.02, sub_y, "TIPO INFRAESTRUCTURA", ha="left", va="center",
-                fontsize=4, fontweight="bold", color=C_GREEN_DARK, zorder=2)
-        # Subrayado del subtítulo
-        ax.plot([0.02, 0.40], [sub_y - 0.02, sub_y - 0.02],
-                color=C_GREEN, linewidth=0.5, transform=ax.transAxes, zorder=2)
+                fontsize=3.5, fontweight="bold", color=C_GREEN_DARK, zorder=2)
 
         col_left = items_inf[:mid]
         col_right = items_inf[mid:n_inf]
@@ -1272,25 +1265,20 @@ class MaquetadorPlano:
         # Sub-columna izquierda (x: 0.02-0.35)
         for i, item in enumerate(col_left):
             y = first_y - i * row_h
-            _dibujar_item(0.02, 0.09, 0.10, y, item, row_h)
+            _dibujar_item(0.02, 0.08, 0.09, y, item, row_h)
 
         # Sub-columna derecha (x: 0.35-0.65)
         for i, item in enumerate(col_right):
             y = first_y - i * row_h
-            _dibujar_item(0.35, 0.42, 0.43, y, item, row_h)
+            _dibujar_item(0.35, 0.41, 0.42, y, item, row_h)
 
         # ── Sección derecha: MONTES PÚBLICOS ──
         ax.text(0.80, sub_y, "MONTES PÚBLICOS", ha="center", va="center",
-                fontsize=4, fontweight="bold", color=C_GREEN_DARK, zorder=2)
-        # Subrayado del subtítulo
-        ax.plot([0.68, 0.92], [sub_y - 0.02, sub_y - 0.02],
-                color=C_GREEN, linewidth=0.5, transform=ax.transAxes, zorder=2)
-
-        row_h_m = row_h  # misma altura de fila para alinear
+                fontsize=3.5, fontweight="bold", color=C_GREEN_DARK, zorder=2)
 
         for i, item in enumerate(items_mon[:n_mon]):
-            y = first_y - i * row_h_m
-            _dibujar_item(0.67, 0.74, 0.75, y, item, row_h_m)
+            y = first_y - i * row_h
+            _dibujar_item(0.67, 0.73, 0.74, y, item, row_h)
 
     # ── Cajetín lateral (Plantilla 2: ax_esc) ────────────────────────
 
