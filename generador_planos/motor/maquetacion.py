@@ -179,7 +179,7 @@ class MaquetadorPlano:
             1, 2, figure=self.fig,
             left=izq, right=1 - der,
             top=gs_top, bottom=inf,
-            width_ratios=[0.72, 0.28],
+            width_ratios=[0.80, 0.20],
             hspace=0.02, wspace=0.008,
         )
 
@@ -187,10 +187,10 @@ class MaquetadorPlano:
         self.ax_map = self.fig.add_subplot(gs[0, 0])
 
         # Panel lateral derecho: subdividido en 4 filas
-        # Minimapa (grande) | Tabla datos (compacta) | Leyenda | Cajetín
+        # Minimapa (pequeño) | Tabla datos (compacta) | Leyenda | Cajetín
         gs_lateral = gridspec.GridSpecFromSubplotSpec(
             4, 1, subplot_spec=gs[0, 1],
-            height_ratios=[0.40, 0.06, 0.16, 0.38],
+            height_ratios=[0.22, 0.08, 0.28, 0.42],
             hspace=0.01,
         )
 
@@ -208,8 +208,8 @@ class MaquetadorPlano:
         ancho_util = self.fmt_mm[0] - MARGENES_MM["izq"] - MARGENES_MM["der"]
         alto_util = self.fmt_mm[1] - MARGENES_MM["sup"] - MARGENES_MM["inf"]
         if self.es_lateral:
-            # Plantilla 2: mapa ocupa 72% del ancho y toda la altura
-            ancho_mm = ancho_util * 0.72
+            # Plantilla 2: mapa ocupa 80% del ancho y toda la altura
+            ancho_mm = ancho_util * 0.80
             alto_mm = (alto_util - _CABECERA_MM)
         else:
             ancho_mm = ancho_util * RATIO_MAPA_ANCHO
@@ -800,9 +800,9 @@ class MaquetadorPlano:
         alto_util = (self.fmt_mm[1] - MARGENES_MM["sup"] - MARGENES_MM["inf"]
                      - _CABECERA_MM)
         if self.es_lateral:
-            # Panel lateral: 28% del ancho, ~38% del alto (minimapa grande)
-            panel_w_mm = ancho_util * 0.28 * 0.90
-            panel_h_mm = alto_util * 0.38 * 0.90
+            # Panel lateral: 20% del ancho, ~22% del alto (minimapa pequeño)
+            panel_w_mm = ancho_util * 0.20 * 0.90
+            panel_h_mm = alto_util * 0.22 * 0.90
         else:
             panel_w_mm = ancho_util * 0.30 * 0.95   # col 2 ratio, menos wspace
             panel_h_mm = alto_util * (1 - RATIO_MAPA_ALTO) * 0.90  # menos hspace
