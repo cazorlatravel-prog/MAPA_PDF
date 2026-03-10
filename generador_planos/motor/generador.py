@@ -847,6 +847,147 @@ class GeneradorPlanos:
         log(f"  \u2713 Guardado: {nombre_arch}")
         return ruta_out
 
+    # ── Vista previa en miniatura ────────────────────────────────────────
+
+    def generar_vista_previa(self, idx_fila: int, formato_key: str,
+                              proveedor: str, transparencia_montes: float,
+                              campos_visibles: list, color_infra: str,
+                              escala_manual: int = None,
+                              campo_encabezado: str = None):
+        """Genera una vista previa (figure matplotlib) a baja resolución.
+
+        Devuelve el objeto ``plt.Figure`` sin guardarlo a disco, para
+        mostrarlo en un popup de la GUI.
+        """
+        self._ensure_agg()
+
+        row = self.gdf_infra.iloc[idx_fila]
+        geom = row.geometry
+
+        _es_lateral = self.layout_key == "Plantilla 2 (Panel lateral)"
+        escala = seleccionar_escala(geom, formato_key, escala_manual,
+                                    es_lateral=_es_lateral)
+
+        # DPI bajo para preview rápido
+        dpi_preview = 72
+        maq = MaquetadorPlano(formato_key, escala,
+                               layout_key=self.layout_key, dpi=dpi_preview)
+        fig, ax_map, ax_info, ax_mini, ax_esc = maq.crear_figura()
+
+        xmin, xmax, ymin, ymax = maq.calcular_extension_mapa(geom)
+        maq.configurar_mapa_principal(xmin, xmax, ymin, ymax)
+
+        gdf_view = self.gdf_infra.iloc[[idx_fila]]
+        self._añadir_fondo(ax_map, gdf_view, proveedor,
+                           xmin, xmax, ymin, ymax)
+        ax_map.set_xlim(xmin, xmax)
+        ax_map.set_ylim(ymin, ymax)
+
+        gdf_sel = self.gdf_infra.iloc[[idx_fila]]
+        self._dibujar_capas_mapa(ax_map, gdf_sel, [idx_fila],
+                                  xmin, xmax, ymin, ymax,
+                                  transparencia_montes, color_infra)
+        ax_map.set_xlim(xmin, xmax)
+        ax_map.set_ylim(ymin, ymax)
+
+        # Etiquetas infraestructuras
+        campo_etiq = self._cajetin.get("campo_etiqueta", "Nombre_Infra")
+        if campo_etiq:
+            maq.dibujar_etiquetas_infra(gdf_sel, campo_etiqueta=campo_etiq,
+                                         campo_mapeo=self._campo_mapeo)
+
+        cx, cy = geom.centroid.x, geom.centroid.y
+        _filas_tabla = self._obtener_filas_tabla([row], idx_fila=idx_fila)
+
+        if maq.es_lateral:
+            maq.dibujar_mapa_posicion(
+                cx, cy,
+                ruta_raster_loc=self.ruta_raster_localizacion,
+                escala_loc=self.escala_localizacion,
+                prov_localizacion=self.prov_localizacion,
+                wms_custom=self.wms_custom_localizacion,
+                wfs_custom=self.wfs_custom_localizacion,
+                ruta_capa_loc=self.ruta_capa_localizacion)
+            maq.dibujar_tabla_infra(_filas_tabla, campos_visibles,
+                                     campo_mapeo=self._campo_mapeo)
+            items_inf, items_mon = self._construir_items_leyenda_separados(
+                gdf_sel, color_infra, xmin, xmax, ymin, ymax)
+            maq.dibujar_leyenda_lateral(items_inf, items_mon)
+            maq.dibujar_cajetin_lateral(row, cajetin=self._cajetin,
+                                         plantilla=self._plantilla,
+                                         proveedor=proveedor,
+                                         campo_mapeo=self._campo_mapeo)
+        else:
+            items_ley = self._construir_items_leyenda(gdf_sel, color_infra,
+                                                       xmin, xmax, ymin, ymax)
+            maq.dibujar_leyenda(items_ley)
+            _fila_panel = _filas_tabla[0] if _filas_tabla else row
+            maq.dibujar_panel_atributos(_fila_panel, campos_visibles,
+                                         campo_mapeo=self._campo_mapeo,
+                                         campo_encabezado=campo_encabezado)
+            maq.dibujar_mapa_posicion(
+                cx, cy,
+                ruta_raster_loc=self.ruta_raster_localizacion,
+                escala_loc=self.escala_localizacion,
+                prov_localizacion=self.prov_localizacion,
+                wms_custom=self.wms_custom_localizacion,
+                wfs_custom=self.wfs_custom_localizacion,
+                ruta_capa_loc=self.ruta_capa_localizacion)
+            items_cat = self._construir_items_categoria(gdf_sel,
+                                                         xmin, xmax, ymin, ymax)
+            maq.dibujar_barra_escala(proveedor, cx_utm=cx, cy_utm=cy,
+                                      cajetin=self._cajetin,
+                                      items_categoria=items_cat)
+            maq.dibujar_cajetin(self._cajetin)
+
+        maq.dibujar_grid_utm(xmin, xmax, ymin, ymax)
+        maq.dibujar_escala_grafica_mapa()
+        maq.dibujar_norte_en_mapa()
+        maq.dibujar_cabecera(row, cajetin=self._cajetin,
+                              plantilla=self._plantilla)
+        maq.dibujar_marcos(plantilla=self._plantilla, cajetin=self._cajetin)
+
+        return fig
+
+    # ── Mapa guía / índice cartográfico ───────────────────────────────────
+
+    def generar_mapa_guia(self, indices: list, formato_key: str,
+                           transparencia_montes: float = 0.3,
+                           salida_dir: str = None,
+                           callback_log=None) -> "plt.Figure | str":
+        """Genera un mapa guía que muestra todas las infraestructuras
+        numeradas.
+
+        Si *salida_dir* es ``None``, devuelve la figura (para popup).
+        Si se proporciona, guarda un PDF y devuelve la ruta.
+        """
+        from .maquetacion import crear_mapa_guia
+
+        self._ensure_agg()
+
+        campo_nombre = self._cajetin.get("campo_etiqueta", "Nombre_Infra")
+        fig = crear_mapa_guia(
+            formato_key=formato_key,
+            gdf_infra=self.gdf_infra,
+            indices=indices,
+            gdf_montes=self.gdf_montes,
+            transparencia_montes=transparencia_montes,
+            plantilla=self._plantilla,
+            cajetin=self._cajetin,
+            campo_nombre=campo_nombre,
+        )
+
+        if salida_dir is not None:
+            ruta_out = os.path.join(salida_dir, "mapa_guia.pdf")
+            fig.savefig(ruta_out, format="pdf",
+                        dpi=self.dpi_guardado or 300, facecolor="white")
+            plt.close(fig)
+            if callback_log:
+                callback_log(f"  \u2713 Mapa guía guardado: mapa_guia.pdf")
+            return ruta_out
+
+        return fig
+
     # ── Generación en serie ──────────────────────────────────────────────
 
     def generar_serie(self, indices: list, formato_key: str, proveedor: str,
@@ -984,6 +1125,27 @@ class GeneradorPlanos:
                 plt.close(fig_indice)
                 if callback_log:
                     callback_log("  \u2713 \u00cdndice a\u00f1adido")
+
+                # Mapa guía cartográfico
+                try:
+                    from .maquetacion import crear_mapa_guia
+                    fig_guia = crear_mapa_guia(
+                        formato_key=formato_key,
+                        gdf_infra=self.gdf_infra,
+                        indices=indices,
+                        gdf_montes=self.gdf_montes,
+                        transparencia_montes=transparencia,
+                        plantilla=self._plantilla,
+                        cajetin=self._cajetin,
+                    )
+                    pdf.savefig(fig_guia, dpi=self.dpi_guardado or 300,
+                                facecolor="white")
+                    plt.close(fig_guia)
+                    if callback_log:
+                        callback_log("  \u2713 Mapa gu\u00eda a\u00f1adido")
+                except Exception as e:
+                    if callback_log:
+                        callback_log(f"  \u26a0 No se pudo generar mapa gu\u00eda: {e}")
 
             # Planos
             for i, idx in enumerate(indices):
