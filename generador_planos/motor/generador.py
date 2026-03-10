@@ -352,7 +352,9 @@ class GeneradorPlanos:
             campo_real = campo_cat
             if self._campo_mapeo and campo_cat in self._campo_mapeo:
                 campo_real = self._campo_mapeo[campo_cat]
-            valores_unicos = sorted(gdf_sel[campo_real].astype(str).unique())
+            valores_unicos = sorted(
+                str(v) for v in gdf_sel[campo_real].dropna().unique()
+            )
             for valor in valores_unicos:
                 simb = self.gestor_simbologia.obtener_simbologia_infra(
                     campo_cat, valor)
@@ -373,7 +375,9 @@ class GeneradorPlanos:
             if not montes_vis.empty:
                 if campo_cat_montes and campo_cat_montes in montes_vis.columns:
                     # Leyenda por categoría de montes
-                    valores_visibles = sorted(montes_vis[campo_cat_montes].astype(str).unique())
+                    valores_visibles = sorted(
+                        str(v) for v in montes_vis[campo_cat_montes].dropna().unique()
+                    )
                     for valor in valores_visibles:
                         simb = self.gestor_simbologia.obtener_simbologia_monte(
                             campo_cat_montes, valor)
@@ -407,7 +411,9 @@ class GeneradorPlanos:
             campo_real = self._campo_mapeo[campo_cat]
 
         # Solo categorías de las infraestructuras seleccionadas para el plano
-        valores_visibles = sorted(gdf_sel[campo_real].astype(str).unique())
+        valores_visibles = sorted(
+            str(v) for v in gdf_sel[campo_real].dropna().unique()
+        )
 
         for valor in valores_visibles:
             simb = self.gestor_simbologia.obtener_simbologia_infra(campo_cat, valor)
@@ -437,7 +443,9 @@ class GeneradorPlanos:
             campo_real = campo_cat
             if self._campo_mapeo and campo_cat in self._campo_mapeo:
                 campo_real = self._campo_mapeo[campo_cat]
-            valores_unicos = sorted(gdf_sel[campo_real].astype(str).unique())
+            valores_unicos = sorted(
+                str(v) for v in gdf_sel[campo_real].dropna().unique()
+            )
             for valor in valores_unicos:
                 simb = self.gestor_simbologia.obtener_simbologia_infra(
                     campo_cat, valor)
