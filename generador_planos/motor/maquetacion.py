@@ -1275,21 +1275,12 @@ class MaquetadorPlano:
             ax.text(x_txt, y, str(label)[:16], ha="left", va="center",
                     fontsize=2.8, color="#3A3A4A", transform=ax.transAxes, zorder=3)
 
-        # ── Distribuir items en todo el espacio disponible ──
-        # Espacio útil: desde debajo del título hasta el fondo
-        content_top = y_top - title_h - 0.03  # pequeño margen
-        content_bot = y_bot + 0.03
-        avail = content_top - content_bot
+        # ── Distribuir items compactos, pegados al título ──
+        content_top = y_top - title_h - 0.02
+        slot_h = 0.07  # altura fija compacta por fila
 
-        # Número de filas necesarias (subtítulo + items)
-        n_rows_max = max(mid, n_mon, 1)
-        total_slots = 1 + n_rows_max  # 1 slot para subtítulo + n para items
-        slot_h = avail / max(total_slots, 1)
-        # Limitar slot_h para que no quede demasiado espaciado con pocos items
-        slot_h = min(slot_h, 0.12)
-
-        sub_y = content_top - slot_h * 0.5
-        first_y = sub_y - slot_h
+        sub_y = content_top - slot_h * 0.4
+        first_y = sub_y - slot_h * 0.85
 
         # ── Sección izquierda: INFRAESTRUCTURA (2 sub-columnas) ──
         ax.text(0.02, sub_y, "INFRAESTRUCTURA", ha="left", va="center",
