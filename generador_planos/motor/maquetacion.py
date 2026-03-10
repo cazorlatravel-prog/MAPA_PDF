@@ -514,6 +514,7 @@ class MaquetadorPlano:
         if handles:
             leg = self.ax_map.legend(
                 handles=handles, loc="lower left", fontsize=4.5,
+                bbox_to_anchor=(0.0, 0.045),
                 title="LEYENDA", title_fontsize=5,
                 frameon=True, framealpha=0.92, facecolor="white",
                 edgecolor="#2C3E50", borderpad=0.6, labelspacing=0.5,
