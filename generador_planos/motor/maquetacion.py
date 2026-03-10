@@ -1336,7 +1336,7 @@ class MaquetadorPlano:
         C_TXT_LIGHT = "#4A4A5A"     # Texto secundario
         C_GREEN = "#007932"          # Verde Junta de Andalucía
         C_GREEN_DARK = "#368f3f"     # Verde oscuro para fondos
-        C_BG_ORG = "#007932"         # Fondo barra organización
+        C_BG_ORG = "#FFFFFF"         # Fondo barra organización (blanco)
         C_BG_PROY = "#F0F4F0"        # Fondo proyecto (verde muy tenue)
         C_BG_MONTE = "#FAFAFA"       # Fondo monte (gris casi blanco)
         C_BG_NUM = "#F5F7F5"         # Fondo nº de plano
@@ -1367,7 +1367,7 @@ class MaquetadorPlano:
                                 facecolor=C_BG_ORG, edgecolor=C_GREEN_DARK,
                                 linewidth=1.2, zorder=1))
 
-        org = caj.get("organizacion", "")
+        org = caj.get("organizacion", "").strip()
         logo_path = caj.get("logo_path", "")
 
         x_txt = 0.02
@@ -1377,14 +1377,29 @@ class MaquetadorPlano:
                 img = PILImage.open(logo_path)
                 iw, ih = img.size
                 aspect_img = iw / max(ih, 1)
-                logo_h_frac = org_h * 0.90
-                logo_w_frac = min(0.40, logo_h_frac * aspect_img)
-                logo_ax = ax.inset_axes(
-                    [0.01, org_y + org_h * 0.05, logo_w_frac, logo_h_frac],
-                    transform=ax.transAxes)
-                logo_ax.imshow(img, aspect="equal")
-                logo_ax.axis("off")
-                x_txt = 0.02 + logo_w_frac + 0.02
+
+                if org:
+                    # Logo + nombre: logo ocupa la parte izquierda
+                    logo_h_frac = org_h * 0.90
+                    logo_w_frac = min(0.40, logo_h_frac * aspect_img)
+                    logo_ax = ax.inset_axes(
+                        [0.01, org_y + org_h * 0.05,
+                         logo_w_frac, logo_h_frac],
+                        transform=ax.transAxes)
+                    logo_ax.imshow(img, aspect="equal")
+                    logo_ax.axis("off")
+                    x_txt = 0.02 + logo_w_frac + 0.02
+                else:
+                    # Solo logo: ocupa TODO el espacio de la celda
+                    logo_h_frac = org_h * 0.92
+                    logo_w_frac = min(0.98, logo_h_frac * aspect_img)
+                    logo_x = (1.0 - logo_w_frac) / 2  # centrado horizontal
+                    logo_ax = ax.inset_axes(
+                        [logo_x, org_y + org_h * 0.04,
+                         logo_w_frac, logo_h_frac],
+                        transform=ax.transAxes)
+                    logo_ax.imshow(img, aspect="equal")
+                    logo_ax.axis("off")
             except Exception:
                 pass
 
@@ -1398,16 +1413,16 @@ class MaquetadorPlano:
                 fsz1 = 7.5 if len(linea1) <= 30 else (6.5 if len(linea1) <= 45 else 5.5)
                 ax.text(x_centro, org_y + org_h * 0.62,
                         linea1, ha="center", va="center",
-                        fontsize=fsz1, fontweight="bold", color="white", zorder=3)
+                        fontsize=fsz1, fontweight="bold", color=C_GREEN, zorder=3)
                 ax.text(x_centro, org_y + org_h * 0.28,
                         linea2, ha="center", va="center",
-                        fontsize=6.0, fontweight="bold", color="#E0F0E0", zorder=3)
+                        fontsize=6.0, fontweight="bold", color=C_GREEN_DARK, zorder=3)
             else:
                 texto = org.upper()
                 if len(texto) <= 30:
                     ax.text(x_centro, org_y + org_h * 0.50, texto,
                             ha="center", va="center",
-                            fontsize=6.5, fontweight="bold", color="white", zorder=3)
+                            fontsize=6.5, fontweight="bold", color=C_GREEN, zorder=3)
                 else:
                     mid = len(texto) // 2
                     pos = texto.rfind(" ", 0, mid + 8)
@@ -1422,11 +1437,11 @@ class MaquetadorPlano:
                     fsz = 6.0 if len(linea1) <= 35 else (5.0 if len(linea1) <= 45 else 4.5)
                     ax.text(x_centro, org_y + org_h * 0.65,
                             linea1, ha="center", va="center",
-                            fontsize=fsz, fontweight="bold", color="white", zorder=3)
+                            fontsize=fsz, fontweight="bold", color=C_GREEN, zorder=3)
                     if linea2:
                         ax.text(x_centro, org_y + org_h * 0.28,
                                 linea2, ha="center", va="center",
-                                fontsize=fsz, fontweight="bold", color="white", zorder=3)
+                                fontsize=fsz, fontweight="bold", color=C_GREEN, zorder=3)
 
         # ═══════════════════════════════════════════════════════════════
         # 2. TÍTULO DEL PROYECTO
