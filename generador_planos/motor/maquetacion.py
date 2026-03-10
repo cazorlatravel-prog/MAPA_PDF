@@ -498,12 +498,7 @@ class MaquetadorPlano:
         from matplotlib.patches import Patch
         handles = []
         for item in items_leyenda:
-            # Soportar tuplas de 6 (legacy) y 7 elementos (con hatch)
-            if len(item) >= 7:
-                label, color, geom_type, linestyle, marker, facecolor, hatch = item[:7]
-            else:
-                label, color, geom_type, linestyle, marker, facecolor = item[:6]
-                hatch = ""
+            label, color, geom_type, linestyle, marker, facecolor = item[:6]
             if "point" in geom_type:
                 h = Line2D([0], [0], marker=marker or "o", color="w",
                            markerfacecolor=color, markersize=5, label=label)
@@ -513,7 +508,7 @@ class MaquetadorPlano:
             else:
                 h = Patch(facecolor=facecolor or color,
                           edgecolor=color, linewidth=0.8,
-                          hatch=hatch or None, label=label)
+                          label=label)
             handles.append(h)
 
         if handles:
@@ -1246,12 +1241,7 @@ class MaquetadorPlano:
 
         # ── helper para dibujar un símbolo + texto ──
         def _dibujar_item(x_sym0, x_sym1, x_txt, y, item, rh):
-            # Soportar tuplas de 6 (legacy) y 7 elementos (con hatch)
-            if len(item) >= 7:
-                label, color, geom_type, linestyle, marker, facecolor, hatch = item[:7]
-            else:
-                label, color, geom_type, linestyle, marker, facecolor = item[:6]
-                hatch = ""
+            label, color, geom_type, linestyle, marker, facecolor = item[:6]
             if "point" in geom_type:
                 ax.plot((x_sym0 + x_sym1) / 2, y, marker=marker or "o",
                         color=color, markersize=2.5, markeredgecolor="white",
@@ -1263,15 +1253,11 @@ class MaquetadorPlano:
             else:
                 rect_w = x_sym1 - x_sym0
                 rect_h = rh * 0.45
-                rect_kw = dict(
+                ax.add_patch(Rectangle(
+                    (x_sym0, y - rect_h / 2), rect_w, rect_h,
                     facecolor=facecolor or (color + "55"),
                     edgecolor=color, linewidth=0.5,
-                    transform=ax.transAxes, zorder=3,
-                )
-                if hatch:
-                    rect_kw["hatch"] = hatch
-                ax.add_patch(Rectangle(
-                    (x_sym0, y - rect_h / 2), rect_w, rect_h, **rect_kw))
+                    transform=ax.transAxes, zorder=3))
             ax.text(x_txt, y, str(label)[:16], ha="left", va="center",
                     fontsize=2.8, color="#3A3A4A", transform=ax.transAxes, zorder=3)
 

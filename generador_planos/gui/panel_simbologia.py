@@ -12,7 +12,7 @@ from .estilos import (
     COLOR_ACENTO, FONT_BOLD, FONT_SMALL,
     crear_frame_seccion,
 )
-from ..motor.simbologia import TIPOS_TRAZO, MARCADORES, TRAMAS, PALETA_CATEGORIAS
+from ..motor.simbologia import TIPOS_TRAZO, MARCADORES, PALETA_CATEGORIAS
 
 
 class PanelSimbologia:
@@ -22,7 +22,7 @@ class PanelSimbologia:
         self.motor = motor
         self.callback_log = callback_log
         self._widgets_capas = []
-        # [(valor, color_var, lbl_color, trazo_var, trama_var, marcador_var)]
+        # [(valor, color_var, lbl_color, trazo_var, marcador_var)]
         self._widgets_categorias = []
 
         f = crear_frame_seccion(parent, "\U0001f3a8  SIMBOLOG\u00cdA")
@@ -194,7 +194,6 @@ class PanelSimbologia:
 
     def _on_campo_cat_changed(self, event=None):
         """Cuando cambia el campo de categorización, genera colores/estilos por valor."""
-        from ..motor.simbologia import _TRAMAS_CICLO
         self._widgets_categorias.clear()
         for w in self._frame_categorias.winfo_children():
             w.destroy()
@@ -213,16 +212,13 @@ class PanelSimbologia:
         # Generar simbología automática
         self.motor.gestor_simbologia.generar_por_categoria(campo, valores)
 
-        nombres_tramas = list(TRAMAS.keys())
         nombres_trazos = list(TIPOS_TRAZO.keys())
         nombres_marcadores = list(MARCADORES.keys())
         trazos_inv = {v: k for k, v in TIPOS_TRAZO.items()}
-        tramas_inv = {v: k for k, v in TRAMAS.items()}
         marcadores_inv = {v: k for k, v in MARCADORES.items()}
 
         for i, valor in enumerate(valores[:20]):
             color = PALETA_CATEGORIAS[i % len(PALETA_CATEGORIAS)]
-            hatch_code = _TRAMAS_CICLO[i % len(_TRAMAS_CICLO)]
 
             # Fila principal: color + nombre
             row_f = tk.Frame(self._frame_categorias, bg=COLOR_PANEL)
@@ -245,7 +241,7 @@ class PanelSimbologia:
                       relief="flat", cursor="hand2", anchor="w").pack(
                       side="left", fill="x", expand=True)
 
-            # Fila de estilo: trazo + trama + marcador
+            # Fila de estilo: trazo + marcador
             style_f = tk.Frame(self._frame_categorias, bg=COLOR_PANEL)
             style_f.pack(fill="x", pady=(0, 2), padx=(14, 0))
 
@@ -255,13 +251,6 @@ class PanelSimbologia:
                          values=nombres_trazos, state="readonly",
                          font=FONT_SMALL, width=8).pack(side="left", padx=(0, 2))
 
-            # Trama
-            trama_var = tk.StringVar(
-                value=tramas_inv.get(hatch_code, "Sin trama"))
-            ttk.Combobox(style_f, textvariable=trama_var,
-                         values=nombres_tramas, state="readonly",
-                         font=FONT_SMALL, width=9).pack(side="left", padx=(0, 2))
-
             # Marcador
             marcador_var = tk.StringVar(value="C\u00edrculo")
             ttk.Combobox(style_f, textvariable=marcador_var,
@@ -270,7 +259,7 @@ class PanelSimbologia:
 
             self._widgets_categorias.append(
                 (str(valor), color_var, lbl_color,
-                 trazo_var, trama_var, marcador_var))
+                 trazo_var, marcador_var))
 
         if len(valores) > 20:
             tk.Label(self._frame_categorias,
@@ -283,7 +272,6 @@ class PanelSimbologia:
 
     def _on_campo_cat_montes_changed(self, event=None):
         """Cuando cambia el campo de categorización de montes, genera estilos por valor."""
-        from ..motor.simbologia import _TRAMAS_CICLO
         self._widgets_cat_montes.clear()
         for w in self._frame_cat_montes.winfo_children():
             w.destroy()
@@ -314,12 +302,8 @@ class PanelSimbologia:
             "#827717", "#9E9D24", "#AFB42B", "#C0CA33", "#D4E157",
         ]
 
-        nombres_tramas = list(TRAMAS.keys())
-        tramas_inv = {v: k for k, v in TRAMAS.items()}
-
         for i, valor in enumerate(valores[:20]):
             color = paleta_montes[i % len(paleta_montes)]
-            hatch_code = _TRAMAS_CICLO[i % len(_TRAMAS_CICLO)]
 
             row_f = tk.Frame(self._frame_cat_montes, bg=COLOR_PANEL)
             row_f.pack(fill="x", pady=1)
@@ -341,20 +325,8 @@ class PanelSimbologia:
                       relief="flat", cursor="hand2", anchor="w").pack(
                       side="left", fill="x", expand=True)
 
-            # Selector de trama para polígonos de montes
-            style_f = tk.Frame(self._frame_cat_montes, bg=COLOR_PANEL)
-            style_f.pack(fill="x", pady=(0, 2), padx=(14, 0))
-
-            tk.Label(style_f, text="Trama:", font=FONT_SMALL,
-                     bg=COLOR_PANEL, fg=COLOR_TEXTO_GRIS).pack(side="left")
-            trama_var = tk.StringVar(
-                value=tramas_inv.get(hatch_code, "Sin trama"))
-            ttk.Combobox(style_f, textvariable=trama_var,
-                         values=nombres_tramas, state="readonly",
-                         font=FONT_SMALL, width=10).pack(side="left", padx=(2, 0))
-
             self._widgets_cat_montes.append(
-                (str(valor), color_var, lbl_color, trama_var))
+                (str(valor), color_var, lbl_color))
 
         if len(valores) > 20:
             tk.Label(self._frame_cat_montes,
@@ -409,26 +381,24 @@ class PanelSimbologia:
         campo_cat = self._campo_categoria.get()
         if campo_cat != "(ninguno)" and self._widgets_categorias:
             for entry in self._widgets_categorias:
-                valor, color_var, _, trazo_var, trama_var, marcador_var = entry
+                valor, color_var, _, trazo_var, marcador_var = entry
                 if campo_cat in gs.categorias and valor in gs.categorias[campo_cat]:
                     simb = gs.categorias[campo_cat][valor]
                     simb.color = color_var["color"]
                     simb.facecolor = color_var["color"] + "55"
                     simb.linestyle = TIPOS_TRAZO.get(trazo_var.get(), "-")
-                    simb.hatch = TRAMAS.get(trama_var.get(), "")
                     simb.marker = MARCADORES.get(marcador_var.get(), "o")
 
         # Categorización de montes por campo
         campo_cat_montes = self._campo_cat_montes.get()
         if campo_cat_montes != "(ninguno)" and self._widgets_cat_montes:
             for entry in self._widgets_cat_montes:
-                valor, color_var, _, trama_var = entry
+                valor, color_var, _ = entry
                 if (campo_cat_montes in gs.categorias_montes and
                         valor in gs.categorias_montes[campo_cat_montes]):
                     simb = gs.categorias_montes[campo_cat_montes][valor]
                     simb.color = color_var["color"]
                     simb.facecolor = color_var["color"]
-                    simb.hatch = TRAMAS.get(trama_var.get(), "")
 
         # Configuración infraestructuras (grosor, transparencia, trazo, marcador)
         self.motor.config_infra = self.obtener_config_infra()

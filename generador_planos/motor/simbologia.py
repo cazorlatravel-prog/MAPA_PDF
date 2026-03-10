@@ -1,7 +1,7 @@
 """
 Modelo de datos de simbología para capas cartográficas.
 
-Permite configurar colores, grosores, tipos de trazo, marcadores y tramas
+Permite configurar colores, grosores, tipos de trazo y marcadores
 por categoría de infraestructura o por capa adicional.
 """
 
@@ -23,23 +23,6 @@ MARCADORES = {
     "Cruz": "+",
     "X": "x",
 }
-
-# Tramas (hatch) disponibles para polígonos — estilo QGIS/ArcGIS
-TRAMAS = {
-    "Sin trama": "",
-    "Diagonal /": "/",
-    "Diagonal \\": "\\",
-    "Cruzado": "+",
-    "Aspas": "x",
-    "Horizontal": "-",
-    "Vertical": "|",
-    "Puntos": ".",
-    "Puntos densos": "o",
-    "Estrellas": "*",
-}
-
-# Lista de tramas para asignación automática rotativa por categoría
-_TRAMAS_CICLO = ["", "/", "\\", "+", "x", "-", "|", ".", "o", "*"]
 
 # Paleta de colores predefinida para categorías
 PALETA_CATEGORIAS = [
@@ -90,7 +73,7 @@ class ConfigSimbologia:
 
     def __init__(self, color="#E74C3C", linewidth=1.5, linestyle="-",
                  alpha=1.0, marker="o", markersize=8, facecolor=None,
-                 label="", hatch=""):
+                 label=""):
         self.color = color
         self.linewidth = float(linewidth)
         self.linestyle = linestyle
@@ -99,7 +82,6 @@ class ConfigSimbologia:
         self.markersize = float(markersize)
         self.facecolor = facecolor or (color + "55")
         self.label = label
-        self.hatch = hatch  # Trama para polígonos (estilo QGIS/ArcGIS)
 
     def to_dict(self) -> dict:
         return {
@@ -111,11 +93,11 @@ class ConfigSimbologia:
             "markersize": self.markersize,
             "facecolor": self.facecolor,
             "label": self.label,
-            "hatch": self.hatch,
         }
 
     @classmethod
     def from_dict(cls, d: dict) -> "ConfigSimbologia":
+        d = {k: v for k, v in d.items() if k != "hatch"}
         return cls(**d)
 
 
@@ -144,10 +126,9 @@ class GestorSimbologia:
         self.categorias[campo] = {}
         for i, valor in enumerate(valores):
             color = PALETA_CATEGORIAS[i % len(PALETA_CATEGORIAS)]
-            hatch = _TRAMAS_CICLO[i % len(_TRAMAS_CICLO)]
             self.categorias[campo][str(valor)] = ConfigSimbologia(
                 color=color, linewidth=2.0, facecolor=color + "55",
-                label=str(valor), hatch=hatch,
+                label=str(valor),
             )
 
     def generar_por_categoria_montes(self, campo: str, valores: list):
@@ -161,10 +142,9 @@ class GestorSimbologia:
         self.categorias_montes[campo] = {}
         for i, valor in enumerate(valores):
             color = paleta_montes[i % len(paleta_montes)]
-            hatch = _TRAMAS_CICLO[i % len(_TRAMAS_CICLO)]
             self.categorias_montes[campo][str(valor)] = ConfigSimbologia(
                 color=color, linewidth=0.8, facecolor=color,
-                alpha=0.3, label=str(valor), hatch=hatch,
+                alpha=0.3, label=str(valor),
             )
 
     def obtener_simbologia_monte(self, campo_cat: str, valor: str) -> ConfigSimbologia:

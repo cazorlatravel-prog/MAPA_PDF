@@ -328,14 +328,11 @@ class GeneradorPlanos:
                         gdf_cat = montes_clip[mask]
                         if gdf_cat.empty:
                             continue
-                        plot_kw = dict(
+                        gdf_cat.plot(
                             ax=ax_map, facecolor=simb.facecolor,
                             edgecolor=simb.color, linewidth=float(simb.linewidth),
                             alpha=float(alpha), zorder=1,
                         )
-                        if simb.hatch:
-                            plot_kw["hatch"] = simb.hatch
-                        gdf_cat.plot(**plot_kw)
                 else:
                     # Color fijo
                     montes_clip.plot(
@@ -394,15 +391,12 @@ class GeneradorPlanos:
                                  linestyle=ls, zorder=5,
                                  alpha=alpha_infra)
                 else:
-                    poly_kw = dict(
+                    gdf_cat.plot(
                         ax=ax_map, facecolor=simb.facecolor,
                         edgecolor=c, linewidth=lw,
                         linestyle=ls, zorder=5,
                         alpha=alpha_infra,
                     )
-                    if simb.hatch:
-                        poly_kw["hatch"] = simb.hatch
-                    gdf_cat.plot(**poly_kw)
         else:
             # Sin categoría: color único
             if "point" in geom_type:
@@ -442,10 +436,10 @@ class GeneradorPlanos:
                     campo_cat, valor)
                 label = str(valor)[:25]
                 items.append((label, simb.color, geom_type, simb.linestyle,
-                              simb.marker, simb.facecolor, simb.hatch))
+                              simb.marker, simb.facecolor))
         else:
             items.append(("Infraestructuras", color_infra, geom_type, "-", "o",
-                           color_infra + "55", ""))
+                           color_infra + "55"))
 
         # Montes (solo si hay montes visibles en el extent)
         if self.gdf_montes is not None:
@@ -465,10 +459,10 @@ class GeneradorPlanos:
                             campo_cat_montes, valor)
                         label = str(valor)[:25]
                         items.append((label, simb.color, "polygon", "-",
-                                      None, simb.facecolor, simb.hatch))
+                                      None, simb.facecolor))
                 else:
                     items.append(("Montes", "#1a5c10", "polygon", "-", None,
-                                  "#22992244", ""))
+                                  "#22992244"))
 
         # Capas extra
         items.extend(self.gestor_capas.obtener_items_leyenda(self.gestor_simbologia))
@@ -502,7 +496,7 @@ class GeneradorPlanos:
             simb = self.gestor_simbologia.obtener_simbologia_infra(campo_cat, valor)
             label = str(valor)[:25]
             items.append((label, simb.color, geom_type, simb.linestyle,
-                          simb.marker, simb.facecolor, simb.hatch))
+                          simb.marker, simb.facecolor))
         return items if items else None
 
     def _construir_items_leyenda_separados(self, gdf_sel, color_infra,
@@ -534,10 +528,10 @@ class GeneradorPlanos:
                     campo_cat, valor)
                 label = str(valor)[:25]
                 items_infra.append((label, simb.color, geom_type, simb.linestyle,
-                                    simb.marker, simb.facecolor, simb.hatch))
+                                    simb.marker, simb.facecolor))
         else:
             items_infra.append(("Infraestructuras", color_infra, geom_type,
-                                "-", "o", color_infra + "55", ""))
+                                "-", "o", color_infra + "55"))
 
         # Montes
         if self.gdf_montes is not None:
@@ -555,10 +549,10 @@ class GeneradorPlanos:
                             campo_cat_montes, valor)
                         label = str(valor)[:25]
                         items_montes.append((label, simb.color, "polygon", "-",
-                                             None, simb.facecolor, simb.hatch))
+                                             None, simb.facecolor))
                 else:
                     items_montes.append(("Montes", "#1a5c10", "polygon", "-",
-                                         None, "#22992244", ""))
+                                         None, "#22992244"))
 
         return items_infra, items_montes
 

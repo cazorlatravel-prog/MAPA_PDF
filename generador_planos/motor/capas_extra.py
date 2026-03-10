@@ -133,7 +133,6 @@ class GestorCapasExtra:
                 simb.linestyle,
                 simb.marker,
                 simb.facecolor,
-                simb.hatch,
             ))
         return items
 
