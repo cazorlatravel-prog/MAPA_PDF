@@ -1499,7 +1499,10 @@ class MaquetadorPlano:
                     fontweight="bold", zorder=3)
 
         # Nº de plano
-        num_inicio = caj.get("num_plano_inicio", 1)
+        try:
+            num_inicio = int(caj.get("num_plano_inicio", 1))
+        except (ValueError, TypeError):
+            num_inicio = 1
         if num_plano is not None:
             n_plano = num_plano
         else:
@@ -1710,7 +1713,10 @@ class MaquetadorPlano:
             titulo_proy = cajetin.get("proyecto", "")
             titulo_mapa = cajetin.get("titulo_mapa", "")
             logo_path = cajetin.get("logo_path", "")
-            num_inicio = cajetin.get("num_plano_inicio", 1)
+            try:
+                num_inicio = int(cajetin.get("num_plano_inicio", 1))
+            except (ValueError, TypeError):
+                num_inicio = 1
             # Subtítulo dinámico desde un campo de la tabla de atributos
             campo_sub = cajetin.get("campo_subtitulo", "")
             if campo_sub and row is not None:

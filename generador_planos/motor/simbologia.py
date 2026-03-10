@@ -75,11 +75,11 @@ class ConfigSimbologia:
                  alpha=1.0, marker="o", markersize=8, facecolor=None,
                  label=""):
         self.color = color
-        self.linewidth = linewidth
+        self.linewidth = float(linewidth)
         self.linestyle = linestyle
-        self.alpha = alpha
+        self.alpha = float(alpha)
         self.marker = marker
-        self.markersize = markersize
+        self.markersize = float(markersize)
         self.facecolor = facecolor or (color + "55")
         self.label = label
 

@@ -95,23 +95,26 @@ class GestorCapasExtra:
                     geom_type = str(g.geom_type).lower()
                     break
 
-            if "point" in geom_type:
-                clip.plot(
-                    ax=ax, color=simb.color, markersize=simb.markersize,
-                    marker=simb.marker, alpha=simb.alpha, zorder=3,
-                    edgecolor="white", linewidth=0.3,
-                )
-            elif "line" in geom_type or "string" in geom_type:
-                clip.plot(
-                    ax=ax, color=simb.color, linewidth=simb.linewidth,
-                    linestyle=simb.linestyle, alpha=simb.alpha, zorder=3,
-                )
-            else:
-                clip.plot(
-                    ax=ax, facecolor=simb.facecolor, edgecolor=simb.color,
-                    linewidth=simb.linewidth, linestyle=simb.linestyle,
-                    alpha=simb.alpha, zorder=3,
-                )
+            try:
+                if "point" in geom_type:
+                    clip.plot(
+                        ax=ax, color=simb.color, markersize=float(simb.markersize),
+                        marker=simb.marker, alpha=float(simb.alpha), zorder=3,
+                        edgecolor="white", linewidth=0.3,
+                    )
+                elif "line" in geom_type or "string" in geom_type:
+                    clip.plot(
+                        ax=ax, color=simb.color, linewidth=float(simb.linewidth),
+                        linestyle=simb.linestyle, alpha=float(simb.alpha), zorder=3,
+                    )
+                else:
+                    clip.plot(
+                        ax=ax, facecolor=simb.facecolor, edgecolor=simb.color,
+                        linewidth=float(simb.linewidth), linestyle=simb.linestyle,
+                        alpha=float(simb.alpha), zorder=3,
+                    )
+            except Exception:
+                pass  # Capa extra no se dibuja si hay error de simbología
 
     def obtener_items_leyenda(self, gestor_simb: GestorSimbologia) -> list:
         """Devuelve items para la leyenda: [(label, color, tipo_geom, linestyle, marker)]."""

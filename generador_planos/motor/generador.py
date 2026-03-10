@@ -8,6 +8,7 @@ simbología, etiquetas, vértices, leyenda, cajetín, portada e índice.
 
 import os
 import threading
+import traceback
 
 import geopandas as gpd
 import matplotlib
@@ -234,8 +235,8 @@ class GeneradorPlanos:
                             continue
                         gdf_cat.plot(
                             ax=ax_map, facecolor=simb.facecolor,
-                            edgecolor=simb.color, linewidth=simb.linewidth,
-                            alpha=alpha, zorder=1,
+                            edgecolor=simb.color, linewidth=float(simb.linewidth),
+                            alpha=float(alpha), zorder=1,
                         )
                 else:
                     # Color fijo
@@ -466,7 +467,9 @@ class GeneradorPlanos:
         row = self.gdf_infra.iloc[idx_fila]
         geom = row.geometry
 
-        escala = seleccionar_escala(geom, formato_key, escala_manual)
+        _es_lateral = self.layout_key == "Plantilla 2 (Panel lateral)"
+        escala = seleccionar_escala(geom, formato_key, escala_manual,
+                                    es_lateral=_es_lateral)
         log(f"  Escala elegida: 1:{escala:,}")
 
         maq = MaquetadorPlano(formato_key, escala, layout_key=self.layout_key, dpi=self.dpi_figura)
@@ -577,7 +580,9 @@ class GeneradorPlanos:
         rows = [self.gdf_infra.iloc[idx] for idx in indices]
 
         geom_union = unary_union(gdf_grupo.geometry)
-        escala = seleccionar_escala(geom_union, formato_key, escala_manual)
+        _es_lateral = self.layout_key == "Plantilla 2 (Panel lateral)"
+        escala = seleccionar_escala(geom_union, formato_key, escala_manual,
+                                    es_lateral=_es_lateral)
         log(f"  Escala elegida: 1:{escala:,} ({len(indices)} infraestructuras)")
 
         maq = MaquetadorPlano(formato_key, escala, layout_key=self.layout_key, dpi=self.dpi_figura)
@@ -697,8 +702,9 @@ class GeneradorPlanos:
             except GeneracionCancelada:
                 raise
             except Exception as e:
+                tb = traceback.format_exc()
                 if callback_log:
-                    callback_log(f"  \u2717 Error: {e}")
+                    callback_log(f"  \u2717 Error: {e}\n{tb}")
             if callback_progreso:
                 callback_progreso(i + 1, total)
         return rutas
@@ -748,8 +754,9 @@ class GeneradorPlanos:
             except GeneracionCancelada:
                 raise
             except Exception as e:
+                tb = traceback.format_exc()
                 if callback_log:
-                    callback_log(f"  \u2717 Error: {e}")
+                    callback_log(f"  \u2717 Error: {e}\n{tb}")
             if callback_progreso:
                 callback_progreso(i + 1, total)
         return rutas
@@ -814,7 +821,9 @@ class GeneradorPlanos:
                     row = self.gdf_infra.iloc[idx]
                     geom = row.geometry
 
-                    escala = seleccionar_escala(geom, formato_key, escala_manual)
+                    _es_lateral = self.layout_key == "Plantilla 2 (Panel lateral)"
+                    escala = seleccionar_escala(geom, formato_key, escala_manual,
+                                                es_lateral=_es_lateral)
                     maq = MaquetadorPlano(formato_key, escala, layout_key=self.layout_key, dpi=self.dpi_figura)
                     fig, ax_map, ax_info, ax_mini, ax_esc = maq.crear_figura()
 
@@ -890,8 +899,9 @@ class GeneradorPlanos:
                     if callback_log:
                         callback_log(f"  \u2713 P\u00e1gina {i + 1} a\u00f1adida")
                 except Exception as e:
+                    tb = traceback.format_exc()
                     if callback_log:
-                        callback_log(f"  \u2717 Error: {e}")
+                        callback_log(f"  \u2717 Error: {e}\n{tb}")
 
                 if callback_progreso:
                     callback_progreso(i + 1, total)
@@ -947,8 +957,9 @@ class GeneradorPlanos:
                 )
                 rutas.extend(resultados)
             except Exception as e:
+                tb = traceback.format_exc()
                 if callback_log:
-                    callback_log(f"  \u2717 Error en lote: {e}", "error")
+                    callback_log(f"  \u2717 Error en lote: {e}\n{tb}", "error")
 
             if callback_progreso:
                 callback_progreso(i + 1, total)

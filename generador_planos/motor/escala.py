@@ -48,7 +48,8 @@ RATIO_MAPA_ALTO = 0.75
 _CABECERA_MM = 8  # Altura de la cabecera (debe coincidir con maquetacion._CABECERA_MM)
 
 
-def seleccionar_escala(geom, formato_key: str, escala_manual: int = None) -> int:
+def seleccionar_escala(geom, formato_key: str, escala_manual: int = None,
+                       es_lateral: bool = False) -> int:
     """Elige la escala más ajustada de la lista ESCALAS.
 
     Si escala_manual está definida, la devuelve directamente (override del usuario).
@@ -62,8 +63,13 @@ def seleccionar_escala(geom, formato_key: str, escala_manual: int = None) -> int
     ancho_util_mm = fmt_mm[0] - MARGENES_MM["izq"] - MARGENES_MM["der"]
     alto_util_mm = fmt_mm[1] - MARGENES_MM["sup"] - MARGENES_MM["inf"]
 
-    ancho_mapa_mm = ancho_util_mm * RATIO_MAPA_ANCHO
-    alto_mapa_mm = (alto_util_mm - _CABECERA_MM) * RATIO_MAPA_ALTO
+    if es_lateral:
+        # Plantilla 2: mapa ocupa 80% del ancho y toda la altura
+        ancho_mapa_mm = ancho_util_mm * 0.80
+        alto_mapa_mm = alto_util_mm - _CABECERA_MM
+    else:
+        ancho_mapa_mm = ancho_util_mm * RATIO_MAPA_ANCHO
+        alto_mapa_mm = (alto_util_mm - _CABECERA_MM) * RATIO_MAPA_ALTO
 
     bounds = geom.bounds  # (minx, miny, maxx, maxy) en metros ETRS89
     ext_x = bounds[2] - bounds[0]
