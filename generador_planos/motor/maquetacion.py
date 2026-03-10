@@ -80,7 +80,7 @@ CALIDADES_PDF = {
     "Media (200 DPI)": (200, 150),
     "Baja (100 DPI)": (100, 100),
 }
-_CABECERA_MM = 8
+_CABECERA_MM = 6
 
 def _etiqueta_campo(campo):
     """Devuelve una etiqueta embellecida o el nombre del campo tal cual."""
@@ -1731,21 +1731,21 @@ class MaquetadorPlano:
             try:
                 from PIL import Image as PILImage
                 img = PILImage.open(logo_path)
-                # Encajar logo en el 12% izquierdo de la cabecera
+                # Encajar logo ajustado a la altura de la cabecera
                 logo_ax = self.fig.add_axes([
                     izq_f + 0.003,
-                    1 - sup_f - h_cab + h_cab * 0.10,
-                    0.04,
-                    h_cab * 0.80,
+                    1 - sup_f - h_cab + h_cab * 0.08,
+                    0.03,
+                    h_cab * 0.84,
                 ], zorder=30)
                 logo_ax.imshow(img, aspect="equal")
                 logo_ax.axis("off")
-                x_org = 0.065
+                x_org = 0.055
             except Exception:
                 pass
 
-        ax_cab.text(x_org, 0.55, org, ha="left", va="center", fontsize=4.5,
-                    fontweight="bold", color=c_acento, linespacing=1.1)
+        ax_cab.text(x_org, 0.52, org, ha="left", va="center", fontsize=4.2,
+                    fontweight="bold", color=c_acento, linespacing=1.05)
 
         # ── Centro: título mapa + subtítulo ──
         titulo_final = ""

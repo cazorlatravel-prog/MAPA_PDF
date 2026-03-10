@@ -45,7 +45,7 @@ FORMATOS = {
 RATIO_MAPA_ANCHO = 1.0
 RATIO_MAPA_ALTO = 0.75
 
-_CABECERA_MM = 8  # Altura de la cabecera (debe coincidir con maquetacion._CABECERA_MM)
+_CABECERA_MM = 6  # Altura de la cabecera (debe coincidir con maquetacion._CABECERA_MM)
 
 
 def seleccionar_escala(geom, formato_key: str, escala_manual: int = None,
