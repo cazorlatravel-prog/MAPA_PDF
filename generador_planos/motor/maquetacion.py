@@ -190,7 +190,7 @@ class MaquetadorPlano:
         # Minimapa (pequeño) | Tabla datos (compacta) | Leyenda | Cajetín
         gs_lateral = gridspec.GridSpecFromSubplotSpec(
             4, 1, subplot_spec=gs[0, 1],
-            height_ratios=[0.22, 0.08, 0.20, 0.50],
+            height_ratios=[0.22, 0.13, 0.15, 0.50],
             hspace=0.01,
         )
 
@@ -1196,18 +1196,13 @@ class MaquetadorPlano:
         C_BG_LEYENDA = "#FAFCFA"     # Fondo general leyenda
         C_DIVIDER = "#CCCCCC"         # Líneas divisorias internas
 
-        # ── Calcular altura real del contenido ──
+        # ── Calcular contenido ──
         items_inf = items_leyenda_infra or []
         items_mon = items_leyenda_montes or []
         n_inf = min(len(items_inf), 12)
         n_mon = min(len(items_mon), 8)
         mid = (n_inf + 1) // 2  # filas en sub-columna más larga
 
-        # Cada fila de items mide row_h; calcular cuántas filas máx
-        n_rows_max = max(mid, n_mon, 1)
-        row_h = min(0.07, 0.70 / max(n_rows_max, 1))
-
-        # Usar todo el axes disponible (ya dimensionado por gs_lateral)
         y_top = 1.0
         y_bot = 0.0
 
@@ -1252,9 +1247,21 @@ class MaquetadorPlano:
             ax.text(x_txt, y, str(label)[:16], ha="left", va="center",
                     fontsize=2.8, color="#3A3A4A", transform=ax.transAxes, zorder=3)
 
-        # ── Posición Y del subtítulo y primer item (compacto) ──
-        sub_y = y_top - title_h - 0.06
-        first_y = sub_y - 0.05
+        # ── Distribuir items en todo el espacio disponible ──
+        # Espacio útil: desde debajo del título hasta el fondo
+        content_top = y_top - title_h - 0.03  # pequeño margen
+        content_bot = y_bot + 0.03
+        avail = content_top - content_bot
+
+        # Número de filas necesarias (subtítulo + items)
+        n_rows_max = max(mid, n_mon, 1)
+        total_slots = 1 + n_rows_max  # 1 slot para subtítulo + n para items
+        slot_h = avail / max(total_slots, 1)
+        # Limitar slot_h para que no quede demasiado espaciado con pocos items
+        slot_h = min(slot_h, 0.12)
+
+        sub_y = content_top - slot_h * 0.5
+        first_y = sub_y - slot_h
 
         # ── Sección izquierda: INFRAESTRUCTURA (2 sub-columnas) ──
         ax.text(0.02, sub_y, "INFRAESTRUCTURA", ha="left", va="center",
@@ -1265,21 +1272,21 @@ class MaquetadorPlano:
 
         # Sub-columna izquierda (x: 0.02-0.35)
         for i, item in enumerate(col_left):
-            y = first_y - i * row_h
-            _dibujar_item(0.02, 0.08, 0.09, y, item, row_h)
+            y = first_y - i * slot_h
+            _dibujar_item(0.02, 0.08, 0.09, y, item, slot_h)
 
         # Sub-columna derecha (x: 0.35-0.65)
         for i, item in enumerate(col_right):
-            y = first_y - i * row_h
-            _dibujar_item(0.35, 0.41, 0.42, y, item, row_h)
+            y = first_y - i * slot_h
+            _dibujar_item(0.35, 0.41, 0.42, y, item, slot_h)
 
         # ── Sección derecha: MONTES PÚBLICOS ──
         ax.text(0.80, sub_y, "MONTES PÚBLICOS", ha="center", va="center",
                 fontsize=3.5, fontweight="bold", color=C_GREEN_DARK, zorder=2)
 
         for i, item in enumerate(items_mon[:n_mon]):
-            y = first_y - i * row_h
-            _dibujar_item(0.67, 0.73, 0.74, y, item, row_h)
+            y = first_y - i * slot_h
+            _dibujar_item(0.67, 0.73, 0.74, y, item, slot_h)
 
     # ── Cajetín lateral (Plantilla 2: ax_esc) ────────────────────────
 
