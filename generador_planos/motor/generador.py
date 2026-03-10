@@ -243,6 +243,7 @@ class GeneradorPlanos:
                     montes_clip.plot(
                         ax=ax_map, facecolor=f"#{green:02x}9922",
                         edgecolor="#1a5c10", linewidth=0.8, alpha=alpha,
+                        zorder=1,
                     )
 
         # Capas extra
@@ -254,7 +255,7 @@ class GeneradorPlanos:
         if not infra_fondo.empty:
             infra_fondo.plot(
                 ax=ax_map, color="#999999", linewidth=0.6,
-                markersize=3, alpha=0.25,
+                markersize=3, alpha=0.25, zorder=3,
             )
 
         # Infraestructuras seleccionadas (resaltadas)
