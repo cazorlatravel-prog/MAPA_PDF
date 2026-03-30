@@ -335,15 +335,28 @@ def añadir_fondo_raster_local(ax, ruta_raster: str, xmin, xmax, ymin, ymax):
         # Calcular extent real de la ventana leída
         win_transform = src.window_transform(window)
         h, w = data.shape[1], data.shape[2]
-        rx_min = win_transform.c
-        ry_max = win_transform.f
-        rx_max = rx_min + w * win_transform.a
-        ry_min = ry_max + h * win_transform.e  # e es negativo
+        rx_min = min(win_transform.c, win_transform.c + w * win_transform.a)
+        rx_max = max(win_transform.c, win_transform.c + w * win_transform.a)
+        ry_min = min(win_transform.f, win_transform.f + h * win_transform.e)
+        ry_max = max(win_transform.f, win_transform.f + h * win_transform.e)
 
+        # Manejar NODATA: convertir píxeles sin datos en transparentes
+        nodata = src.nodata
         if n_bands == 1:
-            img = data[0]
+            img = data[0].astype(float)
+            if nodata is not None:
+                img = np.ma.masked_equal(img, nodata)
         else:
             img = np.moveaxis(data, 0, -1)  # (bands, h, w) → (h, w, bands)
+            if nodata is not None:
+                # Máscara: transparente donde TODAS las bandas == nodata
+                mask = np.all(data == nodata, axis=0)
+                # Convertir a RGBA para transparencia
+                if img.dtype == np.uint8:
+                    alpha = np.where(mask, 0, 255).astype(np.uint8)
+                else:
+                    alpha = np.where(mask, 0.0, 1.0).astype(img.dtype)
+                img = np.dstack([img, alpha])
 
     ax.imshow(
         img, extent=[rx_min, rx_max, ry_min, ry_max],
