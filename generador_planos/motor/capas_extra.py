@@ -62,7 +62,8 @@ class GestorCapasExtra:
 
             from .generador import _asegurar_crs
             gdf, aviso_crs = _asegurar_crs(gdf, nombre)
-            # Construir índice espacial para consultas .cx[] rápidas
+            # Resetear índice y construir índice espacial para .cx[]
+            gdf = gdf.reset_index(drop=True)
             gdf.sindex
 
             capa = CapaExtra(nombre=nombre, ruta=ruta, gdf=gdf, tipo=tipo)

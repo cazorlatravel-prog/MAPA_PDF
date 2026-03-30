@@ -273,7 +273,8 @@ class GeneradorPlanos:
             # Auto-calcular longitud/superficie si no existen
             gdf = _auto_calcular_campos(gdf)
 
-            # Construir índice espacial para consultas .cx[] rápidas
+            # Resetear índice y construir índice espacial para .cx[]
+            gdf = gdf.reset_index(drop=True)
             gdf.sindex
 
             self.gdf_infra = gdf
@@ -303,7 +304,8 @@ class GeneradorPlanos:
             gdf, aviso_crs = _asegurar_crs(gdf, origen)
             # Limpiar columnas con tipos mixtos
             gdf = _limpiar_tipos_mixtos(gdf)
-            # Construir índice espacial para consultas .cx[] rápidas
+            # Resetear índice y construir índice espacial para .cx[]
+            gdf = gdf.reset_index(drop=True)
             gdf.sindex
             self.gdf_montes = gdf
             msg = f"\u2713 Capa montes ({origen}): {len(gdf)} elementos"
