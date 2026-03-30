@@ -134,7 +134,7 @@ class App(tk.Tk):
         self._crear_panel_log(der)
 
     def _barra_superior(self):
-        barra = tk.Frame(self, bg=COLOR_HEADER, height=56)
+        barra = tk.Frame(self, bg=COLOR_HEADER, height=66)
         barra.pack(fill="x")
         barra.pack_propagate(False)
 
