@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Script para construir el ejecutable (.exe) del Generador de Planos Forestales.
+Script para construir el ejecutable (.exe) de EstelaGis.
 
 Uso:
     1. Instalar PyInstaller:  pip install pyinstaller
@@ -17,7 +17,7 @@ import subprocess
 
 # ── Configuración ────────────────────────────────────────────────────────
 
-APP_NAME = "GeneradorPlanos"
+APP_NAME = "EstelaGis"
 ICON_FILE = os.path.join("assets", "icon.ico")
 
 # Punto de entrada directo (sin verificar dependencias, ya van empaquetadas)
@@ -209,7 +209,7 @@ def construir_exe(modo_onefile=False):
 
 
 def main():
-    print("\n  GENERADOR DE PLANOS FORESTALES - Constructor de ejecutable\n")
+    print("\n  EstelaGis - Constructor de ejecutable\n")
 
     if not verificar_pyinstaller():
         sys.exit(1)

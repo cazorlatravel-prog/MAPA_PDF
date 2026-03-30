@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-GENERADOR DE PLANOS FORESTALES - v2.0
+EstelaGis - v2.0
 Punto de entrada de la aplicación.
 
 Aplicación de escritorio Python para generación de planos cartográficos
@@ -35,7 +35,7 @@ def verificar_dependencias() -> list:
 def mostrar_error_dependencias(faltantes: list):
     """Muestra ventana de error con instrucciones de instalación."""
     root = tk.Tk()
-    root.title("Dependencias faltantes")
+    root.title("EstelaGis — Dependencias faltantes")
     root.geometry("600x400")
     root.configure(bg="#1a1a2e")
 
@@ -67,16 +67,95 @@ def mostrar_error_dependencias(faltantes: list):
     root.mainloop()
 
 
+def mostrar_splash(root):
+    """Muestra una ventana splash de bienvenida mientras carga la app."""
+    splash = tk.Toplevel(root)
+    splash.overrideredirect(True)
+
+    ancho, alto = 480, 260
+    x = (splash.winfo_screenwidth() - ancho) // 2
+    y = (splash.winfo_screenheight() - alto) // 2
+    splash.geometry(f"{ancho}x{alto}+{x}+{y}")
+    splash.configure(bg="#0F1923")
+    splash.attributes("-topmost", True)
+
+    # Borde sutil
+    borde = tk.Frame(splash, bg="#10B981", bd=0)
+    borde.place(relx=0, rely=0, relwidth=1, relheight=1)
+    interior = tk.Frame(borde, bg="#0F1923")
+    interior.place(x=1, y=1, relwidth=1, relheight=1, width=-2, height=-2)
+
+    # Nombre prominente estilo GIS
+    name_frame = tk.Frame(interior, bg="#0F1923")
+    name_frame.pack(pady=(32, 0))
+
+    tk.Label(
+        name_frame, text="Estela",
+        font=("Segoe UI", 28, "bold"), bg="#0F1923", fg="#10B981",
+    ).pack(side="left")
+
+    tk.Label(
+        name_frame, text="Gis",
+        font=("Segoe UI", 28), bg="#0F1923", fg="#E8ECF1",
+    ).pack(side="left")
+
+    # Subtitulo descriptivo
+    tk.Label(
+        interior, text="Planos Forestales",
+        font=("Segoe UI", 11), bg="#0F1923", fg="#8899AA",
+    ).pack(pady=(2, 12))
+
+    # Copyright
+    tk.Label(
+        interior,
+        text="\u00a9 Jose Caballero S\u00e1nchez (Cazorla 2026)",
+        font=("Segoe UI", 10, "bold"), bg="#0F1923", fg="#10B981",
+    ).pack(pady=(2, 4))
+
+    # Licencia
+    tk.Label(
+        interior,
+        text="Licencia de uso gratuita, prohibida su comercializaci\u00f3n.",
+        font=("Segoe UI", 8), bg="#0F1923", fg="#8899AA",
+    ).pack()
+
+    # Barra de carga
+    barra_bg = tk.Frame(interior, bg="#243447", height=3)
+    barra_bg.pack(fill="x", padx=40, pady=(18, 0))
+    barra = tk.Frame(barra_bg, bg="#10B981", height=3, width=0)
+    barra.place(x=0, y=0, height=3)
+
+    # Animacion de la barra
+    def animar(step=0):
+        if step <= 100:
+            ancho_total = barra_bg.winfo_width() or (480 - 80)
+            barra.place(x=0, y=0, height=3, width=int(ancho_total * step / 100))
+            splash.after(20, animar, step + 2)
+
+    splash.after(100, animar)
+    return splash
+
+
 def main():
     faltantes = verificar_dependencias()
     if faltantes:
         mostrar_error_dependencias(faltantes)
         sys.exit(1)
 
-    # Importar después de verificar dependencias
+    # Importar despues de verificar dependencias
     from generador_planos.gui.app import App
 
     app = App()
+
+    # Mostrar splash
+    splash = mostrar_splash(app)
+    app.withdraw()
+
+    def cerrar_splash():
+        splash.destroy()
+        app.deiconify()
+
+    app.after(2500, cerrar_splash)
     app.mainloop()
 
 

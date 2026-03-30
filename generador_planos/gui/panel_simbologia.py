@@ -1,39 +1,37 @@
 """
-Panel editor de simbología: colores, grosores, trazos y marcadores
+Panel editor de simbologia: colores, grosores, trazos y marcadores
 para infraestructuras, montes y capas extra.
-Incluye categorización por campo: color/trazo diferente según valor.
 """
 
 import tkinter as tk
 from tkinter import ttk, colorchooser
 
 from .estilos import (
-    COLOR_PANEL, COLOR_TEXTO, COLOR_TEXTO_GRIS, COLOR_BORDE,
-    COLOR_ACENTO, FONT_BOLD, FONT_SMALL,
-    crear_frame_seccion,
+    COLOR_PANEL, COLOR_TEXTO, COLOR_TEXTO_GRIS, COLOR_BORDE, COLOR_ENTRY,
+    COLOR_ACENTO, COLOR_HOVER,
+    FONT_BOLD, FONT_SMALL,
+    crear_frame_seccion, crear_boton, crear_label,
 )
 from ..motor.simbologia import TIPOS_TRAZO, MARCADORES, PALETA_CATEGORIAS
 
 
 class PanelSimbologia:
-    """Panel de configuración de simbología para capas."""
+    """Panel de configuracion de simbologia para capas."""
 
     def __init__(self, parent, motor, callback_log):
         self.motor = motor
         self.callback_log = callback_log
         self._widgets_capas = []
-        # [(valor, color_var, lbl_color, trazo_var, marcador_var)]
         self._widgets_categorias = []
 
         f = crear_frame_seccion(parent, "\U0001f3a8  SIMBOLOG\u00cdA")
 
-        # ── Categorización por campo ──
-        tk.Label(f, text="Colorear por campo:", font=FONT_BOLD,
-                 bg=COLOR_PANEL, fg=COLOR_TEXTO).grid(
-                 row=0, column=0, sticky="w")
+        # ── Categorizacion por campo ──
+        crear_label(f, "Colorear por campo:", tipo="titulo").grid(
+            row=0, column=0, sticky="w")
 
         cat_f = tk.Frame(f, bg=COLOR_PANEL)
-        cat_f.grid(row=1, column=0, sticky="ew", pady=(2, 2))
+        cat_f.grid(row=1, column=0, sticky="ew", pady=(2, 4))
 
         self._campo_categoria = tk.StringVar(value="(ninguno)")
         self._cb_campo_cat = ttk.Combobox(
@@ -47,14 +45,14 @@ class PanelSimbologia:
         self._frame_categorias.grid(row=2, column=0, sticky="ew", pady=(2, 6))
 
         # Separador
-        ttk.Separator(f, orient="horizontal").grid(
-            row=3, column=0, sticky="ew", pady=(2, 6))
+        tk.Frame(f, bg=COLOR_BORDE, height=1).grid(
+            row=3, column=0, sticky="ew", pady=(2, 8))
 
-        # ── Simbología de infraestructuras ──
+        # ── Simbologia de infraestructuras ──
         grosor_header = tk.Frame(f, bg=COLOR_PANEL)
         grosor_header.grid(row=4, column=0, sticky="ew")
-        tk.Label(grosor_header, text="Grosor l\u00ednea infra:", font=FONT_SMALL,
-                 bg=COLOR_PANEL, fg=COLOR_TEXTO).pack(side="left")
+        crear_label(grosor_header, "Grosor l\u00ednea infra:", tipo="normal").pack(
+            side="left")
         self._lbl_grosor = tk.Label(grosor_header, text="2.5", font=FONT_SMALL,
                                      bg=COLOR_PANEL, fg=COLOR_ACENTO)
         self._lbl_grosor.pack(side="right")
@@ -67,8 +65,8 @@ class PanelSimbologia:
 
         alpha_header = tk.Frame(f, bg=COLOR_PANEL)
         alpha_header.grid(row=6, column=0, sticky="ew")
-        tk.Label(alpha_header, text="Transparencia infra:", font=FONT_SMALL,
-                 bg=COLOR_PANEL, fg=COLOR_TEXTO).pack(side="left")
+        crear_label(alpha_header, "Transparencia infra:", tipo="normal").pack(
+            side="left")
         self._lbl_alpha = tk.Label(alpha_header, text="0.35", font=FONT_SMALL,
                                     bg=COLOR_PANEL, fg=COLOR_ACENTO)
         self._lbl_alpha.pack(side="right")
@@ -79,18 +77,16 @@ class PanelSimbologia:
         ttk.Scale(f, from_=0.1, to=1.0, variable=self._alpha_infra,
                   orient="horizontal").grid(row=7, column=0, sticky="ew", pady=(2, 6))
 
-        tk.Label(f, text="Trazo l\u00ednea infra:", font=FONT_SMALL,
-                 bg=COLOR_PANEL, fg=COLOR_TEXTO).grid(
-                 row=8, column=0, sticky="w")
+        crear_label(f, "Trazo l\u00ednea infra:", tipo="normal").grid(
+            row=8, column=0, sticky="w")
         self._trazo_infra = tk.StringVar(value="Continuo")
         ttk.Combobox(f, textvariable=self._trazo_infra,
                      values=list(TIPOS_TRAZO.keys()),
                      state="readonly", font=FONT_SMALL).grid(
                      row=9, column=0, sticky="ew", pady=(2, 6))
 
-        tk.Label(f, text="Marcador puntos:", font=FONT_SMALL,
-                 bg=COLOR_PANEL, fg=COLOR_TEXTO).grid(
-                 row=10, column=0, sticky="w")
+        crear_label(f, "Marcador puntos:", tipo="normal").grid(
+            row=10, column=0, sticky="w")
         self._marcador = tk.StringVar(value="C\u00edrculo")
         ttk.Combobox(f, textvariable=self._marcador,
                      values=list(MARCADORES.keys()),
@@ -98,29 +94,28 @@ class PanelSimbologia:
                      row=11, column=0, sticky="ew", pady=(2, 6))
 
         # ── Color de montes ──
-        tk.Label(f, text="Color montes:", font=FONT_SMALL,
-                 bg=COLOR_PANEL, fg=COLOR_TEXTO).grid(
-                 row=12, column=0, sticky="w")
+        crear_label(f, "Color montes:", tipo="normal").grid(
+            row=12, column=0, sticky="w")
         col_montes_f = tk.Frame(f, bg=COLOR_PANEL)
         col_montes_f.grid(row=13, column=0, sticky="ew", pady=(2, 6))
         self._color_montes = "#1a5c10"
         self._lbl_col_montes = tk.Label(col_montes_f, bg=self._color_montes,
-                                         width=4, relief="solid", bd=1)
-        self._lbl_col_montes.pack(side="left", padx=(0, 6))
-        tk.Button(col_montes_f, text="Cambiar", command=self._elegir_color_montes,
-                  font=FONT_SMALL, bg=COLOR_BORDE, fg=COLOR_TEXTO,
-                  relief="flat", cursor="hand2").pack(side="left")
+                                         width=4, relief="flat", bd=0,
+                                         highlightthickness=1,
+                                         highlightbackground=COLOR_BORDE)
+        self._lbl_col_montes.pack(side="left", padx=(0, 8))
+        crear_boton(col_montes_f, "Cambiar", self._elegir_color_montes).pack(
+            side="left")
 
-        # ── Categorización de montes por campo ──
-        ttk.Separator(f, orient="horizontal").grid(
-            row=14, column=0, sticky="ew", pady=(2, 4))
+        # ── Categorizacion de montes por campo ──
+        tk.Frame(f, bg=COLOR_BORDE, height=1).grid(
+            row=14, column=0, sticky="ew", pady=(2, 6))
 
-        tk.Label(f, text="Colorear montes por campo:", font=FONT_BOLD,
-                 bg=COLOR_PANEL, fg=COLOR_TEXTO).grid(
-                 row=15, column=0, sticky="w")
+        crear_label(f, "Colorear montes por campo:", tipo="titulo").grid(
+            row=15, column=0, sticky="w")
 
         cat_montes_f = tk.Frame(f, bg=COLOR_PANEL)
-        cat_montes_f.grid(row=16, column=0, sticky="ew", pady=(2, 2))
+        cat_montes_f.grid(row=16, column=0, sticky="ew", pady=(2, 4))
 
         self._campo_cat_montes = tk.StringVar(value="(ninguno)")
         self._cb_campo_cat_montes = ttk.Combobox(
@@ -133,50 +128,48 @@ class PanelSimbologia:
 
         self._frame_cat_montes = tk.Frame(f, bg=COLOR_PANEL)
         self._frame_cat_montes.grid(row=17, column=0, sticky="ew", pady=(2, 6))
-        self._widgets_cat_montes = []  # [(valor, color_var, lbl_color), ...]
+        self._widgets_cat_montes = []
 
         # ── Capas extra ──
-        ttk.Separator(f, orient="horizontal").grid(
-            row=18, column=0, sticky="ew", pady=(2, 4))
+        tk.Frame(f, bg=COLOR_BORDE, height=1).grid(
+            row=18, column=0, sticky="ew", pady=(2, 6))
 
-        tk.Label(f, text="Capas adicionales:", font=FONT_BOLD,
-                 bg=COLOR_PANEL, fg=COLOR_TEXTO_GRIS).grid(
-                 row=19, column=0, sticky="w", pady=(2, 0))
+        crear_label(f, "Capas adicionales:", tipo="titulo").grid(
+            row=19, column=0, sticky="w", pady=(2, 0))
 
         self._frame_capas = tk.Frame(f, bg=COLOR_PANEL)
         self._frame_capas.grid(row=20, column=0, sticky="ew", pady=(2, 4))
 
-        # ── Botón aplicar ──
-        tk.Button(f, text="Aplicar simbolog\u00eda", command=self._aplicar,
-                  font=FONT_SMALL, bg=COLOR_ACENTO, fg="#1A1A2E",
-                  relief="flat", cursor="hand2", pady=3).grid(
-                  row=21, column=0, sticky="ew", pady=(4, 4))
+        # ── Boton aplicar ──
+        crear_boton(f, "Aplicar simbolog\u00eda", self._aplicar,
+                    estilo="primario").grid(
+            row=21, column=0, sticky="ew", pady=(6, 4))
 
         f.columnconfigure(0, weight=1)
 
     def actualizar_capas_extra(self):
-        """Actualiza la lista de capas extra disponibles."""
         for w in self._frame_capas.winfo_children():
             w.destroy()
         self._widgets_capas.clear()
 
         capas = self.motor.gestor_capas.capas
         if not capas:
-            tk.Label(self._frame_capas, text="(sin capas adicionales)",
-                     font=FONT_SMALL, bg=COLOR_PANEL,
-                     fg=COLOR_TEXTO_GRIS).pack(anchor="w")
+            crear_label(self._frame_capas, "(sin capas adicionales)",
+                        tipo="secundario").pack(anchor="w")
             return
 
         for capa in capas:
             row_f = tk.Frame(self._frame_capas, bg=COLOR_PANEL)
-            row_f.pack(fill="x", pady=1)
+            row_f.pack(fill="x", pady=2)
 
             simb = self.motor.gestor_simbologia.obtener_simbologia_capa(capa.tipo)
             color_var = {"color": simb.color}
 
             lbl_color = tk.Label(row_f, bg=simb.color, width=3,
-                                  relief="solid", bd=1)
-            lbl_color.pack(side="left", padx=(0, 4))
+                                  relief="flat", bd=0,
+                                  highlightthickness=1,
+                                  highlightbackground=COLOR_BORDE)
+            lbl_color.pack(side="left", padx=(0, 6))
 
             def _elegir(lbl=lbl_color, cv=color_var):
                 c = colorchooser.askcolor(color=cv["color"],
@@ -185,15 +178,12 @@ class PanelSimbologia:
                     cv["color"] = c
                     lbl.configure(bg=c)
 
-            tk.Button(row_f, text=capa.nombre, command=_elegir,
-                      font=FONT_SMALL, bg=COLOR_BORDE, fg=COLOR_TEXTO,
-                      relief="flat", cursor="hand2").pack(side="left", fill="x",
-                                                           expand=True)
+            crear_boton(row_f, capa.nombre, _elegir).pack(
+                side="left", fill="x", expand=True)
 
             self._widgets_capas.append((capa.nombre, capa.tipo, color_var))
 
     def _on_campo_cat_changed(self, event=None):
-        """Cuando cambia el campo de categorización, genera colores/estilos por valor."""
         self._widgets_categorias.clear()
         for w in self._frame_categorias.winfo_children():
             w.destroy()
@@ -204,25 +194,24 @@ class PanelSimbologia:
 
         valores = self.motor.obtener_valores_unicos(campo)
         if not valores:
-            tk.Label(self._frame_categorias, text="(sin valores)",
-                     font=FONT_SMALL, bg=COLOR_PANEL,
-                     fg=COLOR_TEXTO_GRIS).pack(anchor="w")
+            crear_label(self._frame_categorias, "(sin valores)",
+                        tipo="secundario").pack(anchor="w")
             return
 
-        # Generar simbología automática
         self.motor.gestor_simbologia.generar_por_categoria(campo, valores)
 
         for i, valor in enumerate(valores[:20]):
             color = PALETA_CATEGORIAS[i % len(PALETA_CATEGORIAS)]
 
-            # Fila principal: color + nombre
             row_f = tk.Frame(self._frame_categorias, bg=COLOR_PANEL)
-            row_f.pack(fill="x", pady=1)
+            row_f.pack(fill="x", pady=2)
 
             color_var = {"color": color}
             lbl_color = tk.Label(row_f, bg=color, width=3,
-                                  relief="solid", bd=1)
-            lbl_color.pack(side="left", padx=(0, 4))
+                                  relief="flat", bd=0,
+                                  highlightthickness=1,
+                                  highlightbackground=COLOR_BORDE)
+            lbl_color.pack(side="left", padx=(0, 6))
 
             def _elegir_cat(lbl=lbl_color, cv=color_var):
                 c = colorchooser.askcolor(color=cv["color"],
@@ -231,26 +220,21 @@ class PanelSimbologia:
                     cv["color"] = c
                     lbl.configure(bg=c)
 
-            tk.Button(row_f, text=str(valor)[:22], command=_elegir_cat,
-                      font=FONT_SMALL, bg=COLOR_BORDE, fg=COLOR_TEXTO,
-                      relief="flat", cursor="hand2", anchor="w").pack(
-                      side="left", fill="x", expand=True)
-
+            crear_boton(row_f, str(valor)[:22], _elegir_cat).pack(
+                side="left", fill="x", expand=True)
 
             self._widgets_categorias.append(
                 (str(valor), color_var, lbl_color))
 
         if len(valores) > 20:
-            tk.Label(self._frame_categorias,
-                     text=f"... +{len(valores) - 20} valores m\u00e1s (estilos auto)",
-                     font=FONT_SMALL, bg=COLOR_PANEL,
-                     fg=COLOR_TEXTO_GRIS).pack(anchor="w")
+            crear_label(self._frame_categorias,
+                        f"... +{len(valores) - 20} valores m\u00e1s",
+                        tipo="secundario").pack(anchor="w")
 
         self.callback_log(
             f"Categor\u00eda por '{campo}': {len(valores)} valores \u00fanicos.", "info")
 
     def _on_campo_cat_montes_changed(self, event=None):
-        """Cuando cambia el campo de categorización de montes, genera estilos por valor."""
         self._widgets_cat_montes.clear()
         for w in self._frame_cat_montes.winfo_children():
             w.destroy()
@@ -260,19 +244,16 @@ class PanelSimbologia:
             return
 
         if campo not in self.motor.gdf_montes.columns:
-            tk.Label(self._frame_cat_montes, text="(campo no encontrado)",
-                     font=FONT_SMALL, bg=COLOR_PANEL,
-                     fg=COLOR_TEXTO_GRIS).pack(anchor="w")
+            crear_label(self._frame_cat_montes, "(campo no encontrado)",
+                        tipo="secundario").pack(anchor="w")
             return
 
         valores = sorted(self.motor.gdf_montes[campo].dropna().astype(str).unique().tolist())
         if not valores:
-            tk.Label(self._frame_cat_montes, text="(sin valores)",
-                     font=FONT_SMALL, bg=COLOR_PANEL,
-                     fg=COLOR_TEXTO_GRIS).pack(anchor="w")
+            crear_label(self._frame_cat_montes, "(sin valores)",
+                        tipo="secundario").pack(anchor="w")
             return
 
-        # Generar simbología automática
         self.motor.gestor_simbologia.generar_por_categoria_montes(campo, valores)
 
         paleta_montes = [
@@ -285,12 +266,14 @@ class PanelSimbologia:
             color = paleta_montes[i % len(paleta_montes)]
 
             row_f = tk.Frame(self._frame_cat_montes, bg=COLOR_PANEL)
-            row_f.pack(fill="x", pady=1)
+            row_f.pack(fill="x", pady=2)
 
             color_var = {"color": color}
             lbl_color = tk.Label(row_f, bg=color, width=3,
-                                  relief="solid", bd=1)
-            lbl_color.pack(side="left", padx=(0, 4))
+                                  relief="flat", bd=0,
+                                  highlightthickness=1,
+                                  highlightbackground=COLOR_BORDE)
+            lbl_color.pack(side="left", padx=(0, 6))
 
             def _elegir_cat(lbl=lbl_color, cv=color_var):
                 c = colorchooser.askcolor(color=cv["color"],
@@ -299,25 +282,21 @@ class PanelSimbologia:
                     cv["color"] = c
                     lbl.configure(bg=c)
 
-            tk.Button(row_f, text=str(valor)[:22], command=_elegir_cat,
-                      font=FONT_SMALL, bg=COLOR_BORDE, fg=COLOR_TEXTO,
-                      relief="flat", cursor="hand2", anchor="w").pack(
-                      side="left", fill="x", expand=True)
+            crear_boton(row_f, str(valor)[:22], _elegir_cat).pack(
+                side="left", fill="x", expand=True)
 
             self._widgets_cat_montes.append(
                 (str(valor), color_var, lbl_color))
 
         if len(valores) > 20:
-            tk.Label(self._frame_cat_montes,
-                     text=f"... +{len(valores) - 20} valores m\u00e1s (estilos auto)",
-                     font=FONT_SMALL, bg=COLOR_PANEL,
-                     fg=COLOR_TEXTO_GRIS).pack(anchor="w")
+            crear_label(self._frame_cat_montes,
+                        f"... +{len(valores) - 20} valores m\u00e1s",
+                        tipo="secundario").pack(anchor="w")
 
         self.callback_log(
             f"Categor\u00eda montes por '{campo}': {len(valores)} valores \u00fanicos.", "info")
 
     def actualizar_campo_categoria(self):
-        """Actualiza las opciones del combobox de categorización con columnas del shapefile."""
         campos = ["(ninguno)"]
         if self.motor.gdf_infra is not None:
             campos += [c for c in self.motor.gdf_infra.columns
@@ -325,7 +304,6 @@ class PanelSimbologia:
         self._cb_campo_cat.configure(values=campos)
 
     def actualizar_campo_categoria_montes(self):
-        """Actualiza las opciones del combobox de categorización de montes."""
         campos = ["(ninguno)"]
         if self.motor.gdf_montes is not None:
             campos += [c for c in self.motor.gdf_montes.columns
@@ -340,23 +318,19 @@ class PanelSimbologia:
             self._lbl_col_montes.configure(bg=c)
 
     def _aplicar(self):
-        """Aplica la simbología configurada al gestor del motor."""
         from ..motor.simbologia import ConfigSimbologia
 
         gs = self.motor.gestor_simbologia
 
-        # Montes
         gs.montes.color = self._color_montes
         gs.montes.facecolor = self._color_montes
 
-        # Capas extra
         for nombre, tipo, color_var in self._widgets_capas:
             simb = gs.obtener_simbologia_capa(tipo)
             simb.color = color_var["color"]
             simb.facecolor = color_var["color"] + "44"
             gs.set_simbologia_capa(tipo, simb)
 
-        # Categorización por campo: actualizar colores y estilos editados
         campo_cat = self._campo_categoria.get()
         if campo_cat != "(ninguno)" and self._widgets_categorias:
             for entry in self._widgets_categorias:
@@ -366,7 +340,6 @@ class PanelSimbologia:
                     simb.color = color_var["color"]
                     simb.facecolor = color_var["color"] + "55"
 
-        # Categorización de montes por campo
         campo_cat_montes = self._campo_cat_montes.get()
         if campo_cat_montes != "(ninguno)" and self._widgets_cat_montes:
             for entry in self._widgets_cat_montes:
@@ -377,13 +350,11 @@ class PanelSimbologia:
                     simb.color = color_var["color"]
                     simb.facecolor = color_var["color"]
 
-        # Configuración infraestructuras (grosor, transparencia, trazo, marcador)
         self.motor.config_infra = self.obtener_config_infra()
 
         self.callback_log("Simbolog\u00eda actualizada.", "info")
 
     def obtener_config_infra(self) -> dict:
-        """Devuelve configuración de simbología de infraestructuras."""
         campo_cat = self._campo_categoria.get()
         campo_cat_montes = self._campo_cat_montes.get()
         return {

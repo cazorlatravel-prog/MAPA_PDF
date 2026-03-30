@@ -1,18 +1,7 @@
 """
-Ventana principal de la aplicación Generador de Planos Forestales.
+Ventana principal de la aplicacion EstelaGis.
 
-Layout: 1100x780 px mínimo, redimensionable.
-┌─────────────────────────────────────────────────────────────┐
-│  GENERADOR DE PLANOS FORESTALES            ETRS89·UTM H30N  │
-├──────────────────┬──────────────────────────────────────────┤
-│  CAPAS           │  TABLA DE INFRAESTRUCTURAS               │
-│  FILTROS         │                                          │
-│  SIMBOLOGÍA      ├──────────────────────────────────────────┤
-│  CAMPOS PLANO    │  LOG DE PROCESO                          │
-│  CAJETÍN         │                                          │
-│  CONFIGURACIÓN   │                                          │
-│  GENERACIÓN      │                                          │
-└──────────────────┴──────────────────────────────────────────┘
+Layout moderno: 1100x780 px minimo, redimensionable.
 """
 
 import os
@@ -20,9 +9,11 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
 from .estilos import (
-    COLOR_FONDO_APP, COLOR_ACENTO, COLOR_TEXTO_GRIS, COLOR_PANEL, COLOR_TEXTO,
-    FONT_BOLD, FONT_MONO, FONT_SMALL,
-    aplicar_estilos,
+    COLOR_FONDO_APP, COLOR_ACENTO, COLOR_ACENTO2, COLOR_TEXTO_GRIS,
+    COLOR_PANEL, COLOR_TEXTO, COLOR_BORDE, COLOR_HEADER, COLOR_ENTRY,
+    FONT_BOLD, FONT_MONO, FONT_SMALL, FONT_SUBTITULO, FONT_SECCION,
+    FONT_BOTON,
+    aplicar_estilos, crear_boton,
 )
 from .panel_capas import PanelCapas
 from .panel_config import PanelConfig
@@ -31,22 +22,24 @@ from .panel_filtros import PanelFiltros
 from .panel_simbologia import PanelSimbologia
 from .panel_cajetin import PanelCajetin
 from .panel_generacion import PanelGeneracion
+from .panel_info import PanelInfo
 from ..motor.generador import GeneradorPlanos
 from ..motor.proyecto import Proyecto
 
 
 class App(tk.Tk):
-    """Ventana principal de la aplicación."""
+    """Ventana principal de la aplicacion."""
 
     def __init__(self):
         super().__init__()
-        self.title("Generador de Planos Forestales - \u00a9 Jose Caballero S\u00e1nchez (Cazorla 2026)")
-        self.geometry("1100x780")
+        self.title("EstelaGis — Planos Forestales")
+        self.geometry("1160x820")
         self.minsize(1100, 780)
         self.configure(bg=COLOR_FONDO_APP)
         self.resizable(True, True)
 
         self.motor = GeneradorPlanos()
+        self._ultimo_dir_proyecto = os.path.expanduser("~")
 
         aplicar_estilos(self)
         self._construir_ui()
@@ -57,29 +50,42 @@ class App(tk.Tk):
 
         # ── Contenedor principal ──
         main = tk.Frame(self, bg=COLOR_FONDO_APP)
-        main.pack(fill="both", expand=True, padx=12, pady=(0, 8))
+        main.pack(fill="both", expand=True, padx=0, pady=0)
 
         # Columna izquierda (controles) con scroll
-        izq_container = tk.Frame(main, bg=COLOR_FONDO_APP)
-        izq_container.pack(side="left", fill="y", padx=(0, 8), pady=4)
+        izq_container = tk.Frame(main, bg=COLOR_PANEL, bd=0,
+                                  highlightthickness=0)
+        izq_container.pack(side="left", fill="y", padx=(8, 0), pady=8)
 
-        izq_canvas = tk.Canvas(izq_container, bg=COLOR_FONDO_APP,
-                                highlightthickness=0, width=280)
+        izq_canvas = tk.Canvas(izq_container, bg=COLOR_PANEL,
+                                highlightthickness=0, width=300)
         izq_scrollbar = ttk.Scrollbar(izq_container, orient="vertical",
                                        command=izq_canvas.yview)
 
-        izq = tk.Frame(izq_canvas, bg="#242D40", bd=0)
+        izq = tk.Frame(izq_canvas, bg=COLOR_PANEL, bd=0)
         izq.bind("<Configure>",
                  lambda e: izq_canvas.configure(scrollregion=izq_canvas.bbox("all")))
         izq_canvas.create_window((0, 0), window=izq, anchor="nw")
         izq_canvas.configure(yscrollcommand=izq_scrollbar.set)
+
+        # Mousewheel scroll
+        def _on_mousewheel(event):
+            izq_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+        def _on_mousewheel_linux(event):
+            if event.num == 4:
+                izq_canvas.yview_scroll(-1, "units")
+            elif event.num == 5:
+                izq_canvas.yview_scroll(1, "units")
+        izq_canvas.bind("<MouseWheel>", _on_mousewheel)
+        izq_canvas.bind("<Button-4>", _on_mousewheel_linux)
+        izq_canvas.bind("<Button-5>", _on_mousewheel_linux)
 
         izq_canvas.pack(side="left", fill="both", expand=True)
         izq_scrollbar.pack(side="right", fill="y")
 
         # Columna derecha (tabla + log)
         der = tk.Frame(main, bg=COLOR_FONDO_APP)
-        der.pack(side="right", fill="both", expand=True, pady=4)
+        der.pack(side="right", fill="both", expand=True, padx=8, pady=8)
 
         # ── Paneles izquierda (orden de flujo de trabajo) ──
 
@@ -106,17 +112,17 @@ class App(tk.Tk):
         # 4. Campos a mostrar en el plano
         self.panel_campos = PanelCampos(izq)
 
-        # 5. Cajetín y plantilla
+        # 5. Cajetin y plantilla
         self.panel_cajetin = PanelCajetin(
             izq, self.motor,
             callback_log=self._escribir_log,
         )
 
-        # 6. Configuración de salida
+        # 6. Configuracion de salida
         self.panel_config = PanelConfig(izq)
 
-        # 7. Generación final
-        self.panel_generacion = PanelGeneracion(
+        # 7. Generacion final
+        self.panel_generacioneracion = PanelGeneracion(
             izq, self.motor,
             get_config=self._get_config,
             callback_log=self._escribir_log,
@@ -128,54 +134,120 @@ class App(tk.Tk):
         self._crear_panel_log(der)
 
     def _barra_superior(self):
-        barra = tk.Frame(self, bg="#141B2D", height=58)
+        barra = tk.Frame(self, bg=COLOR_HEADER, height=56)
         barra.pack(fill="x")
         barra.pack_propagate(False)
 
-        tk.Label(
-            barra, text="\U0001f5fa  GENERADOR DE PLANOS FORESTALES",
-            font=("Helvetica", 14, "bold"), bg="#141B2D", fg=COLOR_ACENTO,
-        ).pack(side="left", padx=16, pady=10)
+        # Contenido izquierdo: titulo
+        left = tk.Frame(barra, bg=COLOR_HEADER)
+        left.pack(side="left", fill="y")
 
         tk.Label(
-            barra,
-            text="\u00a9 Jose Caballero S\u00e1nchez (Cazorla 2026) \u00b7 Todos los derechos reservados",
-            font=("Helvetica", 8), bg="#141B2D", fg="#7F8C8D",
-        ).pack(side="left", padx=(0, 8), pady=10)
+            left, text="\U0001f5fa",
+            font=("Segoe UI", 18), bg=COLOR_HEADER, fg=COLOR_ACENTO,
+        ).pack(side="left", padx=(16, 6), pady=8)
 
-        # Botones de proyecto en la barra
-        btn_f = tk.Frame(barra, bg="#141B2D")
-        btn_f.pack(side="right", padx=8)
+        title_frame = tk.Frame(left, bg=COLOR_HEADER)
+        title_frame.pack(side="left", pady=8)
 
-        tk.Button(btn_f, text="Guardar proyecto", command=self._guardar_proyecto,
-                  font=("Helvetica", 9), bg="#2C3E50", fg="#ECF0F1",
-                  relief="flat", cursor="hand2", padx=6).pack(side="left", padx=2)
-        tk.Button(btn_f, text="Cargar proyecto", command=self._cargar_proyecto,
-                  font=("Helvetica", 9), bg="#2C3E50", fg="#ECF0F1",
-                  relief="flat", cursor="hand2", padx=6).pack(side="left", padx=2)
+        # Nombre prominente de la aplicacion (estilo ArcGIS / QGIS)
+        name_row = tk.Frame(title_frame, bg=COLOR_HEADER)
+        name_row.pack(anchor="w")
 
         tk.Label(
-            barra, text="ETRS89 \u00b7 UTM H30N",
-            font=("Helvetica", 9), bg="#141B2D", fg=COLOR_TEXTO_GRIS,
-        ).pack(side="right", padx=16)
+            name_row, text="Estela",
+            font=("Segoe UI", 15, "bold"), bg=COLOR_HEADER, fg=COLOR_ACENTO,
+        ).pack(side="left")
+
+        tk.Label(
+            name_row, text="Gis",
+            font=("Segoe UI", 15), bg=COLOR_HEADER, fg=COLOR_TEXTO,
+        ).pack(side="left")
+
+        tk.Label(
+            name_row, text="  Planos Forestales",
+            font=("Segoe UI", 9), bg=COLOR_HEADER, fg=COLOR_TEXTO_GRIS,
+        ).pack(side="left", pady=(4, 0))
+
+        tk.Label(
+            title_frame,
+            text="\u00a9 Jose Caballero S\u00e1nchez \u00b7 Cazorla 2026",
+            font=("Segoe UI", 8), bg=COLOR_HEADER, fg=COLOR_TEXTO_GRIS,
+        ).pack(anchor="w")
+
+        # Contenido derecho: botones de proyecto + CRS
+        right = tk.Frame(barra, bg=COLOR_HEADER)
+        right.pack(side="right", fill="y", padx=12)
+
+        # Badge CRS
+        crs_frame = tk.Frame(right, bg=COLOR_BORDE, bd=0,
+                              highlightthickness=0)
+        crs_frame.pack(side="right", pady=14, padx=(8, 0))
+        tk.Label(
+            crs_frame, text=" ETRS89 \u00b7 UTM H30N ",
+            font=("Segoe UI", 8, "bold"), bg=COLOR_BORDE, fg=COLOR_TEXTO_GRIS,
+        ).pack(padx=6, pady=2)
+
+        # Botones de proyecto
+        btn_f = tk.Frame(right, bg=COLOR_HEADER)
+        btn_f.pack(side="right", pady=10)
+
+        btn_guardar = tk.Button(
+            btn_f, text="\U0001f4be  Guardar", command=self._guardar_proyecto,
+            font=FONT_BOTON, bg=COLOR_BORDE, fg=COLOR_TEXTO,
+            relief="flat", cursor="hand2", padx=10, pady=3,
+            bd=0, highlightthickness=0,
+            activebackground=COLOR_ACENTO, activeforeground="#FFFFFF")
+        btn_guardar.pack(side="left", padx=(0, 6))
+
+        btn_cargar = tk.Button(
+            btn_f, text="\U0001f4c2  Cargar", command=self._cargar_proyecto,
+            font=FONT_BOTON, bg=COLOR_BORDE, fg=COLOR_TEXTO,
+            relief="flat", cursor="hand2", padx=10, pady=3,
+            bd=0, highlightthickness=0,
+            activebackground=COLOR_ACENTO, activeforeground="#FFFFFF")
+        btn_cargar.pack(side="left")
+
+        btn_info = tk.Button(
+            btn_f, text="\u2139\ufe0f  Info", command=self._mostrar_info,
+            font=FONT_BOTON, bg=COLOR_BORDE, fg=COLOR_TEXTO,
+            relief="flat", cursor="hand2", padx=10, pady=3,
+            bd=0, highlightthickness=0,
+            activebackground=COLOR_ACENTO, activeforeground="#FFFFFF")
+        btn_info.pack(side="left", padx=(6, 0))
+
+        # Hover effects
+        for btn in (btn_guardar, btn_cargar, btn_info):
+            btn.bind("<Enter>", lambda e, b=btn: b.configure(bg="#2A4058"))
+            btn.bind("<Leave>", lambda e, b=btn: b.configure(bg=COLOR_BORDE))
 
     def _crear_panel_tabla(self, parent):
-        """Crea la tabla de infraestructuras directamente en el panel derecho."""
-        lf = tk.LabelFrame(
-            parent, text=" INFRAESTRUCTURAS ",
-            font=FONT_BOLD, bg=COLOR_FONDO_APP, fg=COLOR_ACENTO,
-            bd=1, relief="solid",
-        )
-        lf.pack(fill="both", expand=True, padx=4, pady=(4, 4))
-        self._tabla_frame = lf
+        """Crea la tabla de infraestructuras."""
+        # Header de seccion
+        header = tk.Frame(parent, bg=COLOR_FONDO_APP)
+        header.pack(fill="x", pady=(0, 4))
+
+        tk.Label(
+            header, text="\U0001f4ca  INFRAESTRUCTURAS",
+            font=FONT_SECCION, bg=COLOR_FONDO_APP, fg=COLOR_ACENTO,
+        ).pack(side="left")
+
+        # Contenedor de tabla
+        tabla_container = tk.Frame(parent, bg=COLOR_PANEL, bd=0,
+                                    highlightthickness=1,
+                                    highlightbackground=COLOR_BORDE)
+        tabla_container.pack(fill="both", expand=True, pady=(0, 6))
+
         cols = ["#"]
-        self._tabla = ttk.Treeview(lf, columns=cols, show="headings",
-                                    selectmode="extended")
+        self._tabla = ttk.Treeview(tabla_container, columns=cols,
+                                    show="headings", selectmode="extended")
         self._tabla.heading("#", text="#")
         self._tabla.column("#", width=60, minwidth=40)
 
-        sb_v = ttk.Scrollbar(lf, orient="vertical", command=self._tabla.yview)
-        sb_h = ttk.Scrollbar(lf, orient="horizontal", command=self._tabla.xview)
+        sb_v = ttk.Scrollbar(tabla_container, orient="vertical",
+                              command=self._tabla.yview)
+        sb_h = ttk.Scrollbar(tabla_container, orient="horizontal",
+                              command=self._tabla.xview)
         self._tabla.configure(yscrollcommand=sb_v.set, xscrollcommand=sb_h.set)
 
         sb_h.pack(side="bottom", fill="x")
@@ -183,7 +255,7 @@ class App(tk.Tk):
         self._tabla.pack(side="left", fill="both", expand=True)
 
     def _reconfigurar_tabla(self, columnas: list):
-        """Reconfigura las columnas de la tabla con las columnas reales del shapefile."""
+        """Reconfigura las columnas de la tabla."""
         cols = ["#"] + columnas
         self._tabla.configure(columns=cols)
         for col in cols:
@@ -192,30 +264,41 @@ class App(tk.Tk):
             self._tabla.column(col, width=ancho, minwidth=40)
 
     def _crear_panel_log(self, parent):
-        lf = tk.LabelFrame(
-            parent, text=" LOG DE PROCESO ",
-            font=FONT_BOLD, bg=COLOR_FONDO_APP, fg=COLOR_ACENTO,
-            bd=1, relief="solid",
-        )
-        lf.pack(fill="x", padx=4, pady=(0, 4))
+        # Header de seccion
+        header = tk.Frame(parent, bg=COLOR_FONDO_APP)
+        header.pack(fill="x", pady=(4, 4))
+
+        tk.Label(
+            header, text="\U0001f4dd  LOG DE PROCESO",
+            font=FONT_SECCION, bg=COLOR_FONDO_APP, fg=COLOR_ACENTO,
+        ).pack(side="left")
+
+        # Contenedor de log
+        log_container = tk.Frame(parent, bg=COLOR_ENTRY, bd=0,
+                                  highlightthickness=1,
+                                  highlightbackground=COLOR_BORDE)
+        log_container.pack(fill="x", pady=(0, 0))
 
         self._log = tk.Text(
-            lf, height=7, font=FONT_MONO,
-            bg="#0D1117", fg="#58D68D",
-            insertbackground="white", relief="flat", state="disabled",
+            log_container, height=7, font=FONT_MONO,
+            bg=COLOR_ENTRY, fg="#6EE7B7",
+            insertbackground=COLOR_ACENTO, relief="flat", state="disabled",
+            padx=10, pady=8, bd=0,
+            selectbackground=COLOR_ACENTO, selectforeground="#FFFFFF",
         )
-        sb = ttk.Scrollbar(lf, orient="vertical", command=self._log.yview)
+        sb = ttk.Scrollbar(log_container, orient="vertical",
+                            command=self._log.yview)
         self._log.configure(yscrollcommand=sb.set)
         self._log.pack(side="left", fill="both", expand=True)
         sb.pack(side="right", fill="y")
 
         # Tags de color
-        self._log.tag_config("error", foreground="#E74C3C")
-        self._log.tag_config("ok", foreground="#007932")
-        self._log.tag_config("warn", foreground="#F39C12")
-        self._log.tag_config("info", foreground="#85C1E9")
+        self._log.tag_config("error", foreground="#FCA5A5")
+        self._log.tag_config("ok", foreground="#6EE7B7")
+        self._log.tag_config("warn", foreground="#FCD34D")
+        self._log.tag_config("info", foreground="#93C5FD")
 
-        self._escribir_log("Sistema iniciado. Carga un shapefile para comenzar.", "info")
+        self._escribir_log("EstelaGis iniciado. Carga un shapefile para comenzar.", "info")
 
     def _escribir_log(self, msg: str, tipo: str = ""):
         def _do():
@@ -231,16 +314,13 @@ class App(tk.Tk):
         if gdf is None:
             return
 
-        # Borrar todo de golpe (más rápido que uno a uno)
         children = self._tabla.get_children()
         if children:
             self._tabla.delete(*children)
 
-        # Configurar tags UNA VEZ antes del bucle
-        self._tabla.tag_configure("par", background="#1E2A3A")
-        self._tabla.tag_configure("impar", background="#172030")
+        self._tabla.tag_configure("par", background="#162230")
+        self._tabla.tag_configure("impar", background="#0F1923")
 
-        # Columnas reales del shapefile (sin geometry)
         columnas = [c for c in gdf.columns if c != "geometry"]
 
         if indices is None:
@@ -259,23 +339,19 @@ class App(tk.Tk):
         self._escribir_log(f"Tabla actualizada: {n} infraestructuras.", "info")
 
     def _on_tabla_cargada(self):
-        # Obtener columnas reales y reconfigurar tabla
         columnas = self.motor.obtener_columnas_shapefile()
         self._reconfigurar_tabla(columnas)
         self._poblar_tabla()
-        self.panel_generacion.actualizar_campos_agrupacion()
-        self.panel_generacion.actualizar_valores_si_agrupado()
+        self.panel_generacioneracion.actualizar_campos_agrupacion()
+        self.panel_generacioneracion.actualizar_valores_si_agrupado()
         self.panel_filtros.actualizar_campos()
         self.panel_simbologia.actualizar_capas_extra()
         self.panel_simbologia.actualizar_campo_categoria()
         self.panel_simbologia.actualizar_campo_categoria_montes()
-        # Actualizar checkboxes de campos con las columnas reales del shapefile
         self.panel_campos.actualizar_campos(columnas)
         self.panel_cajetin.actualizar_campos_subtitulo(columnas)
-        # Actualizar combo de campo enlace SHP para Excel
         self.panel_config.actualizar_campos_shp_enlace(columnas)
 
-        # Restaurar campos visibles del proyecto si se acaba de cargar uno
         if hasattr(self, "_campos_visibles_proyecto") and self._campos_visibles_proyecto:
             campos_proy = self._campos_visibles_proyecto
             for campo, var in self.panel_campos._check_campos.items():
@@ -284,7 +360,6 @@ class App(tk.Tk):
             self._campos_visibles_proyecto = []
 
     def _on_montes_cargados(self):
-        """Actualiza comboboxes de categorización y etiquetas de montes."""
         self.panel_simbologia.actualizar_campo_categoria_montes()
         if self.motor.gdf_montes is not None:
             cols = [c for c in self.motor.gdf_montes.columns
@@ -295,33 +370,25 @@ class App(tk.Tk):
         self._poblar_tabla(indices)
 
     def _auto_aplicar_todo(self):
-        """Aplica cajetín, plantilla, layout y simbología al motor antes de generar."""
+        """Aplica cajetin, plantilla, layout y simbologia al motor antes de generar."""
         cajetin = self.panel_cajetin.obtener_cajetin()
         plantilla = self.panel_cajetin.obtener_plantilla()
         self.motor.set_cajetin(cajetin)
         self.motor.set_plantilla(plantilla)
-        # Plantilla de layout
         self.motor.layout_key = self.panel_cajetin.obtener_layout_key()
-        # Calidad PDF (DPI)
         self.motor.dpi_figura = self.panel_config.dpi_figura
         self.motor.dpi_guardado = self.panel_config.dpi_guardado
-        # Primero aplicar simbología (colores de categorías, montes, capas extra)
         self.panel_simbologia._aplicar()
-        # Después sobreescribir alpha con el valor del panel Capas (tiene prioridad)
         self.motor.config_infra["alpha"] = self.panel_capas.transparencia_infra.get()
-        # Rutas de ráster local
         self.motor.ruta_raster_general = self.panel_config.ruta_raster_general
         self.motor.ruta_raster_localizacion = self.panel_config.ruta_raster_localizacion
         self.motor.ruta_capa_localizacion = self.panel_config.ruta_capa_localizacion
-        # WMS/WFS personalizados
         self.motor.wms_custom_general = self.panel_config.wms_custom_general
         self.motor.wfs_custom_general = self.panel_config.wfs_custom_general
         self.motor.wms_custom_localizacion = self.panel_config.wms_custom_localizacion
         self.motor.wfs_custom_localizacion = self.panel_config.wfs_custom_localizacion
-        # Escala y proveedor localización
         self.motor.escala_localizacion = self.panel_config.escala_localizacion
         self.motor.prov_localizacion = self.panel_config._prov_localizacion.get()
-        # Datos de tabla desde Excel
         if self.panel_config.usa_excel and self.panel_config.ruta_excel:
             try:
                 self.motor.cargar_excel_tabla(
@@ -359,60 +426,60 @@ class App(tk.Tk):
             title="Guardar proyecto",
             defaultextension=".json",
             filetypes=[("Proyecto JSON", "*.json")],
+            initialdir=self._ultimo_dir_proyecto,
         )
         if not ruta:
             return
-
-        p = Proyecto()
-        p.nombre = os.path.splitext(os.path.basename(ruta))[0]
-        p.formato = self.panel_config.formato.get()
-        p.proveedor = self.panel_config.proveedor.get()
-        p.ruta_raster_general = self.panel_config.ruta_raster_general
-        p.ruta_raster_localizacion = self.panel_config.ruta_raster_localizacion
-        p.prov_localizacion = self.panel_config._prov_localizacion.get()
-        p.escala_localizacion = self.panel_config.escala_localizacion
-        p.ruta_capa_localizacion = self.panel_config.ruta_capa_localizacion
-        p.wms_custom_general = self.panel_config.wms_custom_general
-        p.wfs_custom_general = self.panel_config.wfs_custom_general
-        p.wms_custom_localizacion = self.panel_config.wms_custom_localizacion
-        p.wfs_custom_localizacion = self.panel_config.wfs_custom_localizacion
-        p.escala_manual = self.panel_config.escala_manual
-        p.transparencia_montes = self.panel_capas.transparencia.get()
-        p.transparencia_infra = self.panel_capas.transparencia_infra.get()
-        p.color_infra = self.panel_config.color_infra
-        p.calidad_pdf = self.panel_config.calidad_pdf
-        p.campos_visibles = self.panel_campos.obtener_campos_activos()
-        p.campo_encabezado = self.panel_campos.obtener_campo_encabezado() or ""
-        p.carpeta_salida = self.panel_config.salida.get()
-        p.patron_nombre = self.panel_config.patron_nombre.get()
-        p.layout_key = self.panel_cajetin.obtener_layout_key()
-        p.cajetin = self.panel_cajetin.obtener_cajetin()
-        p.plantilla = self.panel_cajetin.obtener_plantilla()
-        p.simbologia = self.motor.gestor_simbologia.to_dict()
-        p.capas_extra = self.motor.gestor_capas.to_dict()
-        # Origen datos tabla
-        p.origen_datos_tabla = self.panel_config._origen_datos.get()
-        p.ruta_excel_tabla = self.panel_config.ruta_excel
-        p.hoja_excel_tabla = self.panel_config.hoja_excel
-        p.campo_enlace_shp = self.panel_config.campo_enlace_shp
-        p.campo_enlace_excel = self.panel_config.campo_enlace_excel
-        p.columnas_excel_activas = self.panel_config.columnas_excel_activas
-
-        # Generación
-        p.modo_gen = self.panel_gen._modo_gen.get()
-        try:
-            p.rango_desde = int(self.panel_gen._rango_desde.get())
-        except ValueError:
-            p.rango_desde = 1
-        try:
-            p.rango_hasta = int(self.panel_gen._rango_hasta.get())
-        except ValueError:
-            p.rango_hasta = 10
-        p.campo_agrupacion = self.panel_gen._campo_agrupacion.get()
-        p.multipagina = self.panel_gen._multipagina.get()
-        p.incluir_portada = self.panel_gen._incluir_portada.get()
+        self._ultimo_dir_proyecto = os.path.dirname(ruta)
 
         try:
+            p = Proyecto()
+            p.nombre = os.path.splitext(os.path.basename(ruta))[0]
+            p.formato = self.panel_config.formato.get()
+            p.proveedor = self.panel_config.proveedor.get()
+            p.ruta_raster_general = self.panel_config.ruta_raster_general
+            p.ruta_raster_localizacion = self.panel_config.ruta_raster_localizacion
+            p.prov_localizacion = self.panel_config._prov_localizacion.get()
+            p.escala_localizacion = self.panel_config.escala_localizacion
+            p.ruta_capa_localizacion = self.panel_config.ruta_capa_localizacion
+            p.wms_custom_general = self.panel_config.wms_custom_general
+            p.wfs_custom_general = self.panel_config.wfs_custom_general
+            p.wms_custom_localizacion = self.panel_config.wms_custom_localizacion
+            p.wfs_custom_localizacion = self.panel_config.wfs_custom_localizacion
+            p.escala_manual = self.panel_config.escala_manual
+            p.transparencia_montes = self.panel_capas.transparencia.get()
+            p.transparencia_infra = self.panel_capas.transparencia_infra.get()
+            p.color_infra = self.panel_config.color_infra
+            p.calidad_pdf = self.panel_config.calidad_pdf
+            p.campos_visibles = self.panel_campos.obtener_campos_activos()
+            p.campo_encabezado = self.panel_campos.obtener_campo_encabezado() or ""
+            p.carpeta_salida = self.panel_config.salida.get()
+            p.patron_nombre = self.panel_config.patron_nombre.get()
+            p.layout_key = self.panel_cajetin.obtener_layout_key()
+            p.cajetin = self.panel_cajetin.obtener_cajetin()
+            p.plantilla = self.panel_cajetin.obtener_plantilla()
+            p.simbologia = self.motor.gestor_simbologia.to_dict()
+            p.capas_extra = self.motor.gestor_capas.to_dict()
+            p.origen_datos_tabla = self.panel_config._origen_datos.get()
+            p.ruta_excel_tabla = self.panel_config.ruta_excel
+            p.hoja_excel_tabla = self.panel_config.hoja_excel
+            p.campo_enlace_shp = self.panel_config.campo_enlace_shp
+            p.campo_enlace_excel = self.panel_config.campo_enlace_excel
+            p.columnas_excel_activas = self.panel_config.columnas_excel_activas
+
+            p.modo_gen = self.panel_generacion._modo_gen.get()
+            try:
+                p.rango_desde = int(self.panel_generacion._rango_desde.get())
+            except ValueError:
+                p.rango_desde = 1
+            try:
+                p.rango_hasta = int(self.panel_generacion._rango_hasta.get())
+            except ValueError:
+                p.rango_hasta = 10
+            p.campo_agrupacion = self.panel_generacion._campo_agrupacion.get()
+            p.multipagina = self.panel_generacion._multipagina.get()
+            p.incluir_portada = self.panel_generacion._incluir_portada.get()
+
             p.guardar(ruta)
             self._escribir_log(f"Proyecto guardado: {ruta}", "ok")
         except Exception as e:
@@ -423,17 +490,18 @@ class App(tk.Tk):
         ruta = filedialog.askopenfilename(
             title="Cargar proyecto",
             filetypes=[("Proyecto JSON", "*.json")],
+            initialdir=self._ultimo_dir_proyecto,
         )
         if not ruta:
             return
+        self._ultimo_dir_proyecto = os.path.dirname(ruta)
 
         try:
             p = Proyecto.cargar(ruta)
 
-            # ── Configuración general ──
+            # ── Configuracion general ──
             self.panel_config.formato.set(p.formato)
             self.panel_config.proveedor.set(p.proveedor)
-            # Ráster local
             if p.ruta_raster_general:
                 self.panel_config._ruta_raster.set(p.ruta_raster_general)
                 self.panel_config._lbl_raster.configure(
@@ -444,16 +512,13 @@ class App(tk.Tk):
                     text=os.path.basename(p.ruta_raster_localizacion))
             if hasattr(p, "prov_localizacion") and p.prov_localizacion:
                 self.panel_config._prov_localizacion.set(p.prov_localizacion)
-            # Escala localización
             if hasattr(p, "escala_localizacion") and p.escala_localizacion:
                 self.panel_config._escala_localizacion.set(
                     f"{p.escala_localizacion:,}")
-            # Capa propia localización
             if hasattr(p, "ruta_capa_localizacion") and p.ruta_capa_localizacion:
                 self.panel_config._ruta_capa_loc.set(p.ruta_capa_localizacion)
                 self.panel_config._lbl_capa_loc.configure(
                     text=os.path.basename(p.ruta_capa_localizacion))
-            # WMS/WFS personalizados mapa general
             if hasattr(p, "wms_custom_general") and p.wms_custom_general:
                 self.panel_config._wms_url.set(p.wms_custom_general.get("url", ""))
                 self.panel_config._wms_capa.set(p.wms_custom_general.get("capa", ""))
@@ -462,7 +527,6 @@ class App(tk.Tk):
             if hasattr(p, "wfs_custom_general") and p.wfs_custom_general:
                 self.panel_config._wfs_url.set(p.wfs_custom_general.get("url", ""))
                 self.panel_config._wfs_capa.set(p.wfs_custom_general.get("capa", ""))
-            # WMS/WFS personalizados localización
             if hasattr(p, "wms_custom_localizacion") and p.wms_custom_localizacion:
                 self.panel_config._wms_loc_url.set(
                     p.wms_custom_localizacion.get("url", ""))
@@ -475,25 +539,21 @@ class App(tk.Tk):
                     p.wfs_custom_localizacion.get("url", ""))
                 self.panel_config._wfs_loc_capa.set(
                     p.wfs_custom_localizacion.get("capa", ""))
-            # Mostrar/ocultar frames según proveedor
             self.panel_config._on_proveedor_changed()
             self.panel_config._on_prov_loc_changed()
             self.panel_config.salida.set(p.carpeta_salida)
             if p.patron_nombre:
                 self.panel_config.patron_nombre.set(p.patron_nombre)
 
-            # Escala manual
             if p.escala_manual:
                 self.panel_config._escala_manual.set(f"{p.escala_manual:,}")
             else:
                 self.panel_config._escala_manual.set("0 (auto)")
 
-            # Color infraestructura
             if p.color_infra:
                 self.panel_config._color_infra = p.color_infra
                 self.panel_config._lbl_color.configure(bg=p.color_infra)
 
-            # Calidad PDF
             if hasattr(p, "calidad_pdf") and p.calidad_pdf:
                 self.panel_config._calidad_pdf.set(p.calidad_pdf)
 
@@ -506,16 +566,12 @@ class App(tk.Tk):
             if hasattr(p, "campo_encabezado") and p.campo_encabezado:
                 self.panel_campos._combo_encabezado.set(p.campo_encabezado)
 
-            # campos_visibles se restauran después de cargar el SHP
-            # (se guardan para restaurar cuando se recargue la capa)
-
-            # ── Layout y cajetín ──
+            # ── Layout y cajetin ──
             if p.layout_key:
                 self.panel_cajetin._layout_key.set(p.layout_key)
                 self.motor.layout_key = p.layout_key
             self.panel_cajetin.cargar_desde_proyecto(p.cajetin, p.plantilla)
 
-            # Aplicar cajetín y plantilla al motor
             self.motor.set_cajetin(p.cajetin)
             self.motor.set_plantilla(p.plantilla)
 
@@ -527,7 +583,6 @@ class App(tk.Tk):
                 self.panel_config._ruta_excel.set(p.ruta_excel_tabla)
                 self.panel_config._lbl_excel.configure(
                     text=os.path.basename(p.ruta_excel_tabla))
-                # Recargar hojas y columnas del Excel
                 hoja = getattr(p, "hoja_excel_tabla", "") or ""
                 try:
                     import openpyxl
@@ -547,37 +602,40 @@ class App(tk.Tk):
                 self.panel_config._campo_enlace_shp.set(p.campo_enlace_shp)
             if hasattr(p, "campo_enlace_excel") and p.campo_enlace_excel:
                 self.panel_config._campo_enlace_excel.set(p.campo_enlace_excel)
-            # Restaurar columnas Excel seleccionadas
             if hasattr(p, "columnas_excel_activas") and p.columnas_excel_activas:
                 cols_proy = p.columnas_excel_activas
                 for col, var in self.panel_config._check_cols_excel.items():
                     var.set(col in cols_proy)
 
-            # ── Simbología ──
+            # ── Simbologia ──
             if p.simbologia:
                 from ..motor.simbologia import GestorSimbologia
                 self.motor.gestor_simbologia = GestorSimbologia.from_dict(p.simbologia)
 
-            # ── Generación ──
+            # ── Generacion ──
             if hasattr(p, "modo_gen") and p.modo_gen:
-                self.panel_gen._modo_gen.set(p.modo_gen)
+                self.panel_generacion._modo_gen.set(p.modo_gen)
             if hasattr(p, "rango_desde"):
-                self.panel_gen._rango_desde.delete(0, "end")
-                self.panel_gen._rango_desde.insert(0, str(p.rango_desde))
+                self.panel_generacion._rango_desde.delete(0, "end")
+                self.panel_generacion._rango_desde.insert(0, str(p.rango_desde))
             if hasattr(p, "rango_hasta"):
-                self.panel_gen._rango_hasta.delete(0, "end")
-                self.panel_gen._rango_hasta.insert(0, str(p.rango_hasta))
+                self.panel_generacion._rango_hasta.delete(0, "end")
+                self.panel_generacion._rango_hasta.insert(0, str(p.rango_hasta))
             if hasattr(p, "campo_agrupacion") and p.campo_agrupacion:
-                self.panel_gen._campo_agrupacion.set(p.campo_agrupacion)
+                self.panel_generacion._campo_agrupacion.set(p.campo_agrupacion)
             if hasattr(p, "multipagina"):
-                self.panel_gen._multipagina.set(p.multipagina)
+                self.panel_generacion._multipagina.set(p.multipagina)
             if hasattr(p, "incluir_portada"):
-                self.panel_gen._incluir_portada.set(p.incluir_portada)
+                self.panel_generacion._incluir_portada.set(p.incluir_portada)
 
-            # Guardar campos visibles para restaurar tras cargar SHP
             self._campos_visibles_proyecto = p.campos_visibles or []
 
             self._escribir_log(f"Proyecto cargado: {p.nombre}", "ok")
         except Exception as e:
             self._escribir_log(f"Error al cargar proyecto: {e}", "error")
             messagebox.showerror("Error", str(e))
+
+    def _mostrar_info(self):
+        """Abre la ventana de informacion tecnica y manual de usuario."""
+        panel_info = PanelInfo(self)
+        panel_info.mostrar()

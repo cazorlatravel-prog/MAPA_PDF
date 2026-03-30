@@ -1,9 +1,5 @@
 """
-Panel de configuración del cajetín profesional y plantilla de colores.
-
-Permite configurar: autor, proyecto, número de proyecto, revisión,
-firma, organización, subtítulo (estático o desde campo), logo,
-número de plano inicial y colores de la plantilla.
+Panel de configuracion del cajetin profesional y plantilla de colores.
 """
 
 import tkinter as tk
@@ -11,136 +7,115 @@ from tkinter import ttk, colorchooser, filedialog
 
 from .estilos import (
     COLOR_PANEL, COLOR_TEXTO, COLOR_TEXTO_GRIS, COLOR_BORDE, COLOR_ENTRY,
-    COLOR_ACENTO, FONT_BOLD, FONT_SMALL,
-    crear_frame_seccion,
+    COLOR_ACENTO, COLOR_HOVER,
+    FONT_BOLD, FONT_SMALL,
+    crear_frame_seccion, crear_boton, crear_entry, crear_label,
 )
 from ..motor.plantillas_layout import PLANTILLAS_DISPONIBLES
 
 
 class PanelCajetin:
-    """Panel de configuración del cajetín y plantilla de colores."""
+    """Panel de configuracion del cajetin y plantilla de colores."""
 
     def __init__(self, parent, motor, callback_log):
         self.motor = motor
         self.callback_log = callback_log
 
-        f = crear_frame_seccion(parent, "\U0001f4cb  CAJETÍN / PLANTILLA")
+        f = crear_frame_seccion(parent, "\U0001f4cb  CAJET\u00cdN / PLANTILLA")
 
         # ── Selector de plantilla de layout ──
-        tk.Label(f, text="Plantilla de layout:", font=FONT_BOLD,
-                 bg=COLOR_PANEL, fg=COLOR_ACENTO).grid(
-                 row=0, column=0, sticky="w")
-        self._layout_key = tk.StringVar(value=PLANTILLAS_DISPONIBLES[0])
+        crear_label(f, "Plantilla de layout:", tipo="titulo").grid(
+            row=0, column=0, sticky="w")
+        self._layout_key = tk.StringVar(value=PLANTILLAS_DISPONIBLES[1])
         ttk.Combobox(f, textvariable=self._layout_key,
                      values=PLANTILLAS_DISPONIBLES,
                      state="readonly", font=FONT_SMALL).grid(
-                     row=1, column=0, sticky="ew", pady=(2, 8))
+                     row=1, column=0, sticky="ew", pady=(2, 10))
 
-        # ── Campos del cajetín ──
+        # ── Campos del cajetin ──
         campos = [
             ("Autor:", "autor"),
             ("Cargo autor:", "cargo_autor"),
             ("Proyecto:", "proyecto"),
-            ("Nº Proyecto:", "num_proyecto"),
-            ("Firma (Vº.Bº):", "firma"),
+            ("N\u00ba Proyecto:", "num_proyecto"),
+            ("Firma (V\u00ba.B\u00ba):", "firma"),
             ("Cargo firma:", "cargo_firma"),
-            ("Revisión/Director:", "revision"),
-            ("Cargo revisión:", "cargo_revision"),
+            ("Revision/Director:", "revision"),
+            ("Cargo revision:", "cargo_revision"),
         ]
         self._vars = {}
-        row_idx = 2  # starts after layout selector
+        row_idx = 2
         for label, key in campos:
-            tk.Label(f, text=label, font=FONT_SMALL, bg=COLOR_PANEL,
-                     fg=COLOR_TEXTO).grid(row=row_idx, column=0, sticky="w")
+            crear_label(f, label, tipo="normal").grid(
+                row=row_idx, column=0, sticky="w")
             var = tk.StringVar()
-            tk.Entry(f, textvariable=var, font=FONT_SMALL, bg=COLOR_ENTRY,
-                     fg=COLOR_TEXTO, insertbackground="white",
-                     relief="flat").grid(row=row_idx + 1, column=0,
-                                          sticky="ew", pady=(2, 4))
+            crear_entry(f, textvariable=var).grid(
+                row=row_idx + 1, column=0, sticky="ew", pady=(2, 6))
             self._vars[key] = var
             row_idx += 2
 
         self._vars["revision"].set("")
 
-        # ── Organización ──
-        tk.Label(f, text="Organización:", font=FONT_SMALL, bg=COLOR_PANEL,
-                 fg=COLOR_TEXTO).grid(row=row_idx, column=0, sticky="w")
-        self._org = tk.StringVar(
-            value="")
-        tk.Entry(f, textvariable=self._org, font=FONT_SMALL, bg=COLOR_ENTRY,
-                 fg=COLOR_TEXTO, insertbackground="white",
-                 relief="flat").grid(row=row_idx + 1, column=0,
-                                      sticky="ew", pady=(2, 4))
+        # ── Organizacion ──
+        crear_label(f, "Organizacion:", tipo="normal").grid(
+            row=row_idx, column=0, sticky="w")
+        self._org = tk.StringVar(value="")
+        crear_entry(f, textvariable=self._org).grid(
+            row=row_idx + 1, column=0, sticky="ew", pady=(2, 6))
         row_idx += 2
 
         # ── Logo ──
-        tk.Label(f, text="Logo (imagen):", font=FONT_SMALL, bg=COLOR_PANEL,
-                 fg=COLOR_TEXTO).grid(row=row_idx, column=0, sticky="w")
+        crear_label(f, "Logo (imagen):", tipo="normal").grid(
+            row=row_idx, column=0, sticky="w")
         logo_f = tk.Frame(f, bg=COLOR_PANEL)
-        logo_f.grid(row=row_idx + 1, column=0, sticky="ew", pady=(2, 4))
+        logo_f.grid(row=row_idx + 1, column=0, sticky="ew", pady=(2, 6))
         self._logo_path = tk.StringVar(value="")
         self._lbl_logo = tk.Label(logo_f, text="Sin logo", font=FONT_SMALL,
                                    bg=COLOR_PANEL, fg=COLOR_TEXTO_GRIS)
-        self._lbl_logo.pack(side="left", padx=(0, 6))
-        tk.Button(logo_f, text="Elegir", command=self._elegir_logo,
-                  font=FONT_SMALL, bg=COLOR_BORDE, fg=COLOR_TEXTO,
-                  relief="flat", cursor="hand2", padx=4).pack(side="left")
-        tk.Button(logo_f, text="Quitar", command=self._quitar_logo,
-                  font=FONT_SMALL, bg=COLOR_BORDE, fg=COLOR_TEXTO,
-                  relief="flat", cursor="hand2", padx=4).pack(side="left",
-                                                                padx=(4, 0))
+        self._lbl_logo.pack(side="left", padx=(0, 8))
+        crear_boton(logo_f, "Elegir", self._elegir_logo).pack(side="left")
+        crear_boton(logo_f, "Quitar", self._quitar_logo).pack(side="left", padx=(4, 0))
         row_idx += 2
 
-        # ── Título del mapa ──
-        tk.Label(f, text="Título del mapa:", font=FONT_SMALL,
-                 bg=COLOR_PANEL, fg=COLOR_TEXTO).grid(
-                 row=row_idx, column=0, sticky="w")
+        # ── Titulo del mapa ──
+        crear_label(f, "Titulo del mapa:", tipo="normal").grid(
+            row=row_idx, column=0, sticky="w")
         self._titulo_mapa = tk.StringVar(value="")
-        tk.Entry(f, textvariable=self._titulo_mapa, font=FONT_SMALL,
-                 bg=COLOR_ENTRY, fg=COLOR_TEXTO, insertbackground="white",
-                 relief="flat").grid(row=row_idx + 1, column=0,
-                                      sticky="ew", pady=(2, 4))
+        crear_entry(f, textvariable=self._titulo_mapa).grid(
+            row=row_idx + 1, column=0, sticky="ew", pady=(2, 6))
         row_idx += 2
 
-        # ── Subtítulo (estático o desde campo) ──
-        tk.Label(f, text="Subtítulo cabecera:", font=FONT_SMALL,
-                 bg=COLOR_PANEL, fg=COLOR_TEXTO).grid(
-                 row=row_idx, column=0, sticky="w")
+        # ── Subtitulo ──
+        crear_label(f, "Subtitulo cabecera:", tipo="normal").grid(
+            row=row_idx, column=0, sticky="w")
         self._subtitulo = tk.StringVar(value="PLANO DE INFRAESTRUCTURA FORESTAL")
-        tk.Entry(f, textvariable=self._subtitulo, font=FONT_SMALL,
-                 bg=COLOR_ENTRY, fg=COLOR_TEXTO, insertbackground="white",
-                 relief="flat").grid(row=row_idx + 1, column=0,
-                                      sticky="ew", pady=(2, 4))
+        crear_entry(f, textvariable=self._subtitulo).grid(
+            row=row_idx + 1, column=0, sticky="ew", pady=(2, 6))
         row_idx += 2
 
-        tk.Label(f, text="Subtítulo desde campo (opcional):", font=FONT_SMALL,
-                 bg=COLOR_PANEL, fg=COLOR_TEXTO_GRIS).grid(
-                 row=row_idx, column=0, sticky="w")
+        crear_label(f, "Subtitulo desde campo (opcional):", tipo="secundario").grid(
+            row=row_idx, column=0, sticky="w")
         self._campo_subtitulo = tk.StringVar(value="")
         self._cb_campo_sub = ttk.Combobox(
             f, textvariable=self._campo_subtitulo,
             values=["(ninguno)"], state="readonly", font=FONT_SMALL,
         )
         self._cb_campo_sub.grid(row=row_idx + 1, column=0,
-                                 sticky="ew", pady=(2, 4))
+                                 sticky="ew", pady=(2, 6))
         self._cb_campo_sub.current(0)
         row_idx += 2
 
-        # ── Nº plano inicial ──
-        tk.Label(f, text="Nº plano inicial:", font=FONT_SMALL,
-                 bg=COLOR_PANEL, fg=COLOR_TEXTO).grid(
-                 row=row_idx, column=0, sticky="w")
+        # ── Num plano inicial ──
+        crear_label(f, "N\u00ba plano inicial:", tipo="normal").grid(
+            row=row_idx, column=0, sticky="w")
         self._num_plano_inicio = tk.StringVar(value="1")
-        tk.Entry(f, textvariable=self._num_plano_inicio, font=FONT_SMALL,
-                 bg=COLOR_ENTRY, fg=COLOR_TEXTO, insertbackground="white",
-                 relief="flat", width=8).grid(row=row_idx + 1, column=0,
-                                               sticky="w", pady=(2, 6))
+        crear_entry(f, textvariable=self._num_plano_inicio, width=8).grid(
+            row=row_idx + 1, column=0, sticky="w", pady=(2, 6))
         row_idx += 2
 
-        # ── Etiquetas en el mapa (campo para nombres) ──
-        tk.Label(f, text="Etiqueta en mapa (campo):", font=FONT_SMALL,
-                 bg=COLOR_PANEL, fg=COLOR_TEXTO).grid(
-                 row=row_idx, column=0, sticky="w")
+        # ── Etiquetas en el mapa ──
+        crear_label(f, "Etiqueta en mapa (campo):", tipo="normal").grid(
+            row=row_idx, column=0, sticky="w")
         self._campo_etiqueta = tk.StringVar(value="Nombre_Infra")
         self._cb_campo_etiq = ttk.Combobox(
             f, textvariable=self._campo_etiqueta,
@@ -152,10 +127,9 @@ class PanelCajetin:
         self._cb_campo_etiq.current(1)
         row_idx += 2
 
-        # ── Etiquetas de montes en el mapa ──
-        tk.Label(f, text="Etiqueta montes (campo):", font=FONT_SMALL,
-                 bg=COLOR_PANEL, fg=COLOR_TEXTO).grid(
-                 row=row_idx, column=0, sticky="w")
+        # ── Etiquetas de montes ──
+        crear_label(f, "Etiqueta montes (campo):", tipo="normal").grid(
+            row=row_idx, column=0, sticky="w")
         self._campo_etiqueta_montes = tk.StringVar(value="(sin etiqueta)")
         self._cb_campo_etiq_montes = ttk.Combobox(
             f, textvariable=self._campo_etiqueta_montes,
@@ -168,17 +142,16 @@ class PanelCajetin:
         row_idx += 2
 
         # ── Colores de plantilla ──
-        tk.Label(f, text="Colores plantilla:", font=FONT_BOLD,
-                 bg=COLOR_PANEL, fg=COLOR_TEXTO_GRIS).grid(
-                 row=row_idx, column=0, sticky="w", pady=(4, 2))
+        crear_label(f, "Colores plantilla:", tipo="titulo").grid(
+            row=row_idx, column=0, sticky="w", pady=(6, 4))
         row_idx += 1
 
         self._colores = {
-            "color_cabecera_fondo": "#1C2333",
+            "color_cabecera_fondo": "#0F1923",
             "color_cabecera_texto": "#FFFFFF",
-            "color_cabecera_acento": "#007932",
-            "color_marco_exterior": "#1C2333",
-            "color_marco_interior": "#007932",
+            "color_cabecera_acento": "#10B981",
+            "color_marco_exterior": "#0F1923",
+            "color_marco_interior": "#10B981",
         }
         self._lbl_colores = {}
 
@@ -192,11 +165,13 @@ class PanelCajetin:
 
         for i, (key, label) in enumerate(etiquetas.items()):
             row_f = tk.Frame(f, bg=COLOR_PANEL)
-            row_f.grid(row=row_idx + i, column=0, sticky="ew", pady=1)
+            row_f.grid(row=row_idx + i, column=0, sticky="ew", pady=2)
 
             lbl_c = tk.Label(row_f, bg=self._colores[key], width=3,
-                              relief="solid", bd=1)
-            lbl_c.pack(side="left", padx=(0, 6))
+                              relief="flat", bd=0,
+                              highlightthickness=1,
+                              highlightbackground=COLOR_BORDE)
+            lbl_c.pack(side="left", padx=(0, 8))
             self._lbl_colores[key] = lbl_c
 
             def _elegir(k=key, lbl=lbl_c):
@@ -206,28 +181,24 @@ class PanelCajetin:
                     self._colores[k] = c
                     lbl.configure(bg=c)
 
-            tk.Button(row_f, text=label, command=_elegir,
-                      font=FONT_SMALL, bg=COLOR_BORDE, fg=COLOR_TEXTO,
-                      relief="flat", cursor="hand2").pack(side="left", fill="x",
-                                                           expand=True)
+            crear_boton(row_f, label, _elegir).pack(
+                side="left", fill="x", expand=True)
 
         row_idx += len(etiquetas)
 
-        # ── Botón aplicar ──
-        tk.Button(f, text="Aplicar cajetín y plantilla",
-                  command=self._aplicar, font=FONT_SMALL,
-                  bg=COLOR_ACENTO, fg="#1A1A2E", relief="flat",
-                  cursor="hand2", pady=3).grid(
-                  row=row_idx, column=0, sticky="ew", pady=(6, 4))
+        # ── Boton aplicar ──
+        crear_boton(f, "Aplicar cajetin y plantilla", self._aplicar,
+                    estilo="primario").grid(
+            row=row_idx, column=0, sticky="ew", pady=(8, 4))
 
         f.columnconfigure(0, weight=1)
 
-    # ── Acciones ──────────────────────────────────────────────────────
+    # ── Acciones ──
 
     def _elegir_logo(self):
         ruta = filedialog.askopenfilename(
             title="Seleccionar logo",
-            filetypes=[("Imágenes", "*.png *.jpg *.jpeg *.bmp *.gif"),
+            filetypes=[("Imagenes", "*.png *.jpg *.jpeg *.bmp *.gif"),
                        ("Todos", "*.*")],
         )
         if ruta:
@@ -241,7 +212,6 @@ class PanelCajetin:
         self._lbl_logo.configure(text="Sin logo", fg=COLOR_TEXTO_GRIS)
 
     def actualizar_campos_subtitulo(self, columnas: list):
-        """Actualiza los combobox de campo para subtítulo y etiquetas."""
         cols = [c for c in columnas if c.lower() != "geometry"]
         valores_sub = ["(ninguno)"] + cols
         self._cb_campo_sub.configure(values=valores_sub)
@@ -251,14 +221,12 @@ class PanelCajetin:
         valores_etiq = ["(sin etiqueta)"] + cols
         self._cb_campo_etiq.configure(values=valores_etiq)
         if self._campo_etiqueta.get() not in valores_etiq:
-            # Default to Nombre_Infra if available
             if "Nombre_Infra" in cols:
                 self._campo_etiqueta.set("Nombre_Infra")
             else:
                 self._cb_campo_etiq.current(0)
 
     def actualizar_campos_montes(self, columnas: list):
-        """Actualiza el combobox de etiquetas de montes con las columnas del shapefile."""
         cols = [c for c in columnas if c.lower() != "geometry"]
         valores = ["(sin etiqueta)"] + cols
         self._cb_campo_etiq_montes.configure(values=valores)
@@ -270,7 +238,7 @@ class PanelCajetin:
         plantilla = self.obtener_plantilla()
         self.motor.set_cajetin(cajetin)
         self.motor.set_plantilla(plantilla)
-        self.callback_log("Cajetín y plantilla actualizados.", "info")
+        self.callback_log("Cajetin y plantilla actualizados.", "info")
 
     def obtener_cajetin(self) -> dict:
         org = self._org.get().replace(" - ", "\n")
@@ -311,7 +279,6 @@ class PanelCajetin:
         return self._layout_key.get()
 
     def cargar_desde_proyecto(self, cajetin: dict, plantilla: dict):
-        """Carga valores desde un proyecto guardado."""
         if cajetin:
             for key, var in self._vars.items():
                 var.set(cajetin.get(key, ""))

@@ -5,8 +5,10 @@ Permite configurar colores, grosores, tipos de trazo y marcadores
 por categoría de infraestructura o por capa adicional.
 """
 
+from __future__ import annotations
+
 # Tipos de trazo disponibles
-TIPOS_TRAZO = {
+TIPOS_TRAZO: dict[str, str] = {
     "Continuo": "-",
     "Discontinuo": "--",
     "Punto-raya": "-.",
@@ -14,7 +16,7 @@ TIPOS_TRAZO = {
 }
 
 # Marcadores disponibles para puntos
-MARCADORES = {
+MARCADORES: dict[str, str] = {
     "Círculo": "o",
     "Cuadrado": "s",
     "Triángulo": "^",
@@ -25,14 +27,14 @@ MARCADORES = {
 }
 
 # Paleta de colores predefinida para categorías
-PALETA_CATEGORIAS = [
+PALETA_CATEGORIAS: list[str] = [
     "#E74C3C", "#3498DB", "#007932", "#F39C12", "#9B59B6",
     "#1ABC9C", "#E67E22", "#34495E", "#C0392B", "#2980B9",
     "#368f3f", "#D35400", "#8E44AD", "#16A085", "#F1C40F",
 ]
 
 # Simbología por defecto para capas extra
-SIMBOLOGIA_CAPAS_EXTRA = {
+SIMBOLOGIA_CAPAS_EXTRA: dict[str, dict[str, str | float]] = {
     "Hidrografía": {
         "color": "#2980B9",
         "linewidth": 1.0,
@@ -71,9 +73,18 @@ SIMBOLOGIA_CAPAS_EXTRA = {
 class ConfigSimbologia:
     """Configuración de simbología para una capa o categoría."""
 
-    def __init__(self, color="#E74C3C", linewidth=1.5, linestyle="-",
-                 alpha=1.0, marker="o", markersize=8, facecolor=None,
-                 label=""):
+    color: str
+    linewidth: float
+    linestyle: str
+    alpha: float
+    marker: str
+    markersize: float
+    facecolor: str
+    label: str
+
+    def __init__(self, color: str = "#E74C3C", linewidth: float = 1.5, linestyle: str = "-",
+                 alpha: float = 1.0, marker: str = "o", markersize: float = 8, facecolor: str | None = None,
+                 label: str = "") -> None:
         self.color = color
         self.linewidth = float(linewidth)
         self.linestyle = linestyle
@@ -83,7 +94,7 @@ class ConfigSimbologia:
         self.facecolor = facecolor or (color + "55")
         self.label = label
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, str | float]:
         return {
             "color": self.color,
             "linewidth": self.linewidth,
@@ -96,7 +107,7 @@ class ConfigSimbologia:
         }
 
     @classmethod
-    def from_dict(cls, d: dict) -> "ConfigSimbologia":
+    def from_dict(cls, d: dict[str, str | float]) -> ConfigSimbologia:
         d = {k: v for k, v in d.items() if k != "hatch"}
         return cls(**d)
 
@@ -104,7 +115,13 @@ class ConfigSimbologia:
 class GestorSimbologia:
     """Gestiona la simbología de todas las capas y categorías."""
 
-    def __init__(self):
+    categorias: dict[str, dict[str, ConfigSimbologia]]
+    capas_extra: dict[str, ConfigSimbologia]
+    montes: ConfigSimbologia
+    categorias_montes: dict[str, dict[str, ConfigSimbologia]]
+    infra_fondo: ConfigSimbologia
+
+    def __init__(self) -> None:
         # Simbología por categoría de infraestructura (campo -> {valor: ConfigSimbologia})
         self.categorias = {}
         # Simbología para capas extra (nombre_capa -> ConfigSimbologia)
@@ -121,7 +138,7 @@ class GestorSimbologia:
             color="#999999", linewidth=0.6, alpha=0.25, label="Otras infraestructuras",
         )
 
-    def generar_por_categoria(self, campo: str, valores: list):
+    def generar_por_categoria(self, campo: str, valores: list[str]) -> None:
         """Genera simbología automática por categoría de un campo."""
         self.categorias[campo] = {}
         for i, valor in enumerate(valores):
@@ -131,10 +148,10 @@ class GestorSimbologia:
                 label=str(valor),
             )
 
-    def generar_por_categoria_montes(self, campo: str, valores: list):
+    def generar_por_categoria_montes(self, campo: str, valores: list[str]) -> None:
         """Genera simbología automática por categoría para montes."""
         # Usar una paleta diferente (más verde/terrosa) para montes
-        paleta_montes = [
+        paleta_montes: list[str] = [
             "#1a5c10", "#2E7D32", "#388E3C", "#43A047", "#4CAF50",
             "#66BB6A", "#81C784", "#A5D6A7", "#558B2F", "#33691E",
             "#827717", "#9E9D24", "#AFB42B", "#C0CA33", "#D4E157",
@@ -168,10 +185,10 @@ class GestorSimbologia:
             return ConfigSimbologia(**d)
         return ConfigSimbologia(color="#888888", label=nombre)
 
-    def set_simbologia_capa(self, nombre: str, simb: ConfigSimbologia):
+    def set_simbologia_capa(self, nombre: str, simb: ConfigSimbologia) -> None:
         self.capas_extra[nombre] = simb
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, object]:
         return {
             "categorias": {
                 campo: {v: s.to_dict() for v, s in vals.items()}
@@ -187,7 +204,7 @@ class GestorSimbologia:
         }
 
     @classmethod
-    def from_dict(cls, d: dict) -> "GestorSimbologia":
+    def from_dict(cls, d: dict[str, object]) -> GestorSimbologia:
         g = cls()
         for campo, vals in d.get("categorias", {}).items():
             g.categorias[campo] = {

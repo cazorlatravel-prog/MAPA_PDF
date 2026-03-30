@@ -11,8 +11,10 @@ from tkinter import ttk, messagebox, filedialog
 
 from .estilos import (
     COLOR_PANEL, COLOR_TEXTO, COLOR_TEXTO_GRIS, COLOR_BORDE, COLOR_ENTRY,
-    COLOR_ACENTO, FONT_BOLD, FONT_SMALL, FONT_LABEL,
-    crear_frame_seccion, crear_boton,
+    COLOR_ACENTO, COLOR_ACENTO2, COLOR_ACENTO3, COLOR_ERROR, COLOR_HOVER,
+    COLOR_FONDO_APP, COLOR_HEADER,
+    FONT_BOLD, FONT_SMALL, FONT_LABEL, FONT_SECCION, FONT_BOTON,
+    crear_frame_seccion, crear_boton, crear_entry, crear_label,
 )
 from ..motor.maquetacion import ETIQUETAS_CAMPOS
 from ..motor.generador import GeneracionCancelada
@@ -31,10 +33,9 @@ class PanelGeneracion:
 
         f = crear_frame_seccion(parent, "\U0001f5a8  GENERACI\u00d3N")
 
-        # ── Modo de selección ──
-        tk.Label(f, text="Planos a generar:", font=FONT_BOLD,
-                 bg=COLOR_PANEL, fg=COLOR_TEXTO).grid(
-                 row=0, column=0, columnspan=2, sticky="w")
+        # ── Modo de seleccion ──
+        crear_label(f, "Planos a generar:", tipo="titulo").grid(
+            row=0, column=0, columnspan=2, sticky="w")
 
         self._modo_gen = tk.StringVar(value="todos")
         self._modo_gen.trace_add("write", self._on_modo_changed)
@@ -49,26 +50,23 @@ class PanelGeneracion:
             tk.Radiobutton(
                 f, text=texto, variable=self._modo_gen, value=val,
                 font=FONT_SMALL, bg=COLOR_PANEL, fg=COLOR_TEXTO,
-                selectcolor=COLOR_BORDE, activebackground=COLOR_PANEL,
-                cursor="hand2",
-            ).grid(row=i, column=0, sticky="w")
+                selectcolor=COLOR_ENTRY, activebackground=COLOR_PANEL,
+                activeforeground=COLOR_ACENTO, cursor="hand2",
+                bd=0, highlightthickness=0,
+            ).grid(row=i, column=0, sticky="w", pady=1)
 
         # Entradas de rango
         rango_f = tk.Frame(f, bg=COLOR_PANEL)
         rango_f.grid(row=3, column=1, sticky="w", padx=(4, 0))
 
-        self._rango_desde = tk.Entry(rango_f, width=5, font=FONT_SMALL,
-                                      bg=COLOR_ENTRY, fg=COLOR_TEXTO,
-                                      insertbackground="white", relief="flat")
+        self._rango_desde = crear_entry(rango_f, width=5)
         self._rango_desde.insert(0, "1")
         self._rango_desde.pack(side="left")
 
-        tk.Label(rango_f, text="\u2013", bg=COLOR_PANEL, fg=COLOR_TEXTO,
-                 font=FONT_SMALL).pack(side="left", padx=2)
+        tk.Label(rango_f, text="\u2013", bg=COLOR_PANEL, fg=COLOR_TEXTO_GRIS,
+                 font=FONT_SMALL).pack(side="left", padx=4)
 
-        self._rango_hasta = tk.Entry(rango_f, width=5, font=FONT_SMALL,
-                                      bg=COLOR_ENTRY, fg=COLOR_TEXTO,
-                                      insertbackground="white", relief="flat")
+        self._rango_hasta = crear_entry(rango_f, width=5)
         self._rango_hasta.insert(0, "10")
         self._rango_hasta.pack(side="left")
 
@@ -77,9 +75,8 @@ class PanelGeneracion:
         self._frame_agrupacion.grid(row=6, column=0, columnspan=2,
                                      sticky="ew", pady=(4, 0))
 
-        tk.Label(self._frame_agrupacion, text="Campo de agrupaci\u00f3n:",
-                 font=FONT_SMALL, bg=COLOR_PANEL, fg=COLOR_TEXTO).grid(
-                 row=0, column=0, sticky="w")
+        crear_label(self._frame_agrupacion, "Campo de agrupaci\u00f3n:",
+                    tipo="normal").grid(row=0, column=0, sticky="w")
 
         campos_agrupacion = list(ETIQUETAS_CAMPOS.keys())
         self._campo_agrupacion = tk.StringVar(value="Monte")
@@ -94,24 +91,22 @@ class PanelGeneracion:
         self._lbl_valores_resumen = tk.Label(
             self._frame_agrupacion,
             text="Valores a generar: (sin datos)",
-            font=FONT_SMALL, bg=COLOR_BORDE, fg=COLOR_TEXTO,
-            anchor="w", padx=6, pady=4, cursor="hand2", relief="flat",
-            wraplength=300, justify="left",
+            font=FONT_SMALL, bg=COLOR_ENTRY, fg=COLOR_TEXTO,
+            anchor="w", padx=8, pady=6, cursor="hand2", relief="flat",
+            wraplength=260, justify="left", bd=0,
+            highlightthickness=1, highlightbackground=COLOR_BORDE,
         )
         self._lbl_valores_resumen.grid(row=1, column=0, columnspan=2,
                                         sticky="ew", pady=(4, 0))
         self._lbl_valores_resumen.bind("<Button-1>", lambda e: self._abrir_popup_valores())
 
         btn_sel_f = tk.Frame(self._frame_agrupacion, bg=COLOR_PANEL)
-        btn_sel_f.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(2, 0))
-        tk.Button(btn_sel_f, text="Seleccionar valores\u2026",
-                  command=self._abrir_popup_valores,
-                  font=FONT_SMALL, bg=COLOR_ACENTO, fg="#1A1A2E",
-                  relief="flat", cursor="hand2", padx=6).pack(side="left", padx=(0, 4))
-        tk.Button(btn_sel_f, text="Detalle\u2026",
-                  command=self._abrir_popup_detalle,
-                  font=FONT_SMALL, bg=COLOR_BORDE, fg=COLOR_TEXTO,
-                  relief="flat", cursor="hand2", padx=4).pack(side="left", padx=(0, 4))
+        btn_sel_f.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(4, 0))
+        crear_boton(btn_sel_f, "Seleccionar valores\u2026",
+                    self._abrir_popup_valores,
+                    estilo="primario").pack(side="left", padx=(0, 4))
+        crear_boton(btn_sel_f, "Detalle\u2026",
+                    self._abrir_popup_detalle).pack(side="left", padx=(0, 4))
 
         self._check_valores = {}
         # {valor_grupo: [indices]} — si no existe la clave, se usan todos
@@ -127,77 +122,77 @@ class PanelGeneracion:
         tk.Label(self._frame_lotes, textvariable=self._ruta_csv,
                  font=FONT_SMALL, bg=COLOR_PANEL, fg=COLOR_TEXTO_GRIS,
                  wraplength=240).pack(anchor="w")
-        tk.Button(self._frame_lotes, text="Seleccionar CSV",
-                  command=self._seleccionar_csv, font=FONT_SMALL,
-                  bg=COLOR_BORDE, fg=COLOR_TEXTO, relief="flat",
-                  cursor="hand2", padx=4).pack(anchor="w", pady=(2, 0))
+        crear_boton(self._frame_lotes, "Seleccionar CSV",
+                    self._seleccionar_csv).pack(anchor="w", pady=(4, 0))
         self._frame_lotes.grid_remove()
 
         # ── Opciones PDF ──
         self._multipagina = tk.BooleanVar(value=False)
         tk.Checkbutton(
-            f, text="PDF multipágina (un solo archivo)",
+            f, text="PDF multipagina (un solo archivo)",
             variable=self._multipagina, font=FONT_SMALL,
-            bg=COLOR_PANEL, fg=COLOR_TEXTO, selectcolor=COLOR_BORDE,
-            activebackground=COLOR_PANEL, cursor="hand2",
-        ).grid(row=8, column=0, columnspan=2, sticky="w", pady=(6, 0))
+            bg=COLOR_PANEL, fg=COLOR_TEXTO, selectcolor=COLOR_ENTRY,
+            activebackground=COLOR_PANEL, activeforeground=COLOR_ACENTO,
+            cursor="hand2", bd=0, highlightthickness=0,
+        ).grid(row=8, column=0, columnspan=2, sticky="w", pady=(8, 0))
 
         self._incluir_portada = tk.BooleanVar(value=False)
         tk.Checkbutton(
             f, text="Incluir portada e \u00edndice",
             variable=self._incluir_portada, font=FONT_SMALL,
-            bg=COLOR_PANEL, fg=COLOR_TEXTO, selectcolor=COLOR_BORDE,
-            activebackground=COLOR_PANEL, cursor="hand2",
+            bg=COLOR_PANEL, fg=COLOR_TEXTO, selectcolor=COLOR_ENTRY,
+            activebackground=COLOR_PANEL, activeforeground=COLOR_ACENTO,
+            cursor="hand2", bd=0, highlightthickness=0,
         ).grid(row=9, column=0, columnspan=2, sticky="w", pady=(2, 0))
 
         # ── Progreso ──
-        tk.Label(f, text="Progreso:", font=FONT_SMALL,
-                 bg=COLOR_PANEL, fg=COLOR_TEXTO_GRIS).grid(
-                 row=10, column=0, columnspan=2, sticky="w", pady=(10, 0))
+        crear_label(f, "Progreso:", tipo="secundario").grid(
+            row=10, column=0, columnspan=2, sticky="w", pady=(12, 0))
 
-        self._progreso = ttk.Progressbar(f, length=240, mode="determinate")
-        self._progreso.grid(row=11, column=0, columnspan=2, sticky="ew", pady=(2, 8))
+        self._progreso = ttk.Progressbar(f, length=240, mode="determinate",
+                                          style="Green.Horizontal.TProgressbar")
+        self._progreso.grid(row=11, column=0, columnspan=2, sticky="ew", pady=(4, 4))
 
         self._lbl_progreso = tk.Label(f, text="\u2014", font=FONT_SMALL,
-                                       bg=COLOR_PANEL, fg=COLOR_TEXTO_GRIS)
+                                       bg=COLOR_PANEL, fg=COLOR_ACENTO)
         self._lbl_progreso.grid(row=12, column=0, columnspan=2, pady=(0, 8))
 
-        # ── Botones Vista previa y Mapa guía ──
+        # ── Botones Vista previa y Mapa guia ──
         btn_preview_f = tk.Frame(f, bg=COLOR_PANEL)
-        btn_preview_f.grid(row=13, column=0, columnspan=2, sticky="ew", pady=(4, 2))
+        btn_preview_f.grid(row=13, column=0, columnspan=2, sticky="ew", pady=(4, 4))
         btn_preview_f.columnconfigure(0, weight=1)
         btn_preview_f.columnconfigure(1, weight=1)
 
         crear_boton(btn_preview_f, "Vista previa",
                     self._vista_previa, icono="\U0001f50d").grid(
-                    row=0, column=0, sticky="ew", padx=(0, 2))
+                    row=0, column=0, sticky="ew", padx=(0, 3))
         crear_boton(btn_preview_f, "Mapa gu\u00eda",
                     self._mapa_guia, icono="\U0001f5fa").grid(
-                    row=0, column=1, sticky="ew", padx=(2, 0))
+                    row=0, column=1, sticky="ew", padx=(3, 0))
 
-        # ── Botón GENERAR ──
+        # ── Boton GENERAR ──
         self._btn_generar = crear_boton(
             f, "  GENERAR PLANOS  ", self._iniciar_generacion,
             icono="\U0001f5a8", ancho=30,
-            color_bg=COLOR_ACENTO, color_fg="#1A1A2E",
+            estilo="primario",
         )
-        self._btn_generar.grid(row=14, column=0, columnspan=2, sticky="ew", pady=4)
+        self._btn_generar.grid(row=14, column=0, columnspan=2, sticky="ew", pady=(6, 4))
 
-        # ── Botón PARAR ──
+        # ── Boton PARAR ──
         self._btn_parar = crear_boton(
             f, "  PARAR GENERACI\u00d3N  ", self._parar_generacion,
             icono="\u23f9", ancho=30,
-            color_bg="#CC3333", color_fg="white",
+            estilo="peligro",
         )
         self._btn_parar.grid(row=15, column=0, columnspan=2, sticky="ew", pady=(0, 4))
         self._btn_parar.configure(state="disabled")
 
-        # ── Botón abrir carpeta ──
+        # ── Boton abrir carpeta ──
         crear_boton(f, "Abrir carpeta de salida",
                     self._abrir_carpeta, icono="\U0001f4c2").grid(
                     row=16, column=0, columnspan=2, sticky="ew", pady=(0, 4))
 
-        # ── Botón vaciar caché ──
+        # ── Boton vaciar cache ──
         crear_boton(f, "Vaciar cach\u00e9 de teselas",
                     self._vaciar_cache, icono="\U0001f5d1").grid(
                     row=17, column=0, columnspan=2, sticky="ew", pady=(0, 4))
@@ -205,7 +200,15 @@ class PanelGeneracion:
         f.columnconfigure(0, weight=1)
         f.columnconfigure(1, weight=1)
 
-    # ── Eventos ──────────────────────────────────────────────────────────
+    def _after_seguro(self, ms, func):
+        """Ejecuta func en el hilo principal solo si la ventana sigue viva."""
+        try:
+            if self._parent_window.winfo_exists():
+                self._parent_window.after(ms, func)
+        except Exception:
+            pass
+
+    # ── Eventos ──
 
     def _on_modo_changed(self, *args):
         modo = self._modo_gen.get()
@@ -285,9 +288,8 @@ class PanelGeneracion:
         popup.transient(self._parent_window)
         popup.grab_set()
 
-        tk.Label(popup, text=f"Valores a generar (campo: {campo})",
-                 font=FONT_BOLD, bg=COLOR_PANEL, fg=COLOR_TEXTO).pack(
-                 anchor="w", padx=8, pady=(8, 4))
+        crear_label(popup, f"Valores a generar (campo: {campo})",
+                    tipo="titulo").pack(anchor="w", padx=10, pady=(10, 6))
 
         # Frame con scroll
         container = tk.Frame(popup, bg=COLOR_PANEL)
@@ -326,8 +328,9 @@ class PanelGeneracion:
             cb = tk.Checkbutton(
                 inner, text=texto, variable=var,
                 font=FONT_SMALL, bg=COLOR_PANEL, fg=COLOR_TEXTO,
-                selectcolor=COLOR_BORDE, activebackground=COLOR_PANEL,
-                cursor="hand2",
+                selectcolor=COLOR_ENTRY, activebackground=COLOR_PANEL,
+                activeforeground=COLOR_ACENTO, cursor="hand2",
+                bd=0, highlightthickness=0,
             )
             cb.pack(anchor="w", padx=8, pady=2)
             popup_vars[valor] = var
@@ -352,15 +355,10 @@ class PanelGeneracion:
 
         popup.protocol("WM_DELETE_WINDOW", _aplicar)
 
-        tk.Button(btn_f, text="Todos", command=_sel_todos,
-                  font=FONT_SMALL, bg=COLOR_BORDE, fg=COLOR_TEXTO,
-                  relief="flat", cursor="hand2", padx=6).pack(side="left", padx=(0, 4))
-        tk.Button(btn_f, text="Ninguno", command=_sel_ninguno,
-                  font=FONT_SMALL, bg=COLOR_BORDE, fg=COLOR_TEXTO,
-                  relief="flat", cursor="hand2", padx=6).pack(side="left", padx=(0, 4))
-        tk.Button(btn_f, text="Aceptar", command=_aplicar,
-                  font=FONT_SMALL, bg=COLOR_ACENTO, fg="#1A1A2E",
-                  relief="flat", cursor="hand2", padx=12).pack(side="right")
+        crear_boton(btn_f, "Todos", _sel_todos).pack(side="left", padx=(0, 4))
+        crear_boton(btn_f, "Ninguno", _sel_ninguno).pack(side="left", padx=(0, 4))
+        crear_boton(btn_f, "Aceptar", _aplicar,
+                    estilo="primario").pack(side="right")
 
     def _seleccionar_todos_valores(self):
         for var in self._check_valores.values():
@@ -388,9 +386,8 @@ class PanelGeneracion:
         popup.transient(self._parent_window)
         popup.grab_set()
 
-        tk.Label(popup, text=f"Infraestructuras agrupadas por: {campo}",
-                 font=FONT_BOLD, bg=COLOR_PANEL, fg=COLOR_TEXTO).pack(
-                 anchor="w", padx=8, pady=(8, 4))
+        crear_label(popup, f"Infraestructuras agrupadas por: {campo}",
+                    tipo="titulo").pack(anchor="w", padx=10, pady=(10, 6))
 
         # Frame con scroll
         container = tk.Frame(popup, bg=COLOR_PANEL)
@@ -417,9 +414,9 @@ class PanelGeneracion:
         for valor in valores_sel:
             indices = self.motor.obtener_indices_por_valor(campo, valor)
             # Cabecera del grupo
-            tk.Label(inner, text=f"\u25bc {valor}  ({len(indices)} infra.)",
-                     font=FONT_BOLD, bg=COLOR_PANEL, fg=COLOR_ACENTO).pack(
-                     anchor="w", padx=4, pady=(6, 2))
+            crear_label(inner, f"\u25bc {valor}  ({len(indices)} infra.)",
+                        tipo="acento", font=FONT_BOLD).pack(
+                anchor="w", padx=4, pady=(8, 2))
 
             grupo_vars = []
             prev_sel = self._indices_filtrados.get(valor)
@@ -441,8 +438,9 @@ class PanelGeneracion:
                 cb = tk.Checkbutton(
                     inner, text=f"  {nombre}", variable=var,
                     font=FONT_SMALL, bg=COLOR_PANEL, fg=COLOR_TEXTO,
-                    selectcolor=COLOR_BORDE, activebackground=COLOR_PANEL,
-                    cursor="hand2",
+                    selectcolor=COLOR_ENTRY, activebackground=COLOR_PANEL,
+                    activeforeground=COLOR_ACENTO, cursor="hand2",
+                    bd=0, highlightthickness=0,
                 )
                 cb.pack(anchor="w", padx=20, pady=1)
                 grupo_vars.append((idx, var))
@@ -523,11 +521,21 @@ class PanelGeneracion:
             return [tabla.index(s) for s in sels]
         elif modo == "rango":
             try:
-                desde = int(self._rango_desde.get()) - 1
+                desde = int(self._rango_desde.get())
                 hasta = int(self._rango_hasta.get())
-                return list(range(max(0, desde), min(hasta, len(gdf))))
             except ValueError:
+                messagebox.showwarning("Rango inválido",
+                    "Los valores 'Desde' y 'Hasta' deben ser números enteros.")
                 return []
+            if desde < 1:
+                desde = 1
+            if hasta > len(gdf):
+                hasta = len(gdf)
+            if desde > hasta:
+                messagebox.showwarning("Rango inválido",
+                    f"'Desde' ({desde}) no puede ser mayor que 'Hasta' ({hasta}).")
+                return []
+            return list(range(desde - 1, hasta))
         else:
             return []
 
@@ -606,9 +614,9 @@ class PanelGeneracion:
                         patron_nombre=patron_nombre,
                     )
 
-                    self._parent_window.after(0, self._fin_generacion)
+                    self._after_seguro(0, self._fin_generacion)
                 except GeneracionCancelada:
-                    self._parent_window.after(0, self._fin_cancelacion)
+                    self._after_seguro(0, self._fin_cancelacion)
 
             threading.Thread(target=_worker_agrupado, daemon=True).start()
         else:
@@ -666,9 +674,9 @@ class PanelGeneracion:
                             patron_nombre=patron_nombre,
                         )
 
-                    self._parent_window.after(0, self._fin_generacion)
+                    self._after_seguro(0, self._fin_generacion)
                 except GeneracionCancelada:
-                    self._parent_window.after(0, self._fin_cancelacion)
+                    self._after_seguro(0, self._fin_cancelacion)
 
             threading.Thread(target=_worker, daemon=True).start()
 
@@ -706,9 +714,9 @@ class PanelGeneracion:
                     campo_encabezado=campo_encabezado,
                 )
 
-                self._parent_window.after(0, self._fin_generacion)
+                self._after_seguro(0, self._fin_generacion)
             except GeneracionCancelada:
-                self._parent_window.after(0, self._fin_cancelacion)
+                self._after_seguro(0, self._fin_cancelacion)
 
         threading.Thread(target=_worker_lotes, daemon=True).start()
 
@@ -717,7 +725,7 @@ class PanelGeneracion:
             self._progreso.configure(value=actual, maximum=total)
             self._lbl_progreso.configure(
                 text=f"{actual}/{total} planos generados")
-        self._parent_window.after(0, _update)
+        self._after_seguro(0, _update)
 
     def _fin_generacion(self):
         cfg = self.get_config()
@@ -830,9 +838,9 @@ class PanelGeneracion:
                     escala_manual=cfg.get("escala_manual"),
                     campo_encabezado=cfg.get("campo_encabezado"),
                 )
-                self._parent_window.after(0, lambda: self._mostrar_preview(fig))
+                self._after_seguro(0, lambda: self._mostrar_preview(fig))
             except Exception as e:
-                self._parent_window.after(
+                self._after_seguro(
                     0, lambda: self.callback_log(
                         f"Error en vista previa: {e}", "error"))
 
@@ -849,12 +857,12 @@ class PanelGeneracion:
         popup = tk.Toplevel(self._parent_window)
         popup.title("Vista previa del plano")
         popup.geometry("900x650")
-        popup.configure(bg="#1C2333")
+        popup.configure(bg=COLOR_FONDO_APP)
         popup.transient(self._parent_window)
 
         canvas = FigureCanvasTkAgg(fig, master=popup)
         canvas.draw()
-        canvas.get_tk_widget().pack(fill="both", expand=True, padx=4, pady=4)
+        canvas.get_tk_widget().pack(fill="both", expand=True, padx=6, pady=6)
 
         import matplotlib.pyplot as _plt
 
@@ -864,10 +872,7 @@ class PanelGeneracion:
 
         popup.protocol("WM_DELETE_WINDOW", _on_close)
 
-        tk.Button(popup, text="Cerrar", command=_on_close,
-                  font=("Helvetica", 10), bg="#2C3E50", fg="#ECF0F1",
-                  relief="flat", cursor="hand2", padx=12, pady=4).pack(
-                  pady=(0, 8))
+        crear_boton(popup, "Cerrar", _on_close).pack(pady=(0, 10))
 
     # ── Mapa guía ─────────────────────────────────────────────────────────
 
@@ -912,9 +917,9 @@ class PanelGeneracion:
                     formato_key=cfg["formato"],
                     transparencia_montes=cfg["transparencia"],
                 )
-                self._parent_window.after(0, lambda: self._mostrar_preview(fig))
+                self._after_seguro(0, lambda: self._mostrar_preview(fig))
             except Exception as e:
-                self._parent_window.after(
+                self._after_seguro(
                     0, lambda: self.callback_log(
                         f"Error en mapa gu\u00eda: {e}", "error"))
 

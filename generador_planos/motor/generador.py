@@ -26,75 +26,14 @@ from .maquetacion import MaquetadorPlano, ETIQUETAS_CAMPOS, crear_portada, crear
 from .capas_extra import GestorCapasExtra
 from .simbologia import GestorSimbologia
 from .proyecto import cargar_lotes_csv
+from ._utils_geo import (  # noqa: F401
+    _asegurar_crs, _detectar_geom_type, _plot_gdf_por_tipo,
+    _limpiar_tipos_mixtos, _auto_calcular_campos, _calcular_stats_grupo,
+    _leer_geodatos,
+)
 
 # Campos esperados en el shapefile
 CAMPOS_ATRIBUTOS = list(ETIQUETAS_CAMPOS.keys())
-
-
-def _limpiar_tipos_mixtos(gdf):
-    """Convierte columnas con tipos mixtos (str + float) a str para evitar TypeError."""
-    import numpy as np
-    for col in gdf.columns:
-        if col == "geometry":
-            continue
-        if gdf[col].dtype == object:
-            # Columna con tipo 'object' puede tener mezcla de str, float, int, None
-            # Intentar convertir a numérico; si no se puede, forzar a str
-            try:
-                gdf[col] = gdf[col].where(gdf[col].isna(), gdf[col].astype(str))
-            except Exception:
-                pass
-    return gdf
-
-
-def _auto_calcular_campos(gdf):
-    """Calcula longitud/superficie automáticamente si no existen en el GDF."""
-    if "Longitud" not in gdf.columns:
-        def _long(g):
-            gt = str(g.geom_type).lower()
-            if "line" in gt or "string" in gt:
-                return round(g.length, 1)
-            return 0.0
-        gdf["Longitud"] = gdf.geometry.apply(_long)
-
-    if "Superficie" not in gdf.columns:
-        def _sup(g):
-            gt = str(g.geom_type).lower()
-            if "polygon" in gt:
-                return round(g.area / 10000, 4)  # m² → ha
-            return 0.0
-        gdf["Superficie"] = gdf.geometry.apply(_sup)
-
-    return gdf
-
-
-def _calcular_stats_grupo(gdf_grupo):
-    """Calcula estadísticas resumen para un grupo de infraestructuras."""
-    stats = {"num_infraestructuras": len(gdf_grupo)}
-
-    if "Longitud" in gdf_grupo.columns:
-        total_m = gdf_grupo["Longitud"].astype(float).sum()
-        stats["total_longitud_km"] = total_m / 1000.0
-
-    if "Superficie" in gdf_grupo.columns:
-        total_ha = gdf_grupo["Superficie"].astype(float).sum()
-        stats["total_superficie_ha"] = total_ha
-
-    return stats
-
-
-def _leer_geodatos(ruta: str, layer: str = None) -> gpd.GeoDataFrame:
-    """Lee un shapefile o geodatabase con fallback al driver OpenFileGDB."""
-    kwargs = {}
-    if layer:
-        kwargs["layer"] = layer
-    if ruta.lower().rstrip("/\\").endswith(".gdb"):
-        # Intentar primero con OpenFileGDB (más compatible con ArcGIS)
-        try:
-            return gpd.read_file(ruta, driver="OpenFileGDB", **kwargs)
-        except Exception:
-            pass
-    return gpd.read_file(ruta, **kwargs)
 
 
 class GeneradorPlanos:
@@ -221,9 +160,8 @@ class GeneradorPlanos:
         """Carga shapefile/GDB de infraestructuras y reproyecta a EPSG:25830."""
         try:
             gdf = _leer_geodatos(ruta, layer=layer)
-            if gdf.crs is None:
-                gdf = gdf.set_crs("EPSG:4326")
-            gdf = gdf.to_crs("EPSG:25830")
+            origen = f"capa '{layer}'" if layer else os.path.basename(ruta)
+            gdf, aviso_crs = _asegurar_crs(gdf, origen)
 
             # Limpiar columnas con tipos mixtos (previene str<float TypeError)
             gdf = _limpiar_tipos_mixtos(gdf)
@@ -231,7 +169,8 @@ class GeneradorPlanos:
             # Auto-calcular longitud/superficie si no existen
             gdf = _auto_calcular_campos(gdf)
 
-            # Construir índice espacial para consultas .cx[] rápidas
+            # Resetear índice y construir índice espacial para .cx[]
+            gdf = gdf.reset_index(drop=True)
             gdf.sindex
 
             self.gdf_infra = gdf
@@ -240,8 +179,9 @@ class GeneradorPlanos:
             faltantes = [c for c in CAMPOS_ATRIBUTOS if c not in cols]
             self._campo_mapeo = None
 
-            origen = f"capa '{layer}'" if layer else os.path.basename(ruta)
             msg = f"\u2713 {len(gdf)} infraestructuras cargadas ({origen}) | CRS: {gdf.crs.name}"
+            if aviso_crs:
+                msg += f"\n  {aviso_crs}"
             if faltantes:
                 msg += f"\n  \u26a0 Campos no encontrados: {', '.join(faltantes)}"
                 msg += f"\n  Campos disponibles: {', '.join(sorted(cols - {'geometry'}))}"
@@ -256,16 +196,18 @@ class GeneradorPlanos:
     def cargar_montes(self, ruta: str, layer: str = None) -> tuple:
         try:
             gdf = _leer_geodatos(ruta, layer=layer)
-            if gdf.crs is None:
-                gdf = gdf.set_crs("EPSG:4326")
-            gdf = gdf.to_crs("EPSG:25830")
+            origen = f"capa '{layer}'" if layer else os.path.basename(ruta)
+            gdf, aviso_crs = _asegurar_crs(gdf, origen)
             # Limpiar columnas con tipos mixtos
             gdf = _limpiar_tipos_mixtos(gdf)
-            # Construir índice espacial para consultas .cx[] rápidas
+            # Resetear índice y construir índice espacial para .cx[]
+            gdf = gdf.reset_index(drop=True)
             gdf.sindex
             self.gdf_montes = gdf
-            origen = f"capa '{layer}'" if layer else os.path.basename(ruta)
-            return True, f"\u2713 Capa montes ({origen}): {len(gdf)} elementos"
+            msg = f"\u2713 Capa montes ({origen}): {len(gdf)} elementos"
+            if aviso_crs:
+                msg += f"\n  {aviso_crs}"
+            return True, msg
         except Exception as e:
             return False, f"Error al cargar montes: {e}"
 
@@ -392,11 +334,6 @@ class GeneradorPlanos:
         alpha_infra = max(0.0, min(1.0, float(ci.get("alpha", 0.35))))
         campo_cat = ci.get("campo_categoria")
 
-        geom_type = ""
-        for geom_single in gdf_sel.geometry:
-            geom_type = str(geom_single.geom_type).lower()
-            break
-
         # ── Categorización por campo ──
         if campo_cat and campo_cat in gdf_sel.columns:
             # Resolver campo real por mapeo si existe
@@ -414,46 +351,22 @@ class GeneradorPlanos:
                     continue
                 c = simb.color
                 ls = simb.linestyle
-                if "point" in geom_type:
-                    gdf_cat.plot(ax=ax_map, color=c, markersize=12,
-                                 marker=simb.marker, zorder=5,
-                                 edgecolor="white", linewidth=0.8,
-                                 alpha=alpha_infra)
-                elif "line" in geom_type or "string" in geom_type:
-                    gdf_cat.plot(ax=ax_map, color=c, linewidth=lw,
-                                 linestyle=ls, zorder=5,
-                                 alpha=alpha_infra)
-                else:
-                    gdf_cat.plot(
-                        ax=ax_map, facecolor=simb.facecolor,
-                        edgecolor=c, linewidth=lw,
-                        linestyle=ls, zorder=5,
-                        alpha=alpha_infra,
-                    )
+                _plot_gdf_por_tipo(
+                    gdf_cat, ax_map, alpha=alpha_infra, lw=lw, zorder=5,
+                    color=c, linestyle=ls, marker=simb.marker,
+                    facecolor=simb.facecolor)
         else:
             # Sin categoría: color único
-            if "point" in geom_type:
-                gdf_sel.plot(ax=ax_map, color=color_infra, markersize=12,
-                             marker="o", zorder=5, edgecolor="white",
-                             linewidth=0.8, alpha=alpha_infra)
-            elif "line" in geom_type or "string" in geom_type:
-                gdf_sel.plot(ax=ax_map, color=color_infra, linewidth=lw,
-                             zorder=5, alpha=alpha_infra)
-            else:
-                gdf_sel.plot(ax=ax_map, facecolor=color_infra + "55",
-                             edgecolor=color_infra, linewidth=lw,
-                             zorder=5, alpha=alpha_infra)
+            _plot_gdf_por_tipo(
+                gdf_sel, ax_map, alpha=alpha_infra, lw=lw, zorder=5,
+                color=color_infra)
 
     def _construir_items_leyenda(self, gdf_sel, color_infra,
                                   xmin=None, xmax=None, ymin=None, ymax=None):
         """Construye items de leyenda sólo con las infraestructuras seleccionadas."""
         items = []
 
-        geom_type = ""
-        for g in gdf_sel.geometry:
-            if g is not None:
-                geom_type = str(g.geom_type).lower()
-                break
+        geom_type = _detectar_geom_type(gdf_sel)
 
         # Solo categorías presentes en las infraestructuras seleccionadas
         campo_cat = self.config_infra.get("campo_categoria")
@@ -510,11 +423,7 @@ class GeneradorPlanos:
             return None
 
         items = []
-        geom_type = ""
-        for g in gdf_sel.geometry:
-            if g is not None:
-                geom_type = str(g.geom_type).lower()
-                break
+        geom_type = _detectar_geom_type(gdf_sel)
 
         campo_real = campo_cat
         if self._campo_mapeo and campo_cat in self._campo_mapeo:
@@ -542,11 +451,7 @@ class GeneradorPlanos:
         items_infra = []
         items_montes = []
 
-        geom_type = ""
-        for g in gdf_sel.geometry:
-            if g is not None:
-                geom_type = str(g.geom_type).lower()
-                break
+        geom_type = _detectar_geom_type(gdf_sel)
 
         campo_cat = self.config_infra.get("campo_categoria")
         if campo_cat and campo_cat in gdf_sel.columns:

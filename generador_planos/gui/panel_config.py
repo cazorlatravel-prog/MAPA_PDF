@@ -1,18 +1,19 @@
 """
-Panel de configuración: formato de salida, cartografía de fondo,
+Panel de configuracion: formato de salida, cartografia de fondo,
 color de infraestructura, escala manual y carpeta de salida.
 """
 
 import os
 import sys
 import tkinter as tk
-from tkinter import ttk, filedialog, colorchooser
+from tkinter import ttk, filedialog, colorchooser, messagebox
 from pathlib import Path
 
 from .estilos import (
     COLOR_PANEL, COLOR_TEXTO, COLOR_TEXTO_GRIS, COLOR_BORDE, COLOR_ENTRY,
+    COLOR_ACENTO, COLOR_HOVER,
     FONT_BOLD, FONT_SMALL, FONT_LABEL,
-    crear_frame_seccion, crear_boton,
+    crear_frame_seccion, crear_boton, crear_entry, crear_label,
 )
 from ..motor.escala import FORMATOS, ESCALAS
 from ..motor.cartografia import PROVIDERS_CTX
@@ -20,26 +21,27 @@ from ..motor.maquetacion import CALIDADES_PDF
 
 
 class PanelConfig:
-    """Panel de configuración general del plano."""
+    """Panel de configuracion general del plano."""
 
     def __init__(self, parent):
         f = crear_frame_seccion(parent, "\u2699  CONFIGURACI\u00d3N")
 
         # ── Formato ──
-        tk.Label(f, text="Formato de salida:", font=FONT_BOLD,
-                 bg=COLOR_PANEL, fg=COLOR_TEXTO).grid(row=0, column=0, sticky="w")
+        crear_label(f, "Formato de salida:", tipo="titulo").grid(
+            row=0, column=0, sticky="w")
         self.formato = tk.StringVar(value="A3 Horizontal")
         cb_fmt = ttk.Combobox(f, textvariable=self.formato,
                               values=list(FORMATOS.keys()),
                               state="readonly", font=FONT_LABEL)
         cb_fmt.grid(row=1, column=0, sticky="ew", pady=(2, 8))
 
-        # ── Cartografía ──
-        tk.Label(f, text="Cartografía de fondo:", font=FONT_BOLD,
-                 bg=COLOR_PANEL, fg=COLOR_TEXTO).grid(row=2, column=0, sticky="w")
+        # ── Cartografia ──
+        crear_label(f, "Cartografia de fondo:", tipo="titulo").grid(
+            row=2, column=0, sticky="w")
         opciones_prov = (list(PROVIDERS_CTX.keys())
-                         + ["── WMS propio ──", "── WFS propio ──",
-                            "── Ráster local ──"])
+                         + ["\u2500\u2500 WMS propio \u2500\u2500",
+                            "\u2500\u2500 WFS propio \u2500\u2500",
+                            "\u2500\u2500 R\u00e1ster local \u2500\u2500"])
         self.proveedor = tk.StringVar(value="OpenStreetMap")
         self._cb_prov = ttk.Combobox(f, textvariable=self.proveedor,
                                values=opciones_prov,
@@ -47,42 +49,38 @@ class PanelConfig:
         self._cb_prov.grid(row=3, column=0, sticky="ew", pady=(2, 4))
         self._cb_prov.bind("<<ComboboxSelected>>", self._on_proveedor_changed)
 
-        # Ráster local para mapa general
+        # Raster local para mapa general
         self._ruta_raster = tk.StringVar(value="")
         self._frame_raster = tk.Frame(f, bg=COLOR_PANEL)
         self._frame_raster.grid(row=4, column=0, sticky="ew", pady=(0, 4))
-        crear_boton(self._frame_raster, "Seleccionar ráster...",
+        crear_boton(self._frame_raster, "Seleccionar r\u00e1ster...",
                     self._elegir_raster_general,
                     icono="\U0001f5fa").pack(side="top", fill="x")
-        self._lbl_raster = tk.Label(self._frame_raster, text="Sin ráster seleccionado",
+        crear_boton(self._frame_raster, "Carpeta de hojas...",
+                    self._elegir_carpeta_raster_general,
+                    icono="\U0001f4c2").pack(side="top", fill="x", pady=(2, 0))
+        self._lbl_raster = tk.Label(self._frame_raster, text="Sin r\u00e1ster seleccionado",
                                      font=FONT_SMALL, bg=COLOR_PANEL,
                                      fg=COLOR_TEXTO_GRIS, anchor="w",
                                      wraplength=240)
         self._lbl_raster.pack(side="top", fill="x", pady=(2, 0))
-        self._frame_raster.grid_remove()  # Oculto por defecto
+        self._frame_raster.grid_remove()
 
         # WMS propio para mapa general
         self._frame_wms_custom = tk.Frame(f, bg=COLOR_PANEL)
         self._frame_wms_custom.grid(row=4, column=0, sticky="ew", pady=(0, 4))
-        tk.Label(self._frame_wms_custom, text="URL del servicio WMS:",
-                 font=FONT_SMALL, bg=COLOR_PANEL, fg=COLOR_TEXTO
-                 ).pack(anchor="w")
+        crear_label(self._frame_wms_custom, "URL del servicio WMS:",
+                    tipo="normal").pack(anchor="w")
         self._wms_url = tk.StringVar(value="")
-        tk.Entry(self._frame_wms_custom, textvariable=self._wms_url,
-                 font=FONT_SMALL, bg=COLOR_ENTRY, fg=COLOR_TEXTO,
-                 insertbackground="white", relief="flat"
-                 ).pack(fill="x", pady=(2, 2))
-        tk.Label(self._frame_wms_custom, text="Nombre de capa (LAYERS):",
-                 font=FONT_SMALL, bg=COLOR_PANEL, fg=COLOR_TEXTO
-                 ).pack(anchor="w")
+        crear_entry(self._frame_wms_custom, textvariable=self._wms_url).pack(
+            fill="x", pady=(2, 2))
+        crear_label(self._frame_wms_custom, "Nombre de capa (LAYERS):",
+                    tipo="normal").pack(anchor="w")
         self._wms_capa = tk.StringVar(value="")
-        tk.Entry(self._frame_wms_custom, textvariable=self._wms_capa,
-                 font=FONT_SMALL, bg=COLOR_ENTRY, fg=COLOR_TEXTO,
-                 insertbackground="white", relief="flat"
-                 ).pack(fill="x", pady=(2, 2))
-        tk.Label(self._frame_wms_custom, text="Formato:",
-                 font=FONT_SMALL, bg=COLOR_PANEL, fg=COLOR_TEXTO
-                 ).pack(anchor="w")
+        crear_entry(self._frame_wms_custom, textvariable=self._wms_capa).pack(
+            fill="x", pady=(2, 2))
+        crear_label(self._frame_wms_custom, "Formato:",
+                    tipo="normal").pack(anchor="w")
         self._wms_formato = tk.StringVar(value="image/png")
         ttk.Combobox(self._frame_wms_custom, textvariable=self._wms_formato,
                      values=["image/png", "image/jpeg"],
@@ -93,31 +91,27 @@ class PanelConfig:
         # WFS propio para mapa general
         self._frame_wfs_custom = tk.Frame(f, bg=COLOR_PANEL)
         self._frame_wfs_custom.grid(row=4, column=0, sticky="ew", pady=(0, 4))
-        tk.Label(self._frame_wfs_custom, text="URL del servicio WFS:",
-                 font=FONT_SMALL, bg=COLOR_PANEL, fg=COLOR_TEXTO
-                 ).pack(anchor="w")
+        crear_label(self._frame_wfs_custom, "URL del servicio WFS:",
+                    tipo="normal").pack(anchor="w")
         self._wfs_url = tk.StringVar(value="")
-        tk.Entry(self._frame_wfs_custom, textvariable=self._wfs_url,
-                 font=FONT_SMALL, bg=COLOR_ENTRY, fg=COLOR_TEXTO,
-                 insertbackground="white", relief="flat"
-                 ).pack(fill="x", pady=(2, 2))
-        tk.Label(self._frame_wfs_custom, text="Nombre de capa (TYPENAMES):",
-                 font=FONT_SMALL, bg=COLOR_PANEL, fg=COLOR_TEXTO
-                 ).pack(anchor="w")
+        crear_entry(self._frame_wfs_custom, textvariable=self._wfs_url).pack(
+            fill="x", pady=(2, 2))
+        crear_label(self._frame_wfs_custom, "Nombre de capa (TYPENAMES):",
+                    tipo="normal").pack(anchor="w")
         self._wfs_capa = tk.StringVar(value="")
-        tk.Entry(self._frame_wfs_custom, textvariable=self._wfs_capa,
-                 font=FONT_SMALL, bg=COLOR_ENTRY, fg=COLOR_TEXTO,
-                 insertbackground="white", relief="flat"
-                 ).pack(fill="x", pady=(2, 2))
+        crear_entry(self._frame_wfs_custom, textvariable=self._wfs_capa).pack(
+            fill="x", pady=(2, 2))
         self._frame_wfs_custom.grid_remove()
 
-        # ── Cartografía localización ──
-        tk.Label(f, text="Cartografía localización:", font=FONT_BOLD,
-                 bg=COLOR_PANEL, fg=COLOR_TEXTO).grid(row=5, column=0, sticky="w")
+        # ── Cartografia localizacion ──
+        crear_label(f, "Cartografia localizacion:", tipo="titulo").grid(
+            row=5, column=0, sticky="w")
         opciones_loc = (["WMS IGN (online)"]
                         + list(PROVIDERS_CTX.keys())
-                        + ["── WMS propio ──", "── WFS propio ──",
-                           "── Ráster local ──", "── Capa SHP/GDB ──"])
+                        + ["\u2500\u2500 WMS propio \u2500\u2500",
+                           "\u2500\u2500 WFS propio \u2500\u2500",
+                           "\u2500\u2500 R\u00e1ster local \u2500\u2500",
+                           "\u2500\u2500 Capa SHP/GDB \u2500\u2500"])
         self._prov_localizacion = tk.StringVar(value="WMS IGN (online)")
         self._cb_prov_loc = ttk.Combobox(f, textvariable=self._prov_localizacion,
                                           values=opciones_loc,
@@ -128,39 +122,35 @@ class PanelConfig:
         self._ruta_raster_loc = tk.StringVar(value="")
         self._frame_raster_loc = tk.Frame(f, bg=COLOR_PANEL)
         self._frame_raster_loc.grid(row=7, column=0, sticky="ew", pady=(0, 4))
-        crear_boton(self._frame_raster_loc, "Seleccionar ráster...",
+        crear_boton(self._frame_raster_loc, "Seleccionar r\u00e1ster...",
                     self._elegir_raster_localizacion,
                     icono="\U0001f5fa").pack(side="top", fill="x")
+        crear_boton(self._frame_raster_loc, "Carpeta de hojas...",
+                    self._elegir_carpeta_raster_localizacion,
+                    icono="\U0001f4c2").pack(side="top", fill="x", pady=(2, 0))
         self._lbl_raster_loc = tk.Label(self._frame_raster_loc,
-                                         text="Sin ráster seleccionado",
+                                         text="Sin r\u00e1ster seleccionado",
                                          font=FONT_SMALL, bg=COLOR_PANEL,
                                          fg=COLOR_TEXTO_GRIS, anchor="w",
                                          wraplength=240)
         self._lbl_raster_loc.pack(side="top", fill="x", pady=(2, 0))
         self._frame_raster_loc.grid_remove()
 
-        # WMS propio para localización
+        # WMS propio para localizacion
         self._frame_wms_loc = tk.Frame(f, bg=COLOR_PANEL)
         self._frame_wms_loc.grid(row=7, column=0, sticky="ew", pady=(0, 4))
-        tk.Label(self._frame_wms_loc, text="URL del servicio WMS:",
-                 font=FONT_SMALL, bg=COLOR_PANEL, fg=COLOR_TEXTO
-                 ).pack(anchor="w")
+        crear_label(self._frame_wms_loc, "URL del servicio WMS:",
+                    tipo="normal").pack(anchor="w")
         self._wms_loc_url = tk.StringVar(value="")
-        tk.Entry(self._frame_wms_loc, textvariable=self._wms_loc_url,
-                 font=FONT_SMALL, bg=COLOR_ENTRY, fg=COLOR_TEXTO,
-                 insertbackground="white", relief="flat"
-                 ).pack(fill="x", pady=(2, 2))
-        tk.Label(self._frame_wms_loc, text="Nombre de capa (LAYERS):",
-                 font=FONT_SMALL, bg=COLOR_PANEL, fg=COLOR_TEXTO
-                 ).pack(anchor="w")
+        crear_entry(self._frame_wms_loc, textvariable=self._wms_loc_url).pack(
+            fill="x", pady=(2, 2))
+        crear_label(self._frame_wms_loc, "Nombre de capa (LAYERS):",
+                    tipo="normal").pack(anchor="w")
         self._wms_loc_capa = tk.StringVar(value="")
-        tk.Entry(self._frame_wms_loc, textvariable=self._wms_loc_capa,
-                 font=FONT_SMALL, bg=COLOR_ENTRY, fg=COLOR_TEXTO,
-                 insertbackground="white", relief="flat"
-                 ).pack(fill="x", pady=(2, 2))
-        tk.Label(self._frame_wms_loc, text="Formato:",
-                 font=FONT_SMALL, bg=COLOR_PANEL, fg=COLOR_TEXTO
-                 ).pack(anchor="w")
+        crear_entry(self._frame_wms_loc, textvariable=self._wms_loc_capa).pack(
+            fill="x", pady=(2, 2))
+        crear_label(self._frame_wms_loc, "Formato:",
+                    tipo="normal").pack(anchor="w")
         self._wms_loc_formato = tk.StringVar(value="image/png")
         ttk.Combobox(self._frame_wms_loc, textvariable=self._wms_loc_formato,
                      values=["image/png", "image/jpeg"],
@@ -168,28 +158,22 @@ class PanelConfig:
                      ).pack(anchor="w", pady=(2, 2))
         self._frame_wms_loc.grid_remove()
 
-        # WFS propio para localización
+        # WFS propio para localizacion
         self._frame_wfs_loc = tk.Frame(f, bg=COLOR_PANEL)
         self._frame_wfs_loc.grid(row=7, column=0, sticky="ew", pady=(0, 4))
-        tk.Label(self._frame_wfs_loc, text="URL del servicio WFS:",
-                 font=FONT_SMALL, bg=COLOR_PANEL, fg=COLOR_TEXTO
-                 ).pack(anchor="w")
+        crear_label(self._frame_wfs_loc, "URL del servicio WFS:",
+                    tipo="normal").pack(anchor="w")
         self._wfs_loc_url = tk.StringVar(value="")
-        tk.Entry(self._frame_wfs_loc, textvariable=self._wfs_loc_url,
-                 font=FONT_SMALL, bg=COLOR_ENTRY, fg=COLOR_TEXTO,
-                 insertbackground="white", relief="flat"
-                 ).pack(fill="x", pady=(2, 2))
-        tk.Label(self._frame_wfs_loc, text="Nombre de capa (TYPENAMES):",
-                 font=FONT_SMALL, bg=COLOR_PANEL, fg=COLOR_TEXTO
-                 ).pack(anchor="w")
+        crear_entry(self._frame_wfs_loc, textvariable=self._wfs_loc_url).pack(
+            fill="x", pady=(2, 2))
+        crear_label(self._frame_wfs_loc, "Nombre de capa (TYPENAMES):",
+                    tipo="normal").pack(anchor="w")
         self._wfs_loc_capa = tk.StringVar(value="")
-        tk.Entry(self._frame_wfs_loc, textvariable=self._wfs_loc_capa,
-                 font=FONT_SMALL, bg=COLOR_ENTRY, fg=COLOR_TEXTO,
-                 insertbackground="white", relief="flat"
-                 ).pack(fill="x", pady=(2, 2))
+        crear_entry(self._frame_wfs_loc, textvariable=self._wfs_loc_capa).pack(
+            fill="x", pady=(2, 2))
         self._frame_wfs_loc.grid_remove()
 
-        # Capa SHP/GDB propia para localización
+        # Capa SHP/GDB propia para localizacion
         self._ruta_capa_loc = tk.StringVar(value="")
         self._frame_capa_loc = tk.Frame(f, bg=COLOR_PANEL)
         self._frame_capa_loc.grid(row=7, column=0, sticky="ew", pady=(0, 4))
@@ -204,23 +188,18 @@ class PanelConfig:
         self._lbl_capa_loc.pack(side="top", fill="x", pady=(2, 0))
         self._frame_capa_loc.grid_remove()
 
-        # ── Escala mapa de localización ──
+        # ── Escala mapa de localizacion ──
         escala_loc_f = tk.Frame(f, bg=COLOR_PANEL)
         escala_loc_f.grid(row=7, column=0, sticky="ew", pady=(0, 8))
-        # Mover este frame debajo de los otros del row 7 — necesitamos row 7b
-        # Usamos un subframe que siempre está visible
         self._frame_escala_loc = tk.Frame(f, bg=COLOR_PANEL)
         self._frame_escala_loc.grid(row=8, column=0, sticky="ew", pady=(0, 8))
-        # Quitar el frame temporal
         escala_loc_f.grid_remove()
 
-        tk.Label(self._frame_escala_loc, text="Escala localización:",
-                 font=FONT_BOLD, bg=COLOR_PANEL, fg=COLOR_TEXTO
-                 ).pack(anchor="w")
+        crear_label(self._frame_escala_loc, "Escala localizacion:",
+                    tipo="titulo").pack(anchor="w")
         esc_loc_inner = tk.Frame(self._frame_escala_loc, bg=COLOR_PANEL)
         esc_loc_inner.pack(fill="x", pady=(2, 0))
-        tk.Label(esc_loc_inner, text="1:", font=FONT_SMALL,
-                 bg=COLOR_PANEL, fg=COLOR_TEXTO).pack(side="left")
+        crear_label(esc_loc_inner, "1:", tipo="normal").pack(side="left")
         self._escala_localizacion = tk.StringVar(value="250,000")
         _ESCALAS_LOC = ["50,000", "100,000", "150,000", "200,000",
                         "250,000", "500,000", "1,000,000", "2,000,000"]
@@ -231,13 +210,12 @@ class PanelConfig:
         self._cb_escala_loc.pack(side="left", padx=(2, 0))
 
         # ── Escala manual ──
-        tk.Label(f, text="Escala (0 = automática):", font=FONT_BOLD,
-                 bg=COLOR_PANEL, fg=COLOR_TEXTO).grid(row=9, column=0, sticky="w")
+        crear_label(f, "Escala (0 = automatica):", tipo="titulo").grid(
+            row=9, column=0, sticky="w")
         escala_f = tk.Frame(f, bg=COLOR_PANEL)
         escala_f.grid(row=10, column=0, sticky="ew", pady=(2, 8))
 
-        tk.Label(escala_f, text="1:", font=FONT_SMALL, bg=COLOR_PANEL,
-                 fg=COLOR_TEXTO).pack(side="left")
+        crear_label(escala_f, "1:", tipo="normal").pack(side="left")
         self._escala_manual = tk.StringVar(value="0")
         self._cb_escala = ttk.Combobox(
             escala_f, textvariable=self._escala_manual,
@@ -247,21 +225,22 @@ class PanelConfig:
         self._cb_escala.pack(side="left", padx=(2, 0))
 
         # ── Color infraestructura ──
-        tk.Label(f, text="Color infraestructura:", font=FONT_BOLD,
-                 bg=COLOR_PANEL, fg=COLOR_TEXTO).grid(row=11, column=0, sticky="w")
+        crear_label(f, "Color infraestructura:", tipo="titulo").grid(
+            row=11, column=0, sticky="w")
         self._color_infra = "#E74C3C"
         btn_frame = tk.Frame(f, bg=COLOR_PANEL)
         btn_frame.grid(row=12, column=0, sticky="ew", pady=(2, 8))
         self._lbl_color = tk.Label(btn_frame, bg=self._color_infra,
-                                    width=4, relief="solid", bd=1)
-        self._lbl_color.pack(side="left", padx=(0, 6))
-        tk.Button(btn_frame, text="Elegir color", command=self._elegir_color,
-                  font=FONT_SMALL, bg=COLOR_BORDE, fg=COLOR_TEXTO,
-                  relief="flat", cursor="hand2").pack(side="left")
+                                    width=4, relief="flat", bd=0,
+                                    highlightthickness=1,
+                                    highlightbackground=COLOR_BORDE)
+        self._lbl_color.pack(side="left", padx=(0, 8))
+        crear_boton(btn_frame, "Elegir color", self._elegir_color).pack(
+            side="left")
 
         # ── Calidad PDF ──
-        tk.Label(f, text="Calidad PDF:", font=FONT_BOLD,
-                 bg=COLOR_PANEL, fg=COLOR_TEXTO).grid(row=13, column=0, sticky="w")
+        crear_label(f, "Calidad PDF:", tipo="titulo").grid(
+            row=13, column=0, sticky="w")
         self._calidad_pdf = tk.StringVar(value="Alta (400 DPI)")
         ttk.Combobox(f, textvariable=self._calidad_pdf,
                      values=list(CALIDADES_PDF.keys()),
@@ -269,8 +248,8 @@ class PanelConfig:
                      row=14, column=0, sticky="ew", pady=(2, 8))
 
         # ── Origen datos tabla ──
-        tk.Label(f, text="Datos de tabla:", font=FONT_BOLD,
-                 bg=COLOR_PANEL, fg=COLOR_TEXTO).grid(row=15, column=0, sticky="w")
+        crear_label(f, "Datos de tabla:", tipo="titulo").grid(
+            row=15, column=0, sticky="w")
         self._origen_datos = tk.StringVar(value="Shapefile (capa cargada)")
         cb_origen = ttk.Combobox(
             f, textvariable=self._origen_datos,
@@ -294,8 +273,7 @@ class PanelConfig:
         # Selector de hoja del Excel
         self._frame_hoja = tk.Frame(self._frame_excel, bg=COLOR_PANEL)
         self._frame_hoja.pack(side="top", fill="x", pady=(2, 0))
-        tk.Label(self._frame_hoja, text="Hoja:", font=FONT_SMALL,
-                 bg=COLOR_PANEL, fg=COLOR_TEXTO).pack(side="left")
+        crear_label(self._frame_hoja, "Hoja:", tipo="normal").pack(side="left")
         self._hoja_excel = tk.StringVar(value="")
         self._cb_hoja = ttk.Combobox(self._frame_hoja,
                                       textvariable=self._hoja_excel,
@@ -303,22 +281,20 @@ class PanelConfig:
         self._cb_hoja.pack(side="left", padx=(4, 0))
         self._cb_hoja.bind("<<ComboboxSelected>>", self._on_hoja_changed)
 
-        # Campo enlace: SHP ↔ Excel
+        # Campo enlace: SHP <-> Excel
         self._frame_enlace = tk.Frame(self._frame_excel, bg=COLOR_PANEL)
         self._frame_enlace.pack(side="top", fill="x", pady=(4, 0))
 
-        tk.Label(self._frame_enlace, text="Campo enlace SHP:",
-                 font=FONT_SMALL, bg=COLOR_PANEL, fg=COLOR_TEXTO
-                 ).grid(row=0, column=0, sticky="w")
+        crear_label(self._frame_enlace, "Campo enlace SHP:",
+                    tipo="normal").grid(row=0, column=0, sticky="w")
         self._campo_enlace_shp = tk.StringVar(value="")
         self._cb_enlace_shp = ttk.Combobox(
             self._frame_enlace, textvariable=self._campo_enlace_shp,
             state="readonly", font=FONT_SMALL, width=18)
         self._cb_enlace_shp.grid(row=0, column=1, sticky="ew", padx=(4, 0))
 
-        tk.Label(self._frame_enlace, text="Campo enlace Excel:",
-                 font=FONT_SMALL, bg=COLOR_PANEL, fg=COLOR_TEXTO
-                 ).grid(row=1, column=0, sticky="w", pady=(2, 0))
+        crear_label(self._frame_enlace, "Campo enlace Excel:",
+                    tipo="normal").grid(row=1, column=0, sticky="w", pady=(2, 0))
         self._campo_enlace_excel = tk.StringVar(value="")
         self._cb_enlace_excel = ttk.Combobox(
             self._frame_enlace, textvariable=self._campo_enlace_excel,
@@ -328,29 +304,27 @@ class PanelConfig:
         self._frame_enlace.columnconfigure(1, weight=1)
 
         # Checkboxes de columnas Excel a incluir
-        tk.Label(self._frame_excel, text="Columnas a incluir:",
-                 font=FONT_SMALL, bg=COLOR_PANEL, fg=COLOR_TEXTO
-                 ).pack(side="top", anchor="w", pady=(4, 2))
+        crear_label(self._frame_excel, "Columnas a incluir:",
+                    tipo="normal").pack(side="top", anchor="w", pady=(4, 2))
 
         self._frame_cols_excel = tk.Frame(self._frame_excel, bg=COLOR_PANEL)
         self._frame_cols_excel.pack(side="top", fill="x")
-        self._check_cols_excel = {}  # {nombre_col: BooleanVar}
+        self._check_cols_excel = {}
         self._widgets_cols_excel = []
 
-        self._frame_excel.grid_remove()  # Oculto por defecto
+        self._frame_excel.grid_remove()
 
         # ── Nombre de archivo ──
-        tk.Label(f, text="Nombre de archivo:", font=FONT_BOLD,
-                 bg=COLOR_PANEL, fg=COLOR_TEXTO).grid(row=18, column=0, sticky="w")
+        crear_label(f, "Nombre de archivo:", tipo="titulo").grid(
+            row=18, column=0, sticky="w")
 
-        # Presets
         self._presets_nombre = {
-            "plano_{num}_{nombre}": "Nº + Nombre infraestructura",
-            "plano_{num}": "Solo número de plano",
+            "plano_{num}_{nombre}": "N\u00ba + Nombre infraestructura",
+            "plano_{num}": "Solo numero de plano",
             "{nombre}": "Solo nombre infraestructura",
-            "plano_{campo}_{num}": "Campo agrupación + Nº",
+            "plano_{campo}_{num}": "Campo agrupacion + N\u00ba",
         }
-        self._preset_nombre = tk.StringVar(value="Nº + Nombre infraestructura")
+        self._preset_nombre = tk.StringVar(value="N\u00ba + Nombre infraestructura")
         cb_preset = ttk.Combobox(
             f, textvariable=self._preset_nombre,
             values=list(self._presets_nombre.values()),
@@ -360,20 +334,18 @@ class PanelConfig:
         cb_preset.bind("<<ComboboxSelected>>", self._on_preset_nombre)
 
         self.patron_nombre = tk.StringVar(value="plano_{num}_{nombre}")
-        tk.Entry(f, textvariable=self.patron_nombre, font=FONT_SMALL,
-                 bg=COLOR_ENTRY, fg=COLOR_TEXTO, insertbackground="white",
-                 relief="flat").grid(row=20, column=0, sticky="ew", pady=(2, 0))
+        crear_entry(f, textvariable=self.patron_nombre).grid(
+            row=20, column=0, sticky="ew", pady=(2, 0))
 
-        # Preview
         self._lbl_preview_nombre = tk.Label(
             f, text="Ej: plano_0001_CortafuegosNorte.pdf",
-            font=("Helvetica", 8), bg=COLOR_PANEL, fg=COLOR_TEXTO_GRIS)
-        self._lbl_preview_nombre.grid(row=21, column=0, sticky="w", pady=(0, 8))
+            font=("Segoe UI", 8), bg=COLOR_PANEL, fg=COLOR_TEXTO_GRIS)
+        self._lbl_preview_nombre.grid(row=21, column=0, sticky="w", pady=(2, 8))
         self.patron_nombre.trace_add("write", self._actualizar_preview_nombre)
 
         # ── Carpeta de salida ──
-        tk.Label(f, text="Carpeta de salida:", font=FONT_BOLD,
-                 bg=COLOR_PANEL, fg=COLOR_TEXTO).grid(row=22, column=0, sticky="w")
+        crear_label(f, "Carpeta de salida:", tipo="titulo").grid(
+            row=22, column=0, sticky="w")
         self.salida = tk.StringVar(value=str(Path.home() / "Planos_Forestales"))
         tk.Label(f, textvariable=self.salida, font=FONT_SMALL,
                  bg=COLOR_PANEL, fg=COLOR_TEXTO_GRIS,
@@ -401,7 +373,6 @@ class PanelConfig:
 
     @property
     def escala_manual(self) -> int:
-        """Devuelve la escala manual o None si es automática."""
         txt = self._escala_manual.get().replace(",", "").strip()
         if txt.startswith("0"):
             return None
@@ -422,7 +393,6 @@ class PanelConfig:
 
     def _on_preset_nombre(self, event=None):
         label = self._preset_nombre.get()
-        # Find the pattern key for this label
         for pattern, lbl in self._presets_nombre.items():
             if lbl == label:
                 self.patron_nombre.set(pattern)
@@ -437,7 +407,7 @@ class PanelConfig:
                 text=f"Ej: {ejemplo}.pdf")
         except (KeyError, IndexError, ValueError):
             self._lbl_preview_nombre.configure(
-                text="Ej: (patrón inválido)")
+                text="Ej: (patron invalido)")
 
     def _elegir_carpeta(self):
         carpeta = filedialog.askdirectory(title="Carpeta de salida")
@@ -454,10 +424,10 @@ class PanelConfig:
         else:
             os.system(f'xdg-open "{carpeta}"')
 
-    # ── Ráster local ──────────────────────────────────────────────────
+    # ── Raster local ──
 
     _RASTER_FILETYPES = [
-        ("Ráster georreferenciado", "*.tif *.tiff *.ecw *.jp2 *.img *.vrt"),
+        ("R\u00e1ster georreferenciado", "*.tif *.tiff *.ecw *.jp2 *.img *.vrt"),
         ("GeoTIFF", "*.tif *.tiff"),
         ("ECW", "*.ecw"),
         ("JPEG2000", "*.jp2"),
@@ -469,11 +439,11 @@ class PanelConfig:
         self._frame_raster.grid_remove()
         self._frame_wms_custom.grid_remove()
         self._frame_wfs_custom.grid_remove()
-        if prov == "── Ráster local ──":
+        if prov == "\u2500\u2500 R\u00e1ster local \u2500\u2500":
             self._frame_raster.grid()
-        elif prov == "── WMS propio ──":
+        elif prov == "\u2500\u2500 WMS propio \u2500\u2500":
             self._frame_wms_custom.grid()
-        elif prov == "── WFS propio ──":
+        elif prov == "\u2500\u2500 WFS propio \u2500\u2500":
             self._frame_wfs_custom.grid()
 
     def _on_prov_loc_changed(self, event=None):
@@ -482,18 +452,18 @@ class PanelConfig:
         self._frame_wms_loc.grid_remove()
         self._frame_wfs_loc.grid_remove()
         self._frame_capa_loc.grid_remove()
-        if prov == "── Ráster local ──":
+        if prov == "\u2500\u2500 R\u00e1ster local \u2500\u2500":
             self._frame_raster_loc.grid()
-        elif prov == "── WMS propio ──":
+        elif prov == "\u2500\u2500 WMS propio \u2500\u2500":
             self._frame_wms_loc.grid()
-        elif prov == "── WFS propio ──":
+        elif prov == "\u2500\u2500 WFS propio \u2500\u2500":
             self._frame_wfs_loc.grid()
-        elif prov == "── Capa SHP/GDB ──":
+        elif prov == "\u2500\u2500 Capa SHP/GDB \u2500\u2500":
             self._frame_capa_loc.grid()
 
     def _elegir_raster_general(self):
         ruta = filedialog.askopenfilename(
-            title="Seleccionar ráster para mapa general",
+            title="Seleccionar r\u00e1ster para mapa general",
             filetypes=self._RASTER_FILETYPES)
         if ruta:
             self._ruta_raster.set(ruta)
@@ -501,11 +471,36 @@ class PanelConfig:
 
     def _elegir_raster_localizacion(self):
         ruta = filedialog.askopenfilename(
-            title="Seleccionar ráster para mapa de localización",
+            title="Seleccionar r\u00e1ster para mapa de localizacion",
             filetypes=self._RASTER_FILETYPES)
         if ruta:
             self._ruta_raster_loc.set(ruta)
             self._lbl_raster_loc.configure(text=Path(ruta).name)
+
+    def _elegir_carpeta_raster_general(self):
+        carpeta = filedialog.askdirectory(
+            title="Seleccionar carpeta con hojas cartograficas (mapa general)")
+        if not carpeta:
+            return
+        self._generar_vrt_y_asignar(carpeta, self._ruta_raster, self._lbl_raster)
+
+    def _elegir_carpeta_raster_localizacion(self):
+        carpeta = filedialog.askdirectory(
+            title="Seleccionar carpeta con hojas cartograficas (localizacion)")
+        if not carpeta:
+            return
+        self._generar_vrt_y_asignar(carpeta, self._ruta_raster_loc, self._lbl_raster_loc)
+
+    def _generar_vrt_y_asignar(self, carpeta, var_ruta, lbl):
+        from ..motor.cartografia import construir_vrt_desde_carpeta
+        try:
+            vrt = construir_vrt_desde_carpeta(carpeta)
+            var_ruta.set(vrt)
+            lbl.configure(text=f"VRT: {Path(carpeta).name} ({Path(vrt).name})")
+        except FileNotFoundError as e:
+            messagebox.showwarning("Sin r\u00e1sters", str(e))
+        except Exception as e:
+            messagebox.showerror("Error al crear mosaico", str(e))
 
     _CAPA_FILETYPES = [
         ("Shapefile", "*.shp"),
@@ -516,13 +511,13 @@ class PanelConfig:
 
     def _elegir_capa_localizacion(self):
         ruta = filedialog.askopenfilename(
-            title="Seleccionar capa para mapa de localización",
+            title="Seleccionar capa para mapa de localizacion",
             filetypes=self._CAPA_FILETYPES)
         if ruta:
             self._ruta_capa_loc.set(ruta)
             self._lbl_capa_loc.configure(text=Path(ruta).name)
 
-    # ── Origen datos tabla (Excel) ─────────────────────────────────────
+    # ── Origen datos tabla (Excel) ──
 
     def _on_origen_datos_changed(self, event=None):
         if self._origen_datos.get() == "Archivo Excel (.xlsx)":
@@ -537,7 +532,6 @@ class PanelConfig:
         if ruta:
             self._ruta_excel.set(ruta)
             self._lbl_excel.configure(text=Path(ruta).name)
-            # Leer nombres de hojas y poblar combobox
             try:
                 import openpyxl
                 wb = openpyxl.load_workbook(ruta, read_only=True, data_only=True)
@@ -553,14 +547,12 @@ class PanelConfig:
                 self._poblar_columnas_excel([])
 
     def _on_hoja_changed(self, event=None):
-        """Al cambiar de hoja, recargar columnas."""
         ruta = self._ruta_excel.get()
         hoja = self._hoja_excel.get()
         if ruta and hoja:
             self._cargar_columnas_excel(ruta, hoja)
 
     def _cargar_columnas_excel(self, ruta: str, hoja: str):
-        """Lee las columnas de la hoja seleccionada y actualiza checkboxes y combos."""
         try:
             import pandas as pd
             df = pd.read_excel(ruta, sheet_name=hoja, engine="openpyxl", nrows=0)
@@ -568,7 +560,6 @@ class PanelConfig:
         except Exception:
             cols = []
         self._poblar_columnas_excel(cols)
-        # Actualizar combo enlace Excel
         self._cb_enlace_excel.configure(values=cols)
         if cols:
             self._campo_enlace_excel.set(cols[0])
@@ -576,7 +567,6 @@ class PanelConfig:
             self._campo_enlace_excel.set("")
 
     def _poblar_columnas_excel(self, columnas: list):
-        """Crea checkboxes para seleccionar qué columnas del Excel incluir."""
         for w in self._widgets_cols_excel:
             w.destroy()
         self._widgets_cols_excel.clear()
@@ -587,15 +577,14 @@ class PanelConfig:
             cb = tk.Checkbutton(
                 self._frame_cols_excel, text=col, variable=var,
                 font=FONT_SMALL, bg=COLOR_PANEL, fg=COLOR_TEXTO,
-                selectcolor=COLOR_BORDE, activebackground=COLOR_PANEL,
-                cursor="hand2",
+                selectcolor=COLOR_ENTRY, activebackground=COLOR_PANEL,
+                cursor="hand2", bd=0, highlightthickness=0,
             )
             cb.pack(anchor="w", pady=1)
             self._check_cols_excel[col] = var
             self._widgets_cols_excel.append(cb)
 
     def actualizar_campos_shp_enlace(self, columnas: list):
-        """Actualiza el combo de campo enlace SHP con las columnas del shapefile."""
         cols = [c for c in columnas if c.lower() != "geometry"]
         self._cb_enlace_shp.configure(values=cols)
         if cols and not self._campo_enlace_shp.get():
@@ -625,31 +614,29 @@ class PanelConfig:
 
     @property
     def columnas_excel_activas(self) -> list:
-        """Devuelve la lista de columnas del Excel seleccionadas por el usuario."""
         return [c for c, v in self._check_cols_excel.items() if v.get()]
 
     @property
     def ruta_raster_general(self) -> str:
-        if self.proveedor.get() == "── Ráster local ──":
+        if self.proveedor.get() == "\u2500\u2500 R\u00e1ster local \u2500\u2500":
             return self._ruta_raster.get()
         return ""
 
     @property
     def ruta_raster_localizacion(self) -> str:
-        if self._prov_localizacion.get() == "── Ráster local ──":
+        if self._prov_localizacion.get() == "\u2500\u2500 R\u00e1ster local \u2500\u2500":
             return self._ruta_raster_loc.get()
         return ""
 
     @property
     def ruta_capa_localizacion(self) -> str:
-        if self._prov_localizacion.get() == "── Capa SHP/GDB ──":
+        if self._prov_localizacion.get() == "\u2500\u2500 Capa SHP/GDB \u2500\u2500":
             return self._ruta_capa_loc.get()
         return ""
 
     @property
     def wms_custom_general(self) -> dict:
-        """Devuelve config WMS personalizado para mapa general, o dict vacío."""
-        if self.proveedor.get() == "── WMS propio ──":
+        if self.proveedor.get() == "\u2500\u2500 WMS propio \u2500\u2500":
             url = self._wms_url.get().strip()
             capa = self._wms_capa.get().strip()
             if url and capa:
@@ -659,8 +646,7 @@ class PanelConfig:
 
     @property
     def wfs_custom_general(self) -> dict:
-        """Devuelve config WFS personalizado para mapa general, o dict vacío."""
-        if self.proveedor.get() == "── WFS propio ──":
+        if self.proveedor.get() == "\u2500\u2500 WFS propio \u2500\u2500":
             url = self._wfs_url.get().strip()
             capa = self._wfs_capa.get().strip()
             if url and capa:
@@ -669,8 +655,7 @@ class PanelConfig:
 
     @property
     def wms_custom_localizacion(self) -> dict:
-        """Devuelve config WMS personalizado para mapa localización, o dict vacío."""
-        if self._prov_localizacion.get() == "── WMS propio ──":
+        if self._prov_localizacion.get() == "\u2500\u2500 WMS propio \u2500\u2500":
             url = self._wms_loc_url.get().strip()
             capa = self._wms_loc_capa.get().strip()
             if url and capa:
@@ -680,8 +665,7 @@ class PanelConfig:
 
     @property
     def wfs_custom_localizacion(self) -> dict:
-        """Devuelve config WFS personalizado para mapa localización, o dict vacío."""
-        if self._prov_localizacion.get() == "── WFS propio ──":
+        if self._prov_localizacion.get() == "\u2500\u2500 WFS propio \u2500\u2500":
             url = self._wfs_loc_url.get().strip()
             capa = self._wfs_loc_capa.get().strip()
             if url and capa:
@@ -690,7 +674,6 @@ class PanelConfig:
 
     @property
     def escala_localizacion(self) -> int:
-        """Devuelve la escala del mapa de localización."""
         txt = self._escala_localizacion.get().replace(",", "").strip()
         try:
             val = int(txt)
