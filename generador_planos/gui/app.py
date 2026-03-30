@@ -366,56 +366,56 @@ class App(tk.Tk):
             return
         self._ultimo_dir_proyecto = os.path.dirname(ruta)
 
-        p = Proyecto()
-        p.nombre = os.path.splitext(os.path.basename(ruta))[0]
-        p.formato = self.panel_config.formato.get()
-        p.proveedor = self.panel_config.proveedor.get()
-        p.ruta_raster_general = self.panel_config.ruta_raster_general
-        p.ruta_raster_localizacion = self.panel_config.ruta_raster_localizacion
-        p.prov_localizacion = self.panel_config._prov_localizacion.get()
-        p.escala_localizacion = self.panel_config.escala_localizacion
-        p.ruta_capa_localizacion = self.panel_config.ruta_capa_localizacion
-        p.wms_custom_general = self.panel_config.wms_custom_general
-        p.wfs_custom_general = self.panel_config.wfs_custom_general
-        p.wms_custom_localizacion = self.panel_config.wms_custom_localizacion
-        p.wfs_custom_localizacion = self.panel_config.wfs_custom_localizacion
-        p.escala_manual = self.panel_config.escala_manual
-        p.transparencia_montes = self.panel_capas.transparencia.get()
-        p.transparencia_infra = self.panel_capas.transparencia_infra.get()
-        p.color_infra = self.panel_config.color_infra
-        p.calidad_pdf = self.panel_config.calidad_pdf
-        p.campos_visibles = self.panel_campos.obtener_campos_activos()
-        p.campo_encabezado = self.panel_campos.obtener_campo_encabezado() or ""
-        p.carpeta_salida = self.panel_config.salida.get()
-        p.patron_nombre = self.panel_config.patron_nombre.get()
-        p.layout_key = self.panel_cajetin.obtener_layout_key()
-        p.cajetin = self.panel_cajetin.obtener_cajetin()
-        p.plantilla = self.panel_cajetin.obtener_plantilla()
-        p.simbologia = self.motor.gestor_simbologia.to_dict()
-        p.capas_extra = self.motor.gestor_capas.to_dict()
-        # Origen datos tabla
-        p.origen_datos_tabla = self.panel_config._origen_datos.get()
-        p.ruta_excel_tabla = self.panel_config.ruta_excel
-        p.hoja_excel_tabla = self.panel_config.hoja_excel
-        p.campo_enlace_shp = self.panel_config.campo_enlace_shp
-        p.campo_enlace_excel = self.panel_config.campo_enlace_excel
-        p.columnas_excel_activas = self.panel_config.columnas_excel_activas
+        try:
+            p = Proyecto()
+            p.nombre = os.path.splitext(os.path.basename(ruta))[0]
+            p.formato = self.panel_config.formato.get()
+            p.proveedor = self.panel_config.proveedor.get()
+            p.ruta_raster_general = self.panel_config.ruta_raster_general
+            p.ruta_raster_localizacion = self.panel_config.ruta_raster_localizacion
+            p.prov_localizacion = self.panel_config._prov_localizacion.get()
+            p.escala_localizacion = self.panel_config.escala_localizacion
+            p.ruta_capa_localizacion = self.panel_config.ruta_capa_localizacion
+            p.wms_custom_general = self.panel_config.wms_custom_general
+            p.wfs_custom_general = self.panel_config.wfs_custom_general
+            p.wms_custom_localizacion = self.panel_config.wms_custom_localizacion
+            p.wfs_custom_localizacion = self.panel_config.wfs_custom_localizacion
+            p.escala_manual = self.panel_config.escala_manual
+            p.transparencia_montes = self.panel_capas.transparencia.get()
+            p.transparencia_infra = self.panel_capas.transparencia_infra.get()
+            p.color_infra = self.panel_config.color_infra
+            p.calidad_pdf = self.panel_config.calidad_pdf
+            p.campos_visibles = self.panel_campos.obtener_campos_activos()
+            p.campo_encabezado = self.panel_campos.obtener_campo_encabezado() or ""
+            p.carpeta_salida = self.panel_config.salida.get()
+            p.patron_nombre = self.panel_config.patron_nombre.get()
+            p.layout_key = self.panel_cajetin.obtener_layout_key()
+            p.cajetin = self.panel_cajetin.obtener_cajetin()
+            p.plantilla = self.panel_cajetin.obtener_plantilla()
+            p.simbologia = self.motor.gestor_simbologia.to_dict()
+            p.capas_extra = self.motor.gestor_capas.to_dict()
+            # Origen datos tabla
+            p.origen_datos_tabla = self.panel_config._origen_datos.get()
+            p.ruta_excel_tabla = self.panel_config.ruta_excel
+            p.hoja_excel_tabla = self.panel_config.hoja_excel
+            p.campo_enlace_shp = self.panel_config.campo_enlace_shp
+            p.campo_enlace_excel = self.panel_config.campo_enlace_excel
+            p.columnas_excel_activas = self.panel_config.columnas_excel_activas
 
-        # Generación
-        p.modo_gen = self.panel_gen._modo_gen.get()
-        try:
-            p.rango_desde = int(self.panel_gen._rango_desde.get())
-        except ValueError:
-            p.rango_desde = 1
-        try:
-            p.rango_hasta = int(self.panel_gen._rango_hasta.get())
-        except ValueError:
-            p.rango_hasta = 10
-        p.campo_agrupacion = self.panel_gen._campo_agrupacion.get()
-        p.multipagina = self.panel_gen._multipagina.get()
-        p.incluir_portada = self.panel_gen._incluir_portada.get()
+            # Generación
+            p.modo_gen = self.panel_gen._modo_gen.get()
+            try:
+                p.rango_desde = int(self.panel_gen._rango_desde.get())
+            except ValueError:
+                p.rango_desde = 1
+            try:
+                p.rango_hasta = int(self.panel_gen._rango_hasta.get())
+            except ValueError:
+                p.rango_hasta = 10
+            p.campo_agrupacion = self.panel_gen._campo_agrupacion.get()
+            p.multipagina = self.panel_gen._multipagina.get()
+            p.incluir_portada = self.panel_gen._incluir_portada.get()
 
-        try:
             p.guardar(ruta)
             self._escribir_log(f"Proyecto guardado: {ruta}", "ok")
         except Exception as e:
