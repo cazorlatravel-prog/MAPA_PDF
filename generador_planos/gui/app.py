@@ -122,7 +122,7 @@ class App(tk.Tk):
         self.panel_config = PanelConfig(izq)
 
         # 7. Generacion final
-        self.panel_generacioneracion = PanelGeneracion(
+        self.panel_generacion = PanelGeneracion(
             izq, self.motor,
             get_config=self._get_config,
             callback_log=self._escribir_log,
@@ -342,8 +342,8 @@ class App(tk.Tk):
         columnas = self.motor.obtener_columnas_shapefile()
         self._reconfigurar_tabla(columnas)
         self._poblar_tabla()
-        self.panel_generacioneracion.actualizar_campos_agrupacion()
-        self.panel_generacioneracion.actualizar_valores_si_agrupado()
+        self.panel_generacion.actualizar_campos_agrupacion()
+        self.panel_generacion.actualizar_valores_si_agrupado()
         self.panel_filtros.actualizar_campos()
         self.panel_simbologia.actualizar_capas_extra()
         self.panel_simbologia.actualizar_campo_categoria()
