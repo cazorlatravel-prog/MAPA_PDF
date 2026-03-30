@@ -204,7 +204,7 @@ class MaquetadorPlano:
             1, 2, figure=self.fig,
             left=izq, right=1 - der,
             top=gs_top, bottom=inf,
-            width_ratios=[0.78, 0.22],
+            width_ratios=[0.80, 0.20],
             hspace=0.02, wspace=0.025,
         )
 
@@ -215,7 +215,7 @@ class MaquetadorPlano:
         # Minimapa (pequeño) | Tabla datos (compacta) | Leyenda | Cajetín
         gs_lateral = gridspec.GridSpecFromSubplotSpec(
             4, 1, subplot_spec=gs[0, 1],
-            height_ratios=[0.27, 0.08, 0.25, 0.40],
+            height_ratios=[0.22, 0.08, 0.28, 0.42],
             hspace=0.01,
         )
 
@@ -244,8 +244,8 @@ class MaquetadorPlano:
         ancho_util = self.fmt_mm[0] - MARGENES_MM["izq"] - MARGENES_MM["der"]
         alto_util = self.fmt_mm[1] - MARGENES_MM["sup"] - MARGENES_MM["inf"]
         if self.es_lateral:
-            # Plantilla 2: mapa ocupa 78% del ancho y toda la altura
-            ancho_mm = ancho_util * 0.78
+            # Plantilla 2: mapa ocupa 80% del ancho y toda la altura
+            ancho_mm = ancho_util * 0.80
             alto_mm = (alto_util - _CABECERA_MM)
         else:
             ancho_mm = ancho_util * RATIO_MAPA_ANCHO
@@ -857,7 +857,7 @@ class MaquetadorPlano:
                      - _CABECERA_MM)
         if self.es_lateral:
             panel_w_mm = ancho_util * 0.20 * 0.90
-            panel_h_mm = alto_util * 0.22 * 0.90
+            panel_h_mm = alto_util * 0.20 * 0.90
         else:
             panel_w_mm = ancho_util * 0.30 * 0.95
             panel_h_mm = alto_util * (1 - RATIO_MAPA_ALTO) * 0.90
@@ -1656,7 +1656,7 @@ class MaquetadorPlano:
         # Escalar fuentes del Nº de plano según ancho real del panel
         # Panel lateral = 20% del ancho útil del papel
         _ancho_mm = self.fmt_mm[0]
-        _panel_mm = _ancho_mm * 0.22  # ancho físico del panel lateral
+        _panel_mm = _ancho_mm * 0.20  # ancho físico del panel lateral
         _factor = _panel_mm / 60.0  # base: ~60mm (A3 × 20%)
         _factor = min(_factor, 1.5)  # limitar para formatos grandes
         fsz_label_np = 3.5 * _factor
