@@ -118,6 +118,8 @@ class PanelFiltros:
         self._campo_filtro.set("(todos)")
         self._cb_valor["values"] = ["(todos)"]
         self._valor_filtro.set("(todos)")
+        # Limpiar filtros activos del SHP anterior
+        self._limpiar_filtros()
 
     def _on_campo_changed(self, event=None):
         campo = self._campo_filtro.get()
