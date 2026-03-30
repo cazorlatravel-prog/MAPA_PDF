@@ -30,7 +30,7 @@ class PanelCajetin:
         tk.Label(f, text="Plantilla de layout:", font=FONT_BOLD,
                  bg=COLOR_PANEL, fg=COLOR_ACENTO).grid(
                  row=0, column=0, sticky="w")
-        self._layout_key = tk.StringVar(value=PLANTILLAS_DISPONIBLES[0])
+        self._layout_key = tk.StringVar(value=PLANTILLAS_DISPONIBLES[1])
         ttk.Combobox(f, textvariable=self._layout_key,
                      values=PLANTILLAS_DISPONIBLES,
                      state="readonly", font=FONT_SMALL).grid(

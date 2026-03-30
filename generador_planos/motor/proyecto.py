@@ -47,7 +47,7 @@ class Proyecto:
         self.campo_mapeo = {}
         self.carpeta_salida = ""
         self.patron_nombre = "plano_{num}_{nombre}"
-        self.layout_key = "Plantilla 1 (Clásica)"
+        self.layout_key = "Plantilla 2 (Panel lateral)"
 
         # Campos adicionales
         self.transparencia_infra = 0.35
