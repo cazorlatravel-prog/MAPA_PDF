@@ -117,7 +117,7 @@ class App(tk.Tk):
         self.panel_config = PanelConfig(izq)
 
         # 7. Generación final
-        self.panel_generacion = PanelGeneracion(
+        self.panel_generacioneracion = PanelGeneracion(
             izq, self.motor,
             get_config=self._get_config,
             callback_log=self._escribir_log,
@@ -264,8 +264,8 @@ class App(tk.Tk):
         columnas = self.motor.obtener_columnas_shapefile()
         self._reconfigurar_tabla(columnas)
         self._poblar_tabla()
-        self.panel_generacion.actualizar_campos_agrupacion()
-        self.panel_generacion.actualizar_valores_si_agrupado()
+        self.panel_generacioneracion.actualizar_campos_agrupacion()
+        self.panel_generacioneracion.actualizar_valores_si_agrupado()
         self.panel_filtros.actualizar_campos()
         self.panel_simbologia.actualizar_capas_extra()
         self.panel_simbologia.actualizar_campo_categoria()
@@ -403,18 +403,18 @@ class App(tk.Tk):
             p.columnas_excel_activas = self.panel_config.columnas_excel_activas
 
             # Generación
-            p.modo_gen = self.panel_gen._modo_gen.get()
+            p.modo_gen = self.panel_generacion._modo_gen.get()
             try:
-                p.rango_desde = int(self.panel_gen._rango_desde.get())
+                p.rango_desde = int(self.panel_generacion._rango_desde.get())
             except ValueError:
                 p.rango_desde = 1
             try:
-                p.rango_hasta = int(self.panel_gen._rango_hasta.get())
+                p.rango_hasta = int(self.panel_generacion._rango_hasta.get())
             except ValueError:
                 p.rango_hasta = 10
-            p.campo_agrupacion = self.panel_gen._campo_agrupacion.get()
-            p.multipagina = self.panel_gen._multipagina.get()
-            p.incluir_portada = self.panel_gen._incluir_portada.get()
+            p.campo_agrupacion = self.panel_generacion._campo_agrupacion.get()
+            p.multipagina = self.panel_generacion._multipagina.get()
+            p.incluir_portada = self.panel_generacion._incluir_portada.get()
 
             p.guardar(ruta)
             self._escribir_log(f"Proyecto guardado: {ruta}", "ok")
@@ -565,19 +565,19 @@ class App(tk.Tk):
 
             # ── Generación ──
             if hasattr(p, "modo_gen") and p.modo_gen:
-                self.panel_gen._modo_gen.set(p.modo_gen)
+                self.panel_generacion._modo_gen.set(p.modo_gen)
             if hasattr(p, "rango_desde"):
-                self.panel_gen._rango_desde.delete(0, "end")
-                self.panel_gen._rango_desde.insert(0, str(p.rango_desde))
+                self.panel_generacion._rango_desde.delete(0, "end")
+                self.panel_generacion._rango_desde.insert(0, str(p.rango_desde))
             if hasattr(p, "rango_hasta"):
-                self.panel_gen._rango_hasta.delete(0, "end")
-                self.panel_gen._rango_hasta.insert(0, str(p.rango_hasta))
+                self.panel_generacion._rango_hasta.delete(0, "end")
+                self.panel_generacion._rango_hasta.insert(0, str(p.rango_hasta))
             if hasattr(p, "campo_agrupacion") and p.campo_agrupacion:
-                self.panel_gen._campo_agrupacion.set(p.campo_agrupacion)
+                self.panel_generacion._campo_agrupacion.set(p.campo_agrupacion)
             if hasattr(p, "multipagina"):
-                self.panel_gen._multipagina.set(p.multipagina)
+                self.panel_generacion._multipagina.set(p.multipagina)
             if hasattr(p, "incluir_portada"):
-                self.panel_gen._incluir_portada.set(p.incluir_portada)
+                self.panel_generacion._incluir_portada.set(p.incluir_portada)
 
             # Guardar campos visibles para restaurar tras cargar SHP
             self._campos_visibles_proyecto = p.campos_visibles or []
