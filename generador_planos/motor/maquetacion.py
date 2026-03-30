@@ -13,6 +13,7 @@ Layout v4:
 """
 
 import math
+import os
 from datetime import date
 
 import numpy as np
@@ -21,17 +22,41 @@ import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 import matplotlib.font_manager as fm
 
-# ── Tipografía corporativa para PDFs: Noto Sans HK ──
+# ── Tipografía corporativa para PDFs ──
 _FONT_CORP = "Noto Sans HK"
-for _fpath in ["/root/.fonts/NotoSansHK-Variable.ttf",
-               "/usr/share/fonts/truetype/noto/NotoSansHK-Regular.ttf"]:
-    try:
-        fm.fontManager.addfont(_fpath)
-    except Exception:
-        pass
-if any(f.name == _FONT_CORP for f in fm.fontManager.ttflist):
+_FONT_PATHS = [
+    "/root/.fonts/NotoSansHK-Variable.ttf",
+    "/usr/share/fonts/truetype/noto/NotoSansHK-Regular.ttf",
+    "/usr/share/fonts/opentype/noto/NotoSansHK-Regular.otf",
+    "/usr/share/fonts/noto/NotoSansHK-Regular.ttf",
+    os.path.join(os.path.expanduser("~"), ".fonts", "NotoSansHK-Variable.ttf"),
+    # macOS
+    "/System/Library/Fonts/Supplemental/NotoSansHK-Regular.otf",
+    "/Library/Fonts/NotoSansHK-Regular.otf",
+    # Windows
+    os.path.join(os.environ.get("LOCALAPPDATA", ""), "Microsoft",
+                 "Windows", "Fonts", "NotoSansHK-Regular.ttf"),
+]
+_FONT_LOADED = False
+for _fpath in _FONT_PATHS:
+    if _fpath and os.path.isfile(_fpath):
+        try:
+            fm.fontManager.addfont(_fpath)
+            _FONT_LOADED = True
+            break
+        except Exception:
+            continue
+if _FONT_LOADED or any(f.name == _FONT_CORP for f in fm.fontManager.ttflist):
     matplotlib.rcParams["font.family"] = "sans-serif"
     matplotlib.rcParams["font.sans-serif"] = [_FONT_CORP, "DejaVu Sans"]
+else:
+    import warnings as _w
+    _w.warn(
+        f"Fuente '{_FONT_CORP}' no encontrada. "
+        f"Los PDFs usarán DejaVu Sans como alternativa."
+    )
+    matplotlib.rcParams["font.family"] = "sans-serif"
+    matplotlib.rcParams["font.sans-serif"] = ["DejaVu Sans"]
 from matplotlib.patches import FancyBboxPatch, Rectangle
 from matplotlib.lines import Line2D
 from .escala import (
