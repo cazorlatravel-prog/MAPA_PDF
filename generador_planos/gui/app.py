@@ -47,6 +47,7 @@ class App(tk.Tk):
         self.resizable(True, True)
 
         self.motor = GeneradorPlanos()
+        self._ultimo_dir_proyecto = os.path.expanduser("~")
 
         aplicar_estilos(self)
         self._construir_ui()
@@ -359,9 +360,11 @@ class App(tk.Tk):
             title="Guardar proyecto",
             defaultextension=".json",
             filetypes=[("Proyecto JSON", "*.json")],
+            initialdir=self._ultimo_dir_proyecto,
         )
         if not ruta:
             return
+        self._ultimo_dir_proyecto = os.path.dirname(ruta)
 
         p = Proyecto()
         p.nombre = os.path.splitext(os.path.basename(ruta))[0]
@@ -423,9 +426,11 @@ class App(tk.Tk):
         ruta = filedialog.askopenfilename(
             title="Cargar proyecto",
             filetypes=[("Proyecto JSON", "*.json")],
+            initialdir=self._ultimo_dir_proyecto,
         )
         if not ruta:
             return
+        self._ultimo_dir_proyecto = os.path.dirname(ruta)
 
         try:
             p = Proyecto.cargar(ruta)
