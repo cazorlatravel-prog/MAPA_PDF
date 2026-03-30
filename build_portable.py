@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Crea un ejecutable portable (.exe) del Generador de Planos Forestales.
+Crea un ejecutable portable (.exe) de EstelaGis.
 
 NO requiere instalación. Se genera un único archivo .exe que se puede
 copiar a un USB, compartir por email o ejecutar desde cualquier carpeta.
@@ -10,9 +10,9 @@ Uso:
     2. python build_portable.py
 
 Genera:
-    dist/GeneradorPlanos_Portable.exe  (~150-300 MB, un solo archivo)
-    GeneradorPlanos_Portable.exe       (copia en la raíz del proyecto)
-    GeneradorPlanos_Portable_v2.0.zip  (ZIP listo para compartir)
+    dist/EstelaGis_Portable.exe  (~150-300 MB, un solo archivo)
+    EstelaGis_Portable.exe       (copia en la raíz del proyecto)
+    EstelaGis_Portable_v2.0.zip  (ZIP listo para compartir)
 """
 
 import os
@@ -23,9 +23,9 @@ import tempfile
 import zipfile
 
 
-APP_NAME = "GeneradorPlanos_Portable"
+APP_NAME = "EstelaGis_Portable"
 APP_VERSION = "2.0.0"
-APP_DESCRIPTION = "Generador de Planos Forestales - \u00a9 Jose Caballero S\u00e1nchez (Cazorla 2026)"
+APP_DESCRIPTION = "EstelaGis — Planos Forestales - \u00a9 Jose Caballero S\u00e1nchez (Cazorla 2026)"
 ICON_FILE = os.path.join("assets", "icon.ico")
 
 # Punto de entrada directo que evita la verificación de dependencias
@@ -160,12 +160,12 @@ VSVersionInfo(
           [
             StringStruct(u'CompanyName', u'Jose Caballero S\u00e1nchez (Cazorla)'),
             StringStruct(u'FileDescription',
-                         u'Generador de Planos Forestales'),
+                         u'EstelaGis — Planos Forestales'),
             StringStruct(u'FileVersion', u'{APP_VERSION}'),
             StringStruct(u'InternalName', u'{APP_NAME}'),
             StringStruct(u'OriginalFilename', u'{APP_NAME}.exe'),
             StringStruct(u'ProductName',
-                         u'Generador de Planos Forestales'),
+                         u'EstelaGis — Planos Forestales'),
             StringStruct(u'ProductVersion', u'{APP_VERSION}'),
             StringStruct(u'LegalCopyright',
                          u'\u00a9 Jose Caballero S\u00e1nchez (Cazorla 2026) Todos los derechos reservados'),
@@ -186,7 +186,7 @@ VSVersionInfo(
 def crear_zip(exe_path):
     """Crea un ZIP listo para compartir con el .exe dentro."""
     version_short = APP_VERSION.replace(".", "_")
-    zip_name = f"GeneradorPlanos_Portable_v{version_short}.zip"
+    zip_name = f"EstelaGis_Portable_v{version_short}.zip"
     zip_path = os.path.join(os.path.dirname(exe_path), zip_name)
 
     print(f"  Creando ZIP: {zip_path}")
@@ -201,7 +201,7 @@ def crear_zip(exe_path):
 def main():
     print()
     print("=" * 60)
-    print("  GENERADOR DE PLANOS FORESTALES")
+    print("  EstelaGis — Planos Forestales")
     print("  Construir ejecutable PORTABLE (un solo .exe)")
     print("=" * 60)
     print()
@@ -350,7 +350,7 @@ def main():
         print("    - Doble clic para ejecutar")
         print()
         print("  Propiedades visibles en Windows Explorer:")
-        print("    - Nombre: Generador de Planos Forestales")
+        print("    - Nombre: EstelaGis")
         print(f"    - Version: {APP_VERSION}")
         print("    - Autor: Jose Caballero")
         print("=" * 60)

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-GENERADOR DE PLANOS FORESTALES - v2.0
+EstelaGis - v2.0
 Punto de entrada de la aplicación.
 
 Aplicación de escritorio Python para generación de planos cartográficos
@@ -35,7 +35,7 @@ def verificar_dependencias() -> list:
 def mostrar_error_dependencias(faltantes: list):
     """Muestra ventana de error con instrucciones de instalación."""
     root = tk.Tk()
-    root.title("Dependencias faltantes")
+    root.title("EstelaGis — Dependencias faltantes")
     root.geometry("600x400")
     root.configure(bg="#1a1a2e")
 
@@ -85,23 +85,25 @@ def mostrar_splash(root):
     interior = tk.Frame(borde, bg="#0F1923")
     interior.place(x=1, y=1, relwidth=1, relheight=1, width=-2, height=-2)
 
-    # Icono
-    tk.Label(
-        interior, text="\U0001f5fa", font=("Segoe UI", 36),
-        bg="#0F1923", fg="#10B981",
-    ).pack(pady=(28, 4))
+    # Nombre prominente estilo GIS
+    name_frame = tk.Frame(interior, bg="#0F1923")
+    name_frame.pack(pady=(32, 0))
 
-    # Titulo
     tk.Label(
-        interior, text="Generador de Planos Forestales",
-        font=("Segoe UI", 15, "bold"), bg="#0F1923", fg="#E8ECF1",
-    ).pack(pady=(0, 12))
+        name_frame, text="Estela",
+        font=("Segoe UI", 28, "bold"), bg="#0F1923", fg="#10B981",
+    ).pack(side="left")
 
-    # Descripcion
     tk.Label(
-        interior, text="Aplicaci\u00f3n para generar planos",
-        font=("Segoe UI", 10), bg="#0F1923", fg="#8899AA",
-    ).pack()
+        name_frame, text="Gis",
+        font=("Segoe UI", 28), bg="#0F1923", fg="#E8ECF1",
+    ).pack(side="left")
+
+    # Subtitulo descriptivo
+    tk.Label(
+        interior, text="Planos Forestales",
+        font=("Segoe UI", 11), bg="#0F1923", fg="#8899AA",
+    ).pack(pady=(2, 12))
 
     # Copyright
     tk.Label(

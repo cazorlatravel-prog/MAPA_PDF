@@ -1,5 +1,5 @@
 ; ────────────────────────────────────────────────────────────────────────────
-; Inno Setup Script - Generador de Planos Forestales v2.0
+; Inno Setup Script - EstelaGis v2.0
 ;
 ; Para crear el instalador:
 ;   1. Descarga Inno Setup: https://jrsoftware.org/isdl.php
@@ -9,10 +9,10 @@
 ; El instalador resultante estará en: Output/InstaladorPlanos_v2.0.exe
 ; ────────────────────────────────────────────────────────────────────────────
 
-#define MyAppName "Generador de Planos Forestales"
+#define MyAppName "EstelaGis"
 #define MyAppVersion "2.0.0"
 #define MyAppPublisher "Jose Caballero"
-#define MyAppExeName "GeneradorPlanos.exe"
+#define MyAppExeName "EstelaGis.exe"
 #define MyAppURL "https://github.com/cazorlatravel-prog/MAPA_PDF"
 
 [Setup]
@@ -22,12 +22,12 @@ AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
 AppSupportURL={#MyAppURL}
-DefaultDirName={autopf}\GeneradorPlanos
+DefaultDirName={autopf}\EstelaGis
 DefaultGroupName={#MyAppName}
 AllowNoIcons=yes
 ; Carpeta donde se genera el instalador
 OutputDir=Output
-OutputBaseFilename=InstaladorPlanos_v{#MyAppVersion}
+OutputBaseFilename=EstelaGis_Instalador_v{#MyAppVersion}
 ; Icono del instalador (descomenta si tienes el .ico)
 ; SetupIconFile=assets\icon.ico
 Compression=lzma2/ultra64
@@ -39,7 +39,7 @@ WizardSizePercent=120
 PrivilegesRequired=admin
 ; Información adicional
 VersionInfoVersion={#MyAppVersion}
-VersionInfoDescription=Generador de Planos Forestales
+VersionInfoDescription=EstelaGis — Planos Forestales
 VersionInfoCopyright=2024 {#MyAppPublisher}
 
 [Languages]
@@ -52,7 +52,7 @@ Name: "quicklaunchicon"; Description: "Crear icono en la barra de &Inicio rápid
 
 [Files]
 ; Todos los archivos de la carpeta dist/GeneradorPlanos
-Source: "dist\GeneradorPlanos\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "dist\EstelaGis\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"

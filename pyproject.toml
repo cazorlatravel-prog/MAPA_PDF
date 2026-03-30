@@ -3,9 +3,9 @@ requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "generador-planos-forestales"
+name = "estelagis"
 version = "2.0.0"
-description = "Generador de planos cartográficos profesionales para infraestructuras forestales"
+description = "EstelaGis — Generador de planos cartográficos profesionales para infraestructuras forestales"
 readme = "PLANOS_FORESTALES.md"
 requires-python = ">=3.9"
 license = {text = "MIT"}
@@ -32,10 +32,10 @@ dependencies = [
 installer = ["pyinstaller>=6.0"]
 
 [project.scripts]
-generador-planos = "generador_planos.main:main"
+estelagis = "generador_planos.main:main"
 
 [project.gui-scripts]
-generador-planos-gui = "generador_planos.main:main"
+estelagis-gui = "generador_planos.main:main"
 
 [tool.setuptools.packages.find]
 include = ["generador_planos*"]

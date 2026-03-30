@@ -1,5 +1,5 @@
 """
-Ventana principal de la aplicacion Generador de Planos Forestales.
+Ventana principal de la aplicacion EstelaGis.
 
 Layout moderno: 1100x780 px minimo, redimensionable.
 """
@@ -32,7 +32,7 @@ class App(tk.Tk):
 
     def __init__(self):
         super().__init__()
-        self.title("Generador de Planos Forestales")
+        self.title("EstelaGis — Planos Forestales")
         self.geometry("1160x820")
         self.minsize(1100, 780)
         self.configure(bg=COLOR_FONDO_APP)
@@ -150,10 +150,24 @@ class App(tk.Tk):
         title_frame = tk.Frame(left, bg=COLOR_HEADER)
         title_frame.pack(side="left", pady=8)
 
+        # Nombre prominente de la aplicacion (estilo ArcGIS / QGIS)
+        name_row = tk.Frame(title_frame, bg=COLOR_HEADER)
+        name_row.pack(anchor="w")
+
         tk.Label(
-            title_frame, text="Generador de Planos Forestales",
-            font=("Segoe UI", 13, "bold"), bg=COLOR_HEADER, fg=COLOR_TEXTO,
-        ).pack(anchor="w")
+            name_row, text="Estela",
+            font=("Segoe UI", 15, "bold"), bg=COLOR_HEADER, fg=COLOR_ACENTO,
+        ).pack(side="left")
+
+        tk.Label(
+            name_row, text="Gis",
+            font=("Segoe UI", 15), bg=COLOR_HEADER, fg=COLOR_TEXTO,
+        ).pack(side="left")
+
+        tk.Label(
+            name_row, text="  Planos Forestales",
+            font=("Segoe UI", 9), bg=COLOR_HEADER, fg=COLOR_TEXTO_GRIS,
+        ).pack(side="left", pady=(4, 0))
 
         tk.Label(
             title_frame,
@@ -284,7 +298,7 @@ class App(tk.Tk):
         self._log.tag_config("warn", foreground="#FCD34D")
         self._log.tag_config("info", foreground="#93C5FD")
 
-        self._escribir_log("Sistema iniciado. Carga un shapefile para comenzar.", "info")
+        self._escribir_log("EstelaGis iniciado. Carga un shapefile para comenzar.", "info")
 
     def _escribir_log(self, msg: str, tipo: str = ""):
         def _do():

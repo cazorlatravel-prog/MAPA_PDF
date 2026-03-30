@@ -21,7 +21,7 @@ FICHA_TECNICA = """
 FICHA TECNICA DE LA APLICACION
 ==============================
 
-  Nombre:        Generador de Planos Forestales
+  Nombre:        EstelaGis — Planos Forestales
   Version:       2.0.0
   Autor:         Jose Caballero Sanchez
   Ubicacion:     Cazorla (Jaen), 2026
@@ -35,9 +35,10 @@ FICHA TECNICA DE LA APLICACION
 PROPOSITO
 =========
 
-Generacion automatizada de planos cartograficos profesionales
-en formato PDF (A3/A4, horizontal/vertical) para la gestion
-de infraestructuras forestales del servicio INFOCA (Plan de
+EstelaGis es una aplicacion de escritorio para la generacion
+automatizada de planos cartograficos profesionales en formato
+PDF (A3/A4, horizontal/vertical) para la gestion de
+infraestructuras forestales del servicio INFOCA (Plan de
 Emergencias por Incendios Forestales de Andalucia).
 
 Permite producir lotes de planos con maquetacion normalizada,
@@ -206,7 +207,7 @@ MANUAL DE USUARIO
 
 1. INICIO RAPIDO
 -----------------
-  1. Ejecute la aplicacion (generador-planos o python -m generador_planos)
+  1. Ejecute EstelaGis (estelagis o python -m generador_planos)
   2. Cargue un Shapefile (.shp) o Geodatabase (.gdb) de infraestructuras
   3. Opcionalmente cargue una capa de Montes Publicos
   4. Configure el formato de salida (A3/A4)
@@ -356,7 +357,7 @@ class PanelInfo:
     def mostrar(self):
         """Abre la ventana de informacion."""
         win = tk.Toplevel(self.parent)
-        win.title("Informacion Tecnica y Manual de Usuario")
+        win.title("EstelaGis — Informacion Tecnica y Manual de Usuario")
         win.geometry("820x680")
         win.minsize(700, 500)
         win.configure(bg=COLOR_FONDO_APP)
@@ -369,7 +370,7 @@ class PanelInfo:
         header.pack_propagate(False)
 
         tk.Label(
-            header, text="\u2139\ufe0f  Informacion Tecnica y Manual de Usuario",
+            header, text="\u2139\ufe0f  EstelaGis — Informacion Tecnica",
             font=("Segoe UI", 13, "bold"), bg=COLOR_HEADER, fg=COLOR_TEXTO,
         ).pack(side="left", padx=16, pady=10)
 
