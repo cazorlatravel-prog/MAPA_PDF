@@ -38,8 +38,7 @@ PROPOSITO
 EstelaGis es una aplicacion de escritorio para la generacion
 automatizada de planos cartograficos profesionales en formato
 PDF (A3/A4, horizontal/vertical) para la gestion de
-infraestructuras forestales del servicio INFOCA (Plan de
-Emergencias por Incendios Forestales de Andalucia).
+infraestructuras forestales.
 
 Permite producir lotes de planos con maquetacion normalizada,
 cajetin reglamentario, simbologia categorizada, cuadriculas UTM,
