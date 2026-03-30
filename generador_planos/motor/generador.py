@@ -74,6 +74,42 @@ def _asegurar_crs(gdf, origen: str = ""):
     return gdf, aviso
 
 
+def _detectar_geom_type(gdf) -> str:
+    """Devuelve el tipo de geometría predominante en el GeoDataFrame."""
+    if gdf.empty:
+        return "unknown"
+    tipos = gdf.geometry.geom_type.dropna()
+    if tipos.empty:
+        return "unknown"
+    return tipos.mode().iloc[0].lower()
+
+
+def _plot_gdf_por_tipo(gdf, ax, alpha, lw, zorder, color,
+                       linestyle="-", marker="o", facecolor=None):
+    """Dibuja un GeoDataFrame separando por tipo de geometría si hay mezcla."""
+    if gdf.empty:
+        return
+    tipos = gdf.geometry.geom_type.str.lower()
+    tipos_unicos = tipos.unique()
+
+    for tipo in tipos_unicos:
+        sub = gdf[tipos == tipo]
+        if sub.empty:
+            continue
+        if "point" in tipo:
+            sub.plot(ax=ax, color=color, markersize=12,
+                     marker=marker, zorder=zorder,
+                     edgecolor="white", linewidth=0.8, alpha=alpha)
+        elif "line" in tipo or "string" in tipo:
+            sub.plot(ax=ax, color=color, linewidth=lw,
+                     linestyle=linestyle, zorder=zorder, alpha=alpha)
+        else:
+            fc = facecolor if facecolor else (color + "55")
+            sub.plot(ax=ax, facecolor=fc, edgecolor=color,
+                     linewidth=lw, linestyle=linestyle,
+                     zorder=zorder, alpha=alpha)
+
+
 def _limpiar_tipos_mixtos(gdf):
     """Convierte columnas con tipos mixtos (str + float) a str para evitar TypeError."""
     import numpy as np
@@ -438,11 +474,6 @@ class GeneradorPlanos:
         alpha_infra = max(0.0, min(1.0, float(ci.get("alpha", 0.35))))
         campo_cat = ci.get("campo_categoria")
 
-        geom_type = ""
-        for geom_single in gdf_sel.geometry:
-            geom_type = str(geom_single.geom_type).lower()
-            break
-
         # ── Categorización por campo ──
         if campo_cat and campo_cat in gdf_sel.columns:
             # Resolver campo real por mapeo si existe
@@ -460,46 +491,22 @@ class GeneradorPlanos:
                     continue
                 c = simb.color
                 ls = simb.linestyle
-                if "point" in geom_type:
-                    gdf_cat.plot(ax=ax_map, color=c, markersize=12,
-                                 marker=simb.marker, zorder=5,
-                                 edgecolor="white", linewidth=0.8,
-                                 alpha=alpha_infra)
-                elif "line" in geom_type or "string" in geom_type:
-                    gdf_cat.plot(ax=ax_map, color=c, linewidth=lw,
-                                 linestyle=ls, zorder=5,
-                                 alpha=alpha_infra)
-                else:
-                    gdf_cat.plot(
-                        ax=ax_map, facecolor=simb.facecolor,
-                        edgecolor=c, linewidth=lw,
-                        linestyle=ls, zorder=5,
-                        alpha=alpha_infra,
-                    )
+                _plot_gdf_por_tipo(
+                    gdf_cat, ax_map, alpha=alpha_infra, lw=lw, zorder=5,
+                    color=c, linestyle=ls, marker=simb.marker,
+                    facecolor=simb.facecolor)
         else:
             # Sin categoría: color único
-            if "point" in geom_type:
-                gdf_sel.plot(ax=ax_map, color=color_infra, markersize=12,
-                             marker="o", zorder=5, edgecolor="white",
-                             linewidth=0.8, alpha=alpha_infra)
-            elif "line" in geom_type or "string" in geom_type:
-                gdf_sel.plot(ax=ax_map, color=color_infra, linewidth=lw,
-                             zorder=5, alpha=alpha_infra)
-            else:
-                gdf_sel.plot(ax=ax_map, facecolor=color_infra + "55",
-                             edgecolor=color_infra, linewidth=lw,
-                             zorder=5, alpha=alpha_infra)
+            _plot_gdf_por_tipo(
+                gdf_sel, ax_map, alpha=alpha_infra, lw=lw, zorder=5,
+                color=color_infra)
 
     def _construir_items_leyenda(self, gdf_sel, color_infra,
                                   xmin=None, xmax=None, ymin=None, ymax=None):
         """Construye items de leyenda sólo con las infraestructuras seleccionadas."""
         items = []
 
-        geom_type = ""
-        for g in gdf_sel.geometry:
-            if g is not None:
-                geom_type = str(g.geom_type).lower()
-                break
+        geom_type = _detectar_geom_type(gdf_sel)
 
         # Solo categorías presentes en las infraestructuras seleccionadas
         campo_cat = self.config_infra.get("campo_categoria")
@@ -556,11 +563,7 @@ class GeneradorPlanos:
             return None
 
         items = []
-        geom_type = ""
-        for g in gdf_sel.geometry:
-            if g is not None:
-                geom_type = str(g.geom_type).lower()
-                break
+        geom_type = _detectar_geom_type(gdf_sel)
 
         campo_real = campo_cat
         if self._campo_mapeo and campo_cat in self._campo_mapeo:
@@ -588,11 +591,7 @@ class GeneradorPlanos:
         items_infra = []
         items_montes = []
 
-        geom_type = ""
-        for g in gdf_sel.geometry:
-            if g is not None:
-                geom_type = str(g.geom_type).lower()
-                break
+        geom_type = _detectar_geom_type(gdf_sel)
 
         campo_cat = self.config_infra.get("campo_categoria")
         if campo_cat and campo_cat in gdf_sel.columns:
