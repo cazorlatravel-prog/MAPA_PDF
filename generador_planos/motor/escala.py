@@ -44,6 +44,8 @@ RATIO_MAPA_ALTO = 0.78
 
 _CABECERA_MM = 6  # Altura de la cabecera (debe coincidir con maquetacion._CABECERA_MM)
 
+DPI_DEFAULT = 400  # calidad de impresión alta
+
 
 def seleccionar_escala(geom, formato_key: str, escala_manual: int = None,
                        es_lateral: bool = False) -> int:
