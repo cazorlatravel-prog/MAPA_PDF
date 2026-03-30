@@ -6,7 +6,7 @@ color de infraestructura, escala manual y carpeta de salida.
 import os
 import sys
 import tkinter as tk
-from tkinter import ttk, filedialog, colorchooser
+from tkinter import ttk, filedialog, colorchooser, messagebox
 from pathlib import Path
 
 from .estilos import (
@@ -54,6 +54,9 @@ class PanelConfig:
         crear_boton(self._frame_raster, "Seleccionar ráster...",
                     self._elegir_raster_general,
                     icono="\U0001f5fa").pack(side="top", fill="x")
+        crear_boton(self._frame_raster, "Carpeta de hojas...",
+                    self._elegir_carpeta_raster_general,
+                    icono="\U0001f4c2").pack(side="top", fill="x", pady=(2, 0))
         self._lbl_raster = tk.Label(self._frame_raster, text="Sin ráster seleccionado",
                                      font=FONT_SMALL, bg=COLOR_PANEL,
                                      fg=COLOR_TEXTO_GRIS, anchor="w",
@@ -131,6 +134,9 @@ class PanelConfig:
         crear_boton(self._frame_raster_loc, "Seleccionar ráster...",
                     self._elegir_raster_localizacion,
                     icono="\U0001f5fa").pack(side="top", fill="x")
+        crear_boton(self._frame_raster_loc, "Carpeta de hojas...",
+                    self._elegir_carpeta_raster_localizacion,
+                    icono="\U0001f4c2").pack(side="top", fill="x", pady=(2, 0))
         self._lbl_raster_loc = tk.Label(self._frame_raster_loc,
                                          text="Sin ráster seleccionado",
                                          font=FONT_SMALL, bg=COLOR_PANEL,
@@ -506,6 +512,32 @@ class PanelConfig:
         if ruta:
             self._ruta_raster_loc.set(ruta)
             self._lbl_raster_loc.configure(text=Path(ruta).name)
+
+    def _elegir_carpeta_raster_general(self):
+        carpeta = filedialog.askdirectory(
+            title="Seleccionar carpeta con hojas cartográficas (mapa general)")
+        if not carpeta:
+            return
+        self._generar_vrt_y_asignar(carpeta, self._ruta_raster, self._lbl_raster)
+
+    def _elegir_carpeta_raster_localizacion(self):
+        carpeta = filedialog.askdirectory(
+            title="Seleccionar carpeta con hojas cartográficas (localización)")
+        if not carpeta:
+            return
+        self._generar_vrt_y_asignar(carpeta, self._ruta_raster_loc, self._lbl_raster_loc)
+
+    def _generar_vrt_y_asignar(self, carpeta, var_ruta, lbl):
+        """Genera un VRT a partir de la carpeta y asigna la ruta."""
+        from ..motor.cartografia import construir_vrt_desde_carpeta
+        try:
+            vrt = construir_vrt_desde_carpeta(carpeta)
+            var_ruta.set(vrt)
+            lbl.configure(text=f"VRT: {Path(carpeta).name} ({Path(vrt).name})")
+        except FileNotFoundError as e:
+            messagebox.showwarning("Sin rásters", str(e))
+        except Exception as e:
+            messagebox.showerror("Error al crear mosaico", str(e))
 
     _CAPA_FILETYPES = [
         ("Shapefile", "*.shp"),

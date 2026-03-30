@@ -352,6 +352,60 @@ def añadir_fondo_raster_local(ax, ruta_raster: str, xmin, xmax, ymin, ymax):
     return True
 
 
+def construir_vrt_desde_carpeta(carpeta: str) -> str:
+    """Genera un archivo VRT (Virtual Raster) a partir de todos los rásters
+    de una carpeta (y subcarpetas), tal como hace QGIS/ArcGIS al añadir
+    una carpeta de hojas cartográficas.
+
+    El VRT se guarda junto a la carpeta con nombre '<carpeta>.vrt'.
+    Si ya existe y es más reciente que los archivos, lo reutiliza.
+
+    Returns:
+        Ruta al fichero .vrt generado.
+    """
+    from pathlib import Path
+    import subprocess
+    import glob
+
+    carpeta_p = Path(carpeta)
+    vrt_path = carpeta_p.parent / f"{carpeta_p.name}.vrt"
+
+    # Buscar todos los rásters en la carpeta y subcarpetas
+    extensiones = ("*.tif", "*.tiff", "*.ecw", "*.jp2", "*.img")
+    archivos = []
+    for ext in extensiones:
+        archivos.extend(glob.glob(str(carpeta_p / "**" / ext), recursive=True))
+
+    if not archivos:
+        raise FileNotFoundError(
+            f"No se encontraron archivos ráster en: {carpeta}")
+
+    # Comprobar si el VRT existente es válido (más reciente que los rásters)
+    if vrt_path.exists():
+        vrt_mtime = vrt_path.stat().st_mtime
+        max_raster_mtime = max(os.path.getmtime(f) for f in archivos)
+        if vrt_mtime > max_raster_mtime:
+            return str(vrt_path)
+
+    # Construir VRT con gdalbuildvrt (viene con GDAL/rasterio)
+    try:
+        cmd = ["gdalbuildvrt", str(vrt_path)] + sorted(archivos)
+        subprocess.run(cmd, check=True, capture_output=True, text=True)
+    except FileNotFoundError:
+        # gdalbuildvrt no disponible, construir con rasterio/GDAL Python
+        try:
+            from osgeo import gdal
+            gdal.BuildVRT(str(vrt_path), sorted(archivos))
+        except ImportError:
+            raise ImportError(
+                "Se necesita GDAL para generar el mosaico virtual.\n"
+                "Instálalo con: pip install gdal\n"
+                "O crea un archivo .vrt manualmente con: "
+                "gdalbuildvrt mosaico.vrt carpeta/*.tif")
+
+    return str(vrt_path)
+
+
 def descargar_wfs(url: str, capa: str, xmin, ymin, xmax, ymax,
                   crs_epsg: int = 25830, max_features: int = 50000):
     """Descarga features de un servicio WFS y devuelve un GeoDataFrame.
