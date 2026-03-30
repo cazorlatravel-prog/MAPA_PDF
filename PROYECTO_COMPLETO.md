@@ -1085,5 +1085,311 @@ keywords = ["cartografia", "forestal", "planos", "SHP", "PDF", "INFOCA"]
 
 ---
 
+## 14. Ficha Tecnica de la Aplicacion
+
+| Campo | Valor |
+|-------|-------|
+| **Nombre** | Generador de Planos Forestales |
+| **Version** | 2.0.0 |
+| **Autor** | Jose Caballero Sanchez |
+| **Ubicacion** | Cazorla (Jaen), 2026 |
+| **Licencia** | MIT |
+| **Python** | >= 3.9 |
+| **Plataformas** | Windows, Linux, macOS |
+| **Interfaz** | Aplicacion de escritorio (Tkinter) |
+| **Distribucion** | PyPI / PyInstaller (ejecutable Windows) |
+
+### Proposito
+
+Generacion automatizada de planos cartograficos profesionales en formato PDF (A3/A4, horizontal/vertical) para la gestion de infraestructuras forestales del servicio INFOCA (Plan de Emergencias por Incendios Forestales de Andalucia).
+
+Permite producir lotes de planos con maquetacion normalizada, cajetin reglamentario, simbologia categorizada, cuadriculas UTM, leyendas, escalas graficas y mapas de localizacion.
+
+---
+
+## 15. Stack Tecnologico
+
+### Capa de Interfaz (GUI)
+
+| Tecnologia | Descripcion |
+|------------|-------------|
+| **tkinter** | Framework nativo Python para GUI de escritorio |
+| **ttk** | Widgets tematizados (Combobox, Treeview, Notebook...) |
+| **Tema visual** | Oscuro (Blue-Night #0F1923 + Esmeralda #10B981) |
+| **Layout** | Sidebar scroll + Panel derecho (tabla + log) |
+| **Scroll** | Canvas con mousewheel (Linux/Windows) |
+
+### Capa Geoespacial (GIS)
+
+| Tecnologia | Descripcion |
+|------------|-------------|
+| **geopandas >= 0.14** | Lectura de Shapefiles (.shp) y Geodatabases (.gdb). Manipulacion de GeoDataFrames, reproyeccion CRS |
+| **shapely >= 2.0** | Operaciones geometricas (buffer, interseccion, centroide, bounds, simplificacion) |
+| **pyproj >= 3.6** | Transformacion de coordenadas entre SRC. EPSG:25830 (ETRS89 / UTM zona 30N) como base |
+| **contextily >= 1.6** | Descarga de teselas WMS/WMTS para fondos de mapa (PNOA, OpenStreetMap, Stamen, etc.) |
+
+### Capa de Renderizado
+
+| Tecnologia | Descripcion |
+|------------|-------------|
+| **matplotlib >= 3.8** | Motor principal de renderizado cartografico. GridSpec para maquetacion multi-panel. Artists para cuadricula UTM, barra de escala, leyenda, rosa de los vientos |
+| **adjustText >= 1.0** | Algoritmo anti-solapamiento de etiquetas |
+| **Pillow >= 10.0** | Manipulacion de imagenes (logos, fondos raster) |
+| **numpy >= 1.26** | Calculos geometricos y transformaciones |
+
+### Capa de Salida
+
+| Tecnologia | Descripcion |
+|------------|-------------|
+| **reportlab >= 4.0** | Generacion final de documentos PDF. Soporte A3/A4 horizontal/vertical. Multipagina (portada, indice, planos, guia) |
+
+### Capa de Datos
+
+| Tecnologia | Descripcion |
+|------------|-------------|
+| **openpyxl >= 3.1** | Lectura de archivos Excel (.xlsx). Enlace de datos tabulares con capas SHP |
+| **requests >= 2.31** | Descarga de teselas y servicios WMS/WFS/WCS |
+| **JSON** | Persistencia de proyectos (.json) |
+
+### Opcional
+
+| Tecnologia | Descripcion |
+|------------|-------------|
+| **pyinstaller >= 6.0** | Empaquetado como ejecutable Windows (.exe) |
+
+---
+
+## 16. Arquitectura del Sistema
+
+**Patron:** MVC simplificado (Motor + GUI)
+**Modulos:** 2 paquetes principales (gui/ y motor/)
+
+```
+generador_planos/
+  |
+  +-- gui/                     CAPA DE PRESENTACION
+  |   +-- app.py               Ventana principal, orquestacion de paneles
+  |   +-- estilos.py           Paleta de colores, fuentes, temas TTK
+  |   +-- panel_capas.py       Carga de capas SHP/GDB + transparencia
+  |   +-- panel_filtros.py     Filtros avanzados por campo/valor
+  |   +-- panel_simbologia.py  Editor de simbologia por categorias
+  |   +-- panel_campos.py      Selector de campos visibles
+  |   +-- panel_cajetin.py     Editor de cajetin y plantillas de layout
+  |   +-- panel_config.py      Configuracion de salida (formato, proveedor)
+  |   +-- panel_generacion.py  Control de generacion y barra de progreso
+  |   +-- panel_info.py        Info tecnica y manual de usuario
+  |
+  +-- motor/                   CAPA DE LOGICA DE NEGOCIO
+      +-- generador.py         Clase GeneradorPlanos (coordinador central)
+      +-- maquetacion.py       Maquetacion y renderizado del mapa
+      +-- cartografia.py       Descarga de teselas WMS/WFS/raster
+      +-- escala.py            Seleccion automatica de escala
+      +-- simbologia.py        Gestor de simbologia por categorias
+      +-- proyecto.py          Persistencia de proyecto en JSON
+      +-- capas_extra.py       Gestion de capas auxiliares
+      +-- paginas_especiales.py Portada, indice, mapa guia
+      +-- perfil.py            Perfil longitudinal topografico
+      +-- plantillas_layout.py Definiciones de plantillas de layout
+      +-- _elementos_mapa.py   Cuadricula UTM, escala, leyenda, norte
+      +-- _utils_geo.py        Utilidades geoespaciales compartidas
+```
+
+### Flujo de Datos
+
+1. Carga SHP/GDB → GeoDataFrame (geopandas)
+2. Reproyeccion a ETRS89 UTM 30N (EPSG:25830)
+3. Filtrado y seleccion de registros
+4. Calculo de extent y escala automatica
+5. Descarga de fondo cartografico (WMS/WMTS/raster)
+6. Renderizado con matplotlib (GridSpec layout)
+7. Adicion de elementos: cuadricula UTM, escala, leyenda
+8. Exportacion a PDF via reportlab
+9. Opcion multipagina: portada + indice + planos + guia
+
+---
+
+## 17. Especificaciones Cartograficas
+
+### Sistema de Referencia
+- **SRC base:** ETRS89 / UTM zona 30N (EPSG:25830)
+- **Reproyeccion:** Automatica desde cualquier CRS de entrada
+
+### Escalas Permitidas
+| Escala |
+|--------|
+| 1:5.000 |
+| 1:7.500 |
+| 1:10.000 |
+| 1:15.000 |
+| 1:20.000 |
+
+Seleccion automatica basada en el extent de la geometria. Opcion de escala manual configurable.
+
+### Formatos de Salida
+| Formato | Dimensiones |
+|---------|-------------|
+| A3 Horizontal | 420 x 297 mm |
+| A3 Vertical | 297 x 420 mm |
+| A4 Horizontal | 297 x 210 mm |
+| A4 Vertical | 210 x 297 mm |
+
+### Proveedores de Fondo
+- PNOA Ortofoto (IGN - Espana)
+- PNOA Mapa Base (IGN - Espana)
+- OpenStreetMap
+- Stamen Terrain
+- CartoDB Positron / DarkMatter
+- Raster local (GeoTIFF, ECW, MrSID)
+- WMS/WFS custom (URL configurable)
+
+### Elementos del Plano
+- Cuadricula UTM con etiquetas de coordenadas
+- Barra de escala grafica (metros/km)
+- Rosa de los vientos (flecha norte)
+- Leyenda de simbologia
+- Cajetin reglamentario (personalizable)
+- Mapa de localizacion (esquina inferior)
+- Tabla de datos asociada (opcional)
+
+### Modos de Generacion
+| Modo | Descripcion |
+|------|-------------|
+| **Individual** | Un plano por registro |
+| **Todos** | Todos los registros del SHP |
+| **Seleccion** | Solo registros seleccionados |
+| **Rango** | Rango numerico (desde-hasta) |
+| **Agrupado** | Por campo (ej: por municipio) |
+| **Lote CSV** | Lista de IDs desde archivo CSV |
+| **Multipagina** | PDF unico con portada + indice |
+
+### Simbologia
+- Por categorias (campo seleccionable)
+- Colores personalizables por categoria
+- Tamano de punto/linea configurable
+- Transparencia ajustable
+- Patron de relleno (solo poligonos)
+
+---
+
+## 18. Manual de Usuario
+
+### 1. Inicio Rapido
+
+1. Ejecute la aplicacion (`generador-planos` o `python -m generador_planos`)
+2. Cargue un Shapefile (.shp) o Geodatabase (.gdb) de infraestructuras
+3. Opcionalmente cargue una capa de Montes Publicos
+4. Configure el formato de salida (A3/A4)
+5. Seleccione la carpeta de salida
+6. Pulse **"GENERAR PLANOS"**
+
+### 2. Carga de Datos
+
+Panel **"CAPAS DE DATOS"** (primer panel del sidebar):
+
+- **Infraestructuras:** Pulse "Cargar SHP/GDB" para seleccionar el archivo con las infraestructuras forestales (pistas, cortafuegos, puntos de agua...).
+  - Si es una Geodatabase (.gdb), se le pedira seleccionar la capa.
+  - Si los campos no coinciden con los esperados, se abrira un dialogo de mapeo de campos para asignar la correspondencia.
+  - La capa se reproyecta automaticamente a ETRS89 UTM 30N.
+- **Montes:** Pulse "Cargar Montes" para anadir la capa de montes publicos. Esta capa se usa como fondo y para el mapa de localizacion.
+- **Capas extra:** Anada capas SHP/GDB adicionales (hidrografia, carreteras...) con su propia simbologia y transparencia.
+- **Transparencia:** Ajuste los deslizadores para controlar la opacidad de las capas de montes e infraestructuras.
+
+### 3. Filtrado de Datos
+
+Panel **"FILTROS"**:
+
+- Seleccione un campo del shapefile
+- Elija un operador (=, !=, contiene, >, <, etc.)
+- Introduzca el valor de filtro
+- Pulse "Aplicar filtro" para filtrar los registros
+- La tabla se actualiza mostrando solo los registros que cumplen
+- Puede combinar multiples filtros
+
+### 4. Simbologia
+
+Panel **"SIMBOLOGIA"**:
+
+- **Campo de categoria:** Seleccione el campo por el cual categorizar
+- Se generaran colores automaticos para cada valor unico
+- Puede personalizar el color de cada categoria haciendo clic
+- Ajuste el tamano del simbolo y la transparencia
+- La simbologia se aplica automaticamente al generar
+
+### 5. Campos Visibles
+
+Panel **"CAMPOS"**:
+
+- Marque/desmarque los campos que desea mostrar en la tabla del plano
+- Seleccione un campo de encabezado para el titulo de cada plano
+- Los campos marcados aparecen en la tabla dentro del PDF
+
+### 6. Cajetin y Plantilla
+
+Panel **"CAJETIN"**:
+
+- **Titulo:** Texto principal del cajetin
+- **Subtitulo:** Puede usar campos del SHP con `{NOMBRE_CAMPO}`
+- **Organismo:** Entidad que emite el plano
+- **Autor:** Nombre del tecnico/autor
+- **Fecha:** Se autocompleta con la fecha actual
+- **Layout:** Elija la distribucion del plano (clasico, compacto, etc.)
+
+### 7. Configuracion de Salida
+
+Panel **"CONFIGURACION"**:
+
+- **Formato:** A3H, A3V, A4H, A4V
+- **Proveedor de fondo:** PNOA, OSM, Stamen, raster local, WMS custom...
+- **Escala:** Automatica o manual (1:5.000 a 1:20.000)
+- **Color de infraestructura:** Color por defecto para simbolos
+- **Carpeta de salida:** Donde se guardaran los PDF generados
+- **Patron de nombre:** Formato del nombre de archivo. Ejemplo: `{TIPO}_{NOMBRE}_{MUNICIPIO}` → `Pista_FortalezaAlta_Cazorla.pdf`
+- **Calidad PDF:** Baja (150dpi), Media (200dpi), Alta (300dpi)
+
+**Datos tabulares:**
+- **Origen:** Desde el shapefile o desde un archivo Excel
+- Si elige Excel: seleccione archivo, hoja, campo de enlace
+- Configure que columnas del Excel mostrar en el plano
+
+### 8. Generacion de Planos
+
+Panel **"GENERACION"**:
+
+- **Modo:**
+  - *Todos:* Genera un plano por cada registro
+  - *Seleccion:* Solo los seleccionados en la tabla
+  - *Rango:* Desde registro N hasta registro M
+  - *Agrupado:* Agrupa por un campo (ej: por municipio)
+  - *Lote CSV:* Lee IDs desde un archivo CSV
+- **Multipagina:** Genera un unico PDF con todos los planos
+  - Incluye portada con titulo y datos del proyecto
+  - Incluye indice con listado de planos y paginas
+  - Incluye mapa guia general al final
+- **Incluir portada:** Anade pagina de portada al multipagina
+- Pulse **"GENERAR PLANOS"** para iniciar el proceso
+- La barra de progreso muestra el avance
+- El log de proceso muestra mensajes detallados
+- Puede cancelar la generacion en cualquier momento
+
+### 9. Proyectos
+
+- **Guardar proyecto:** Barra superior > "Guardar". Guarda toda la configuracion actual en un archivo JSON (capas, simbologia, cajetin, formato, filtros, etc.)
+- **Cargar proyecto:** Barra superior > "Cargar". Restaura la configuracion desde un archivo JSON guardado
+
+### 10. Atajos y Consejos
+
+- La tabla derecha muestra las infraestructuras cargadas. Puede seleccionar registros para generacion individual.
+- El log de proceso (parte inferior derecha) muestra:
+  - **Verde:** Operaciones completadas con exito
+  - **Amarillo:** Advertencias
+  - **Rojo:** Errores
+  - **Azul:** Informacion del sistema
+- Use "Escala manual = 0" para seleccion automatica de escala.
+- Los campos de subtitulo admiten variables: `{CAMPO}` se sustituye por el valor del registro actual.
+- Para geodatabases grandes, la carga puede tardar. La previsualizacion rapida se muestra en miniatura.
+- El CRS se muestra en la barra superior como badge: "ETRS89 - UTM H30N" (EPSG:25830)
+
+---
+
 *Documento generado automaticamente. Ultima actualizacion: 2026-03-30.*
 
