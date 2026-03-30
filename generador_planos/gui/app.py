@@ -22,6 +22,7 @@ from .panel_filtros import PanelFiltros
 from .panel_simbologia import PanelSimbologia
 from .panel_cajetin import PanelCajetin
 from .panel_generacion import PanelGeneracion
+from .panel_info import PanelInfo
 from ..motor.generador import GeneradorPlanos
 from ..motor.proyecto import Proyecto
 
@@ -193,8 +194,16 @@ class App(tk.Tk):
             activebackground=COLOR_ACENTO, activeforeground="#FFFFFF")
         btn_cargar.pack(side="left")
 
+        btn_info = tk.Button(
+            btn_f, text="\u2139\ufe0f  Info", command=self._mostrar_info,
+            font=FONT_BOTON, bg=COLOR_BORDE, fg=COLOR_TEXTO,
+            relief="flat", cursor="hand2", padx=10, pady=3,
+            bd=0, highlightthickness=0,
+            activebackground=COLOR_ACENTO, activeforeground="#FFFFFF")
+        btn_info.pack(side="left", padx=(6, 0))
+
         # Hover effects
-        for btn in (btn_guardar, btn_cargar):
+        for btn in (btn_guardar, btn_cargar, btn_info):
             btn.bind("<Enter>", lambda e, b=btn: b.configure(bg="#2A4058"))
             btn.bind("<Leave>", lambda e, b=btn: b.configure(bg=COLOR_BORDE))
 
@@ -611,3 +620,8 @@ class App(tk.Tk):
         except Exception as e:
             self._escribir_log(f"Error al cargar proyecto: {e}", "error")
             messagebox.showerror("Error", str(e))
+
+    def _mostrar_info(self):
+        """Abre la ventana de informacion tecnica y manual de usuario."""
+        panel_info = PanelInfo(self)
+        panel_info.mostrar()
