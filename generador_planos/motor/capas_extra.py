@@ -60,7 +60,7 @@ class GestorCapasExtra:
                 else:
                     nombre = os.path.splitext(os.path.basename(ruta))[0]
 
-            from .generador import _asegurar_crs
+            from ._utils_geo import _asegurar_crs
             gdf, aviso_crs = _asegurar_crs(gdf, nombre)
             # Resetear índice y construir índice espacial para .cx[]
             gdf = gdf.reset_index(drop=True)
