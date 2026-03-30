@@ -531,11 +531,21 @@ class PanelGeneracion:
             return [tabla.index(s) for s in sels]
         elif modo == "rango":
             try:
-                desde = int(self._rango_desde.get()) - 1
+                desde = int(self._rango_desde.get())
                 hasta = int(self._rango_hasta.get())
-                return list(range(max(0, desde), min(hasta, len(gdf))))
             except ValueError:
+                messagebox.showwarning("Rango inválido",
+                    "Los valores 'Desde' y 'Hasta' deben ser números enteros.")
                 return []
+            if desde < 1:
+                desde = 1
+            if hasta > len(gdf):
+                hasta = len(gdf)
+            if desde > hasta:
+                messagebox.showwarning("Rango inválido",
+                    f"'Desde' ({desde}) no puede ser mayor que 'Hasta' ({hasta}).")
+                return []
+            return list(range(desde - 1, hasta))
         else:
             return []
 
