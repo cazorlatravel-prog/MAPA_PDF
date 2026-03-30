@@ -40,7 +40,7 @@ def mostrar_error_dependencias(faltantes: list):
     root.configure(bg="#1a1a2e")
 
     tk.Label(
-        root, text="\u26a0 Faltan librer\u00edas necesarias",
+        root, text="\u26a0 Faltan librerías necesarias",
         font=("Consolas", 14, "bold"), bg="#1a1a2e", fg="#e94560",
     ).pack(pady=20)
 
@@ -67,73 +67,103 @@ def mostrar_error_dependencias(faltantes: list):
     root.mainloop()
 
 
-def mostrar_splash(root):
-    """Muestra una ventana splash de bienvenida mientras carga la app."""
-    splash = tk.Toplevel(root)
-    splash.overrideredirect(True)
+class SplashScreen:
+    """Ventana splash con barra de progreso real durante la carga."""
 
-    ancho, alto = 480, 260
-    x = (splash.winfo_screenwidth() - ancho) // 2
-    y = (splash.winfo_screenheight() - alto) // 2
-    splash.geometry(f"{ancho}x{alto}+{x}+{y}")
-    splash.configure(bg="#0F1923")
-    splash.attributes("-topmost", True)
+    def __init__(self):
+        self.root = tk.Tk()
+        self.root.overrideredirect(True)
 
-    # Borde sutil
-    borde = tk.Frame(splash, bg="#10B981", bd=0)
-    borde.place(relx=0, rely=0, relwidth=1, relheight=1)
-    interior = tk.Frame(borde, bg="#0F1923")
-    interior.place(x=1, y=1, relwidth=1, relheight=1, width=-2, height=-2)
+        ancho, alto = 500, 300
+        x = (self.root.winfo_screenwidth() - ancho) // 2
+        y = (self.root.winfo_screenheight() - alto) // 2
+        self.root.geometry(f"{ancho}x{alto}+{x}+{y}")
+        self.root.configure(bg="#0F1923")
+        self.root.attributes("-topmost", True)
 
-    # Nombre prominente estilo GIS
-    name_frame = tk.Frame(interior, bg="#0F1923")
-    name_frame.pack(pady=(32, 0))
+        # Borde sutil
+        borde = tk.Frame(self.root, bg="#10B981", bd=0)
+        borde.place(relx=0, rely=0, relwidth=1, relheight=1)
+        interior = tk.Frame(borde, bg="#0F1923")
+        interior.place(x=1, y=1, relwidth=1, relheight=1, width=-2, height=-2)
 
-    tk.Label(
-        name_frame, text="Estela",
-        font=("Segoe UI", 28, "bold"), bg="#0F1923", fg="#10B981",
-    ).pack(side="left")
+        # Nombre prominente estilo GIS
+        name_frame = tk.Frame(interior, bg="#0F1923")
+        name_frame.pack(pady=(40, 0))
 
-    tk.Label(
-        name_frame, text="Gis",
-        font=("Segoe UI", 28), bg="#0F1923", fg="#E8ECF1",
-    ).pack(side="left")
+        tk.Label(
+            name_frame, text="Estela",
+            font=("Segoe UI", 32, "bold"), bg="#0F1923", fg="#10B981",
+        ).pack(side="left")
 
-    # Subtitulo descriptivo
-    tk.Label(
-        interior, text="Planos Forestales",
-        font=("Segoe UI", 11), bg="#0F1923", fg="#8899AA",
-    ).pack(pady=(2, 12))
+        tk.Label(
+            name_frame, text="Gis",
+            font=("Segoe UI", 32), bg="#0F1923", fg="#E8ECF1",
+        ).pack(side="left")
 
-    # Copyright
-    tk.Label(
-        interior,
-        text="\u00a9 Jose Caballero S\u00e1nchez (Cazorla 2026)",
-        font=("Segoe UI", 10, "bold"), bg="#0F1923", fg="#10B981",
-    ).pack(pady=(2, 4))
+        # Subtitulo descriptivo
+        tk.Label(
+            interior, text="Planos Forestales",
+            font=("Segoe UI", 12), bg="#0F1923", fg="#8899AA",
+        ).pack(pady=(2, 8))
 
-    # Licencia
-    tk.Label(
-        interior,
-        text="Licencia de uso gratuita, prohibida su comercializaci\u00f3n.",
-        font=("Segoe UI", 8), bg="#0F1923", fg="#8899AA",
-    ).pack()
+        # Version
+        tk.Label(
+            interior, text="v2.0",
+            font=("Segoe UI", 9), bg="#0F1923", fg="#506070",
+        ).pack(pady=(0, 16))
 
-    # Barra de carga
-    barra_bg = tk.Frame(interior, bg="#243447", height=3)
-    barra_bg.pack(fill="x", padx=40, pady=(18, 0))
-    barra = tk.Frame(barra_bg, bg="#10B981", height=3, width=0)
-    barra.place(x=0, y=0, height=3)
+        # Copyright
+        tk.Label(
+            interior,
+            text="\u00a9 Jose Caballero Sánchez (Cazorla 2026)",
+            font=("Segoe UI", 10, "bold"), bg="#0F1923", fg="#10B981",
+        ).pack(pady=(0, 4))
 
-    # Animacion de la barra
-    def animar(step=0):
-        if step <= 100:
-            ancho_total = barra_bg.winfo_width() or (480 - 80)
-            barra.place(x=0, y=0, height=3, width=int(ancho_total * step / 100))
-            splash.after(20, animar, step + 2)
+        # Licencia
+        tk.Label(
+            interior,
+            text="Licencia de uso gratuita, prohibida su comercialización.",
+            font=("Segoe UI", 8), bg="#0F1923", fg="#8899AA",
+        ).pack()
 
-    splash.after(100, animar)
-    return splash
+        # Texto de estado
+        self._estado_var = tk.StringVar(value="Iniciando...")
+        tk.Label(
+            interior, textvariable=self._estado_var,
+            font=("Segoe UI", 8), bg="#0F1923", fg="#506070",
+        ).pack(pady=(14, 4))
+
+        # Barra de carga
+        barra_bg = tk.Frame(interior, bg="#243447", height=4)
+        barra_bg.pack(fill="x", padx=50, pady=(0, 0))
+        self._barra = tk.Frame(barra_bg, bg="#10B981", height=4, width=0)
+        self._barra.place(x=0, y=0, height=4)
+        self._barra_bg = barra_bg
+
+        # Porcentaje
+        self._pct_var = tk.StringVar(value="0%")
+        tk.Label(
+            interior, textvariable=self._pct_var,
+            font=("Segoe UI", 8), bg="#0F1923", fg="#506070",
+        ).pack(pady=(4, 0))
+
+        self._progreso = 0
+        self.root.update()
+
+    def set_progreso(self, porcentaje: int, texto: str = ""):
+        """Actualiza la barra de progreso y el texto de estado."""
+        self._progreso = porcentaje
+        ancho_total = self._barra_bg.winfo_width() or 400
+        self._barra.place(x=0, y=0, height=4, width=int(ancho_total * porcentaje / 100))
+        self._pct_var.set(f"{porcentaje}%")
+        if texto:
+            self._estado_var.set(texto)
+        self.root.update()
+
+    def cerrar(self):
+        """Cierra la ventana splash."""
+        self.root.destroy()
 
 
 def main():
@@ -142,20 +172,48 @@ def main():
         mostrar_error_dependencias(faltantes)
         sys.exit(1)
 
-    # Importar despues de verificar dependencias
+    # Mostrar splash ANTES de las importaciones pesadas
+    splash = SplashScreen()
+    splash.set_progreso(5, "Cargando bibliotecas base...")
+
+    # Importaciones pesadas por pasos con progreso real
+    splash.set_progreso(10, "Cargando numpy...")
+    import numpy  # noqa: F401
+
+    splash.set_progreso(20, "Cargando matplotlib...")
+    import matplotlib  # noqa: F401
+
+    splash.set_progreso(30, "Cargando geopandas...")
+    import geopandas  # noqa: F401
+
+    splash.set_progreso(40, "Cargando PIL / Pillow...")
+    import PIL  # noqa: F401
+
+    splash.set_progreso(48, "Cargando contextily...")
+    import contextily  # noqa: F401
+
+    splash.set_progreso(55, "Cargando pyproj...")
+    import pyproj  # noqa: F401
+
+    splash.set_progreso(62, "Cargando reportlab...")
+    import reportlab  # noqa: F401
+
+    splash.set_progreso(70, "Cargando interfaz gráfica...")
     from generador_planos.gui.app import App
 
+    splash.set_progreso(85, "Inicializando aplicación...")
+
+    # Crear ventana principal oculta, reutilizando el Tk del splash no es posible
+    # porque splash usa su propio Tk. Cerramos splash y creamos App.
+    splash.set_progreso(95, "Preparando ventana principal...")
+
+    # Guardar geometría del splash para transición suave
+    splash.set_progreso(100, "¡Listo!")
+    splash.root.after(300, splash.cerrar)
+    splash.root.mainloop()
+
+    # Ahora crear la aplicación principal (los módulos ya están cacheados)
     app = App()
-
-    # Mostrar splash
-    splash = mostrar_splash(app)
-    app.withdraw()
-
-    def cerrar_splash():
-        splash.destroy()
-        app.deiconify()
-
-    app.after(2500, cerrar_splash)
     app.mainloop()
 
 
