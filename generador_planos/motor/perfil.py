@@ -8,13 +8,17 @@ Nota: Requiere un DEM (Digital Elevation Model) para funcionar. Si no hay
 DEM disponible, genera un perfil plano con la longitud y pendiente estimada.
 """
 
+from __future__ import annotations
+
 import math
 
 import numpy as np
+from matplotlib.axes import Axes
 from matplotlib.patches import Rectangle
+from shapely.geometry.base import BaseGeometry
 
 
-def calcular_perfil_desde_geometria(geom, n_puntos=50):
+def calcular_perfil_desde_geometria(geom: BaseGeometry, n_puntos: int = 50) -> tuple[np.ndarray, np.ndarray]:
     """Extrae puntos equidistantes a lo largo de una geometría lineal.
 
     Devuelve (distancias_acumuladas, coords_xy) sin elevación.
@@ -33,7 +37,7 @@ def calcular_perfil_desde_geometria(geom, n_puntos=50):
     return distancias, np.array(coords)
 
 
-def estimar_pendiente(geom):
+def estimar_pendiente(geom: BaseGeometry) -> float:
     """Estima la pendiente media de una geometría lineal (sin DEM).
 
     Calcula basándose en la diferencia de coordenadas entre inicio y fin.
@@ -61,7 +65,7 @@ def estimar_pendiente(geom):
     return 0.0
 
 
-def generar_elevaciones_sinteticas(distancias, z_base=500, variacion=50):
+def generar_elevaciones_sinteticas(distancias: np.ndarray, z_base: float = 500, variacion: float = 50) -> np.ndarray:
     """Genera elevaciones sintéticas para demostración cuando no hay DEM.
 
     Usa una función suave (seno + ruido) para simular un perfil topográfico.
@@ -86,8 +90,8 @@ def generar_elevaciones_sinteticas(distancias, z_base=500, variacion=50):
     return elevaciones
 
 
-def dibujar_perfil(ax, distancias, elevaciones, titulo="PERFIL LONGITUDINAL",
-                    color_relleno="#00793244", color_linea="#368f3f"):
+def dibujar_perfil(ax: Axes, distancias: np.ndarray, elevaciones: np.ndarray, titulo: str = "PERFIL LONGITUDINAL",
+                    color_relleno: str = "#00793244", color_linea: str = "#368f3f") -> None:
     """Dibuja un perfil topográfico en un eje matplotlib.
 
     ax: eje matplotlib donde dibujar

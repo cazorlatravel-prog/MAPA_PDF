@@ -11,15 +11,62 @@ Un proyecto almacena:
   - Carpeta de salida
 """
 
+from __future__ import annotations
+
 import json
 import os
 from datetime import datetime
+from typing import Any
 
 
 class Proyecto:
     """Configuración completa de un proyecto de planos."""
 
-    def __init__(self):
+    nombre: str
+    fecha_creacion: str
+    fecha_modificacion: str
+    ruta_infra: str
+    ruta_montes: str
+    formato: str
+    proveedor: str
+    ruta_raster_general: str
+    ruta_raster_localizacion: str
+    prov_localizacion: str
+    escala_localizacion: int
+    ruta_capa_localizacion: str
+    wms_custom_general: dict[str, str]
+    wfs_custom_general: dict[str, str]
+    wms_custom_localizacion: dict[str, str]
+    wfs_custom_localizacion: dict[str, str]
+    escala_manual: int | None
+    transparencia_montes: float
+    color_infra: str
+    campos_visibles: list[str]
+    campo_mapeo: dict[str, str]
+    carpeta_salida: str
+    patron_nombre: str
+    layout_key: str
+    transparencia_infra: float
+    calidad_pdf: str
+    campo_encabezado: str
+    modo_gen: str
+    rango_desde: int
+    rango_hasta: int
+    campo_agrupacion: str
+    multipagina: bool
+    incluir_portada: bool
+    origen_datos_tabla: str
+    ruta_excel_tabla: str
+    hoja_excel_tabla: str
+    campo_enlace_shp: str
+    campo_enlace_excel: str
+    columnas_excel_activas: list[str]
+    cajetin: dict[str, str]
+    plantilla: dict[str, str]
+    capas_extra: list[dict[str, Any]]
+    simbologia: dict[str, Any]
+
+    def __init__(self) -> None:
         self.nombre = "Proyecto sin nombre"
         self.fecha_creacion = datetime.now().isoformat()
         self.fecha_modificacion = datetime.now().isoformat()
@@ -99,7 +146,7 @@ class Proyecto:
         # Simbología (dict serializable)
         self.simbologia = {}
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         self.fecha_modificacion = datetime.now().isoformat()
         return {
             "nombre": self.nombre,
@@ -148,7 +195,7 @@ class Proyecto:
         }
 
     @classmethod
-    def from_dict(cls, d: dict) -> "Proyecto":
+    def from_dict(cls, d: dict[str, Any]) -> Proyecto:
         p = cls()
         for key in [
             "nombre", "fecha_creacion", "fecha_modificacion",
@@ -171,20 +218,20 @@ class Proyecto:
                 setattr(p, key, d[key])
         return p
 
-    def guardar(self, ruta: str):
+    def guardar(self, ruta: str) -> None:
         """Guarda el proyecto a un archivo JSON."""
         with open(ruta, "w", encoding="utf-8") as f:
             json.dump(self.to_dict(), f, indent=2, ensure_ascii=False)
 
     @classmethod
-    def cargar(cls, ruta: str) -> "Proyecto":
+    def cargar(cls, ruta: str) -> Proyecto:
         """Carga un proyecto desde un archivo JSON."""
         with open(ruta, "r", encoding="utf-8") as f:
             data = json.load(f)
         return cls.from_dict(data)
 
 
-def cargar_lotes_csv(ruta_csv: str) -> list:
+def cargar_lotes_csv(ruta_csv: str) -> list[dict[str, str]]:
     """Carga un CSV con rutas a múltiples shapefiles para generación por lotes.
 
     Formato CSV esperado:

@@ -7,9 +7,13 @@ Escalas permitidas (solo estas):
 La escala se elige automáticamente según la extensión de la geometría + margen del 20%.
 """
 
-ESCALAS = [5000, 7500, 10000, 15000, 20000, 25000, 30000]
+from __future__ import annotations
 
-INTERVALOS_GRID = {
+from shapely.geometry.base import BaseGeometry
+
+ESCALAS: list[int] = [5000, 7500, 10000, 15000, 20000, 25000, 30000]
+
+INTERVALOS_GRID: dict[int, int] = {
     5000: 500,
     7500: 500,
     10000: 1000,
@@ -20,7 +24,7 @@ INTERVALOS_GRID = {
 }
 
 # Longitud de la barra de escala gráfica (metros)
-BARRA_ESCALA_M = {
+BARRA_ESCALA_M: dict[int, int] = {
     5000: 1000,
     7500: 1000,
     10000: 1000,
@@ -30,24 +34,25 @@ BARRA_ESCALA_M = {
     30000: 5000,
 }
 
-MARGENES_MM = {"izq": 10, "der": 10, "sup": 10, "inf": 12}
+MARGENES_MM: dict[str, int] = {"izq": 10, "der": 10, "sup": 10, "inf": 12}
 
-FORMATOS = {
+FORMATOS: dict[str, tuple[int, int]] = {
     "A4 Horizontal": (297, 210),
     "A3 Horizontal": (420, 297),
     "A2 Horizontal": (594, 420),
 }
 
 # Proporción del mapa principal respecto al ancho/alto útil
-RATIO_MAPA_ANCHO = 1.0
-RATIO_MAPA_ALTO = 0.78
+RATIO_MAPA_ANCHO: float = 1.0
+RATIO_MAPA_ALTO: float = 0.78
 
-_CABECERA_MM = 6  # Altura de la cabecera (debe coincidir con maquetacion._CABECERA_MM)
+_CABECERA_MM: int = 6  # Altura de la cabecera (debe coincidir con maquetacion._CABECERA_MM)
 
-DPI_DEFAULT = 400  # calidad de impresión alta
+DPI_DEFAULT: int = 400  # calidad de impresión alta
 
 
-def seleccionar_escala(geom, formato_key: str, escala_manual: int = None,
+def seleccionar_escala(geom: BaseGeometry, formato_key: str,
+                       escala_manual: int | None = None,
                        es_lateral: bool = False) -> int:
     """Elige la escala más ajustada de la lista ESCALAS.
 

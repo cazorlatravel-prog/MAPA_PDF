@@ -1,11 +1,15 @@
 """Funciones de utilidad geoespacial compartidas por el motor."""
 
+from __future__ import annotations
+
 import warnings as _warnings
 
 import geopandas as gpd
+from geopandas import GeoDataFrame
+from matplotlib.axes import Axes
 
 
-def _asegurar_crs(gdf, origen: str = ""):
+def _asegurar_crs(gdf: GeoDataFrame, origen: str = "") -> tuple[GeoDataFrame, str]:
     """Asegura que el GeoDataFrame tiene CRS y lo reproyecta a EPSG:25830.
 
     Si no tiene CRS, intenta detectar si las coordenadas son UTM o
@@ -45,7 +49,7 @@ def _asegurar_crs(gdf, origen: str = ""):
     return gdf, aviso
 
 
-def _detectar_geom_type(gdf) -> str:
+def _detectar_geom_type(gdf: GeoDataFrame) -> str:
     """Devuelve el tipo de geometría predominante en el GeoDataFrame."""
     if gdf.empty:
         return "unknown"
@@ -55,8 +59,8 @@ def _detectar_geom_type(gdf) -> str:
     return tipos.mode().iloc[0].lower()
 
 
-def _plot_gdf_por_tipo(gdf, ax, alpha, lw, zorder, color,
-                       linestyle="-", marker="o", facecolor=None):
+def _plot_gdf_por_tipo(gdf: GeoDataFrame, ax: Axes, alpha: float, lw: float, zorder: int, color: str,
+                       linestyle: str = "-", marker: str = "o", facecolor: str | None = None) -> None:
     """Dibuja un GeoDataFrame separando por tipo de geometría si hay mezcla."""
     if gdf.empty:
         return
@@ -81,7 +85,7 @@ def _plot_gdf_por_tipo(gdf, ax, alpha, lw, zorder, color,
                      zorder=zorder, alpha=alpha)
 
 
-def _limpiar_tipos_mixtos(gdf):
+def _limpiar_tipos_mixtos(gdf: GeoDataFrame) -> GeoDataFrame:
     """Convierte columnas con tipos mixtos (str + float) a str para evitar TypeError."""
     for col in gdf.columns:
         if col == "geometry":
@@ -96,7 +100,7 @@ def _limpiar_tipos_mixtos(gdf):
     return gdf
 
 
-def _auto_calcular_campos(gdf):
+def _auto_calcular_campos(gdf: GeoDataFrame) -> GeoDataFrame:
     """Calcula longitud/superficie automáticamente si no existen en el GDF."""
     if "Longitud" not in gdf.columns:
         def _long(g):
@@ -117,7 +121,7 @@ def _auto_calcular_campos(gdf):
     return gdf
 
 
-def _calcular_stats_grupo(gdf_grupo):
+def _calcular_stats_grupo(gdf_grupo: GeoDataFrame) -> dict[str, float]:
     """Calcula estadísticas resumen para un grupo de infraestructuras."""
     stats = {"num_infraestructuras": len(gdf_grupo)}
 
@@ -132,7 +136,7 @@ def _calcular_stats_grupo(gdf_grupo):
     return stats
 
 
-def _leer_geodatos(ruta: str, layer: str = None) -> gpd.GeoDataFrame:
+def _leer_geodatos(ruta: str, layer: str | None = None) -> GeoDataFrame:
     """Lee un shapefile o geodatabase con fallback al driver OpenFileGDB."""
     kwargs = {}
     if layer:
