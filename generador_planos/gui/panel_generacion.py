@@ -31,6 +31,14 @@ class PanelGeneracion:
 
         f = crear_frame_seccion(parent, "\U0001f5a8  GENERACI\u00d3N")
 
+    def _after_seguro(self, ms, func):
+        """Ejecuta func en el hilo principal solo si la ventana sigue viva."""
+        try:
+            if self._parent_window.winfo_exists():
+                self._parent_window.after(ms, func)
+        except Exception:
+            pass
+
         # ── Modo de selección ──
         tk.Label(f, text="Planos a generar:", font=FONT_BOLD,
                  bg=COLOR_PANEL, fg=COLOR_TEXTO).grid(
@@ -606,9 +614,9 @@ class PanelGeneracion:
                         patron_nombre=patron_nombre,
                     )
 
-                    self._parent_window.after(0, self._fin_generacion)
+                    self._after_seguro(0, self._fin_generacion)
                 except GeneracionCancelada:
-                    self._parent_window.after(0, self._fin_cancelacion)
+                    self._after_seguro(0, self._fin_cancelacion)
 
             threading.Thread(target=_worker_agrupado, daemon=True).start()
         else:
@@ -666,9 +674,9 @@ class PanelGeneracion:
                             patron_nombre=patron_nombre,
                         )
 
-                    self._parent_window.after(0, self._fin_generacion)
+                    self._after_seguro(0, self._fin_generacion)
                 except GeneracionCancelada:
-                    self._parent_window.after(0, self._fin_cancelacion)
+                    self._after_seguro(0, self._fin_cancelacion)
 
             threading.Thread(target=_worker, daemon=True).start()
 
@@ -706,9 +714,9 @@ class PanelGeneracion:
                     campo_encabezado=campo_encabezado,
                 )
 
-                self._parent_window.after(0, self._fin_generacion)
+                self._after_seguro(0, self._fin_generacion)
             except GeneracionCancelada:
-                self._parent_window.after(0, self._fin_cancelacion)
+                self._after_seguro(0, self._fin_cancelacion)
 
         threading.Thread(target=_worker_lotes, daemon=True).start()
 
@@ -717,7 +725,7 @@ class PanelGeneracion:
             self._progreso.configure(value=actual, maximum=total)
             self._lbl_progreso.configure(
                 text=f"{actual}/{total} planos generados")
-        self._parent_window.after(0, _update)
+        self._after_seguro(0, _update)
 
     def _fin_generacion(self):
         cfg = self.get_config()
@@ -830,9 +838,9 @@ class PanelGeneracion:
                     escala_manual=cfg.get("escala_manual"),
                     campo_encabezado=cfg.get("campo_encabezado"),
                 )
-                self._parent_window.after(0, lambda: self._mostrar_preview(fig))
+                self._after_seguro(0, lambda: self._mostrar_preview(fig))
             except Exception as e:
-                self._parent_window.after(
+                self._after_seguro(
                     0, lambda: self.callback_log(
                         f"Error en vista previa: {e}", "error"))
 
@@ -912,9 +920,9 @@ class PanelGeneracion:
                     formato_key=cfg["formato"],
                     transparencia_montes=cfg["transparencia"],
                 )
-                self._parent_window.after(0, lambda: self._mostrar_preview(fig))
+                self._after_seguro(0, lambda: self._mostrar_preview(fig))
             except Exception as e:
-                self._parent_window.after(
+                self._after_seguro(
                     0, lambda: self.callback_log(
                         f"Error en mapa gu\u00eda: {e}", "error"))
 
