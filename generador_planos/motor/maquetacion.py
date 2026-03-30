@@ -741,12 +741,16 @@ class MaquetadorPlano:
         if n_cols == 0 or n_rows_data == 0:
             return
 
-        # Anchos proporcionales al contenido
+        # Anchos proporcionales al contenido (muestreo representativo)
         pesos = []
+        # Muestrear hasta 30 filas distribuidas uniformemente
+        n_muestra = min(len(rows), 30)
+        paso = max(1, len(rows) // n_muestra)
+        muestra = rows[::paso][:n_muestra]
         for campo in campos:
             etiq = _etiqueta_campo(campo)
             max_len = len(etiq)
-            for r in rows[:5]:
+            for r in muestra:
                 campo_real = _resolver(campo)
                 val = _fmt_valor(r.get(campo_real, None))
                 if val and val != "\u2014":
