@@ -52,11 +52,6 @@ class GestorCapasExtra:
         """
         try:
             gdf = _leer_geodatos(ruta, layer=layer)
-            if gdf.crs is None:
-                gdf = gdf.set_crs("EPSG:4326")
-            gdf = gdf.to_crs("EPSG:25830")
-            # Construir índice espacial para consultas .cx[] rápidas
-            gdf.sindex
 
             if not nombre:
                 import os
@@ -65,10 +60,17 @@ class GestorCapasExtra:
                 else:
                     nombre = os.path.splitext(os.path.basename(ruta))[0]
 
+            from .generador import _asegurar_crs
+            gdf, aviso_crs = _asegurar_crs(gdf, nombre)
+            # Construir índice espacial para consultas .cx[] rápidas
+            gdf.sindex
+
             capa = CapaExtra(nombre=nombre, ruta=ruta, gdf=gdf, tipo=tipo)
             self.capas.append(capa)
 
             msg = f"\u2713 Capa '{nombre}': {len(gdf)} elementos ({tipo})"
+            if aviso_crs:
+                msg += f"\n  {aviso_crs}"
             return True, msg, capa
         except Exception as e:
             return False, f"Error al cargar capa: {e}", None

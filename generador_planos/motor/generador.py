@@ -31,6 +31,49 @@ from .proyecto import cargar_lotes_csv
 CAMPOS_ATRIBUTOS = list(ETIQUETAS_CAMPOS.keys())
 
 
+import warnings as _warnings
+
+
+def _asegurar_crs(gdf, origen: str = ""):
+    """Asegura que el GeoDataFrame tiene CRS y lo reproyecta a EPSG:25830.
+
+    Si no tiene CRS, intenta detectar si las coordenadas son UTM o
+    geográficas (lat/lon) según el rango de valores, y avisa al usuario.
+    """
+    CRS_DESTINO = "EPSG:25830"
+
+    if gdf.crs is not None:
+        if gdf.crs.to_epsg() != 25830:
+            gdf = gdf.to_crs(CRS_DESTINO)
+        return gdf, ""
+
+    # Sin CRS definido: intentar detectar por rango de coordenadas
+    bounds = gdf.total_bounds  # (minx, miny, maxx, maxy)
+    minx, miny, maxx, maxy = bounds
+
+    aviso = ""
+    if minx > 100_000 and maxx < 900_000 and miny > 3_500_000 and maxy < 5_000_000:
+        # Parece UTM zona 30N (coordenadas típicas de España peninsular)
+        gdf = gdf.set_crs(CRS_DESTINO)
+        aviso = (f"\u26a0 '{origen}' sin CRS definido. "
+                 f"Se asume EPSG:25830 (UTM 30N) por el rango de coordenadas.")
+    elif minx > -20 and maxx < 10 and miny > 25 and maxy < 50:
+        # Parece WGS84 geográficas (lon/lat de España)
+        gdf = gdf.set_crs("EPSG:4326")
+        gdf = gdf.to_crs(CRS_DESTINO)
+        aviso = (f"\u26a0 '{origen}' sin CRS definido. "
+                 f"Se asume EPSG:4326 (WGS84) por el rango de coordenadas.")
+    else:
+        # No se puede determinar: asumir UTM 30N y avisar
+        gdf = gdf.set_crs(CRS_DESTINO)
+        aviso = (f"\u26a0 '{origen}' sin CRS definido y no se pudo detectar "
+                 f"automáticamente. Se asume EPSG:25830. "
+                 f"Rango: X[{minx:.0f}-{maxx:.0f}] Y[{miny:.0f}-{maxy:.0f}]")
+
+    _warnings.warn(aviso)
+    return gdf, aviso
+
+
 def _limpiar_tipos_mixtos(gdf):
     """Convierte columnas con tipos mixtos (str + float) a str para evitar TypeError."""
     import numpy as np
@@ -221,9 +264,8 @@ class GeneradorPlanos:
         """Carga shapefile/GDB de infraestructuras y reproyecta a EPSG:25830."""
         try:
             gdf = _leer_geodatos(ruta, layer=layer)
-            if gdf.crs is None:
-                gdf = gdf.set_crs("EPSG:4326")
-            gdf = gdf.to_crs("EPSG:25830")
+            origen = f"capa '{layer}'" if layer else os.path.basename(ruta)
+            gdf, aviso_crs = _asegurar_crs(gdf, origen)
 
             # Limpiar columnas con tipos mixtos (previene str<float TypeError)
             gdf = _limpiar_tipos_mixtos(gdf)
@@ -240,8 +282,9 @@ class GeneradorPlanos:
             faltantes = [c for c in CAMPOS_ATRIBUTOS if c not in cols]
             self._campo_mapeo = None
 
-            origen = f"capa '{layer}'" if layer else os.path.basename(ruta)
             msg = f"\u2713 {len(gdf)} infraestructuras cargadas ({origen}) | CRS: {gdf.crs.name}"
+            if aviso_crs:
+                msg += f"\n  {aviso_crs}"
             if faltantes:
                 msg += f"\n  \u26a0 Campos no encontrados: {', '.join(faltantes)}"
                 msg += f"\n  Campos disponibles: {', '.join(sorted(cols - {'geometry'}))}"
@@ -256,16 +299,17 @@ class GeneradorPlanos:
     def cargar_montes(self, ruta: str, layer: str = None) -> tuple:
         try:
             gdf = _leer_geodatos(ruta, layer=layer)
-            if gdf.crs is None:
-                gdf = gdf.set_crs("EPSG:4326")
-            gdf = gdf.to_crs("EPSG:25830")
+            origen = f"capa '{layer}'" if layer else os.path.basename(ruta)
+            gdf, aviso_crs = _asegurar_crs(gdf, origen)
             # Limpiar columnas con tipos mixtos
             gdf = _limpiar_tipos_mixtos(gdf)
             # Construir índice espacial para consultas .cx[] rápidas
             gdf.sindex
             self.gdf_montes = gdf
-            origen = f"capa '{layer}'" if layer else os.path.basename(ruta)
-            return True, f"\u2713 Capa montes ({origen}): {len(gdf)} elementos"
+            msg = f"\u2713 Capa montes ({origen}): {len(gdf)} elementos"
+            if aviso_crs:
+                msg += f"\n  {aviso_crs}"
+            return True, msg
         except Exception as e:
             return False, f"Error al cargar montes: {e}"
 
