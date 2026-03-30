@@ -524,6 +524,11 @@ class PanelCapas:
 
     def _previsualizar(self, gdf):
         if self._canvas_widget is not None:
+            # Cerrar la figura matplotlib anterior para liberar memoria
+            try:
+                plt.close(self._canvas_widget.figure)
+            except Exception:
+                pass
             self._canvas_widget.get_tk_widget().destroy()
 
         fig, ax = plt.subplots(1, 1, figsize=(3, 1.5), dpi=72)
