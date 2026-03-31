@@ -27,6 +27,8 @@ class Proyecto:
     fecha_modificacion: str
     ruta_infra: str
     ruta_montes: str
+    layer_infra: str
+    layer_montes: str
     formato: str
     proveedor: str
     ruta_raster_general: str
@@ -74,6 +76,8 @@ class Proyecto:
         # Rutas de datos
         self.ruta_infra = ""
         self.ruta_montes = ""
+        self.layer_infra = ""   # Nombre de capa dentro de GDB (vacío si SHP)
+        self.layer_montes = ""  # Nombre de capa dentro de GDB (vacío si SHP)
 
         # Configuración de generación
         self.formato = "A3 Horizontal"
@@ -154,6 +158,8 @@ class Proyecto:
             "fecha_modificacion": self.fecha_modificacion,
             "ruta_infra": self.ruta_infra,
             "ruta_montes": self.ruta_montes,
+            "layer_infra": self.layer_infra,
+            "layer_montes": self.layer_montes,
             "formato": self.formato,
             "proveedor": self.proveedor,
             "ruta_raster_general": self.ruta_raster_general,
@@ -199,7 +205,8 @@ class Proyecto:
         p = cls()
         for key in [
             "nombre", "fecha_creacion", "fecha_modificacion",
-            "ruta_infra", "ruta_montes", "formato", "proveedor",
+            "ruta_infra", "ruta_montes", "layer_infra", "layer_montes",
+            "formato", "proveedor",
             "ruta_raster_general", "ruta_raster_localizacion", "prov_localizacion",
             "escala_localizacion", "ruta_capa_localizacion",
             "wms_custom_general", "wfs_custom_general",

@@ -46,6 +46,10 @@ class PanelCapas:
         crear_label(f, "Capa Infraestructuras", tipo="titulo").grid(
             row=0, column=0, sticky="w", pady=(0, 2))
 
+        self._ruta_infra_completa = ""   # Ruta absoluta para guardar proyecto
+        self._ruta_montes_completa = ""  # Ruta absoluta para guardar proyecto
+        self._layer_infra = None         # Nombre de capa GDB (si aplica)
+        self._layer_montes = None        # Nombre de capa GDB (si aplica)
         self._ruta_infra = tk.StringVar(value="Sin cargar")
         tk.Label(f, textvariable=self._ruta_infra, font=FONT_SMALL,
                  bg=COLOR_PANEL, fg=COLOR_TEXTO_GRIS,
@@ -148,6 +152,82 @@ class PanelCapas:
 
         f.columnconfigure(0, weight=1)
 
+    def cargar_infra_desde_proyecto(self, ruta: str, layer: str = None,
+                                     mapeo: dict = None):
+        """Carga infraestructuras desde una ruta guardada en proyecto (sin diálogo)."""
+        if not ruta or not os.path.exists(ruta):
+            self.callback_log(
+                f"Ruta de infraestructuras no encontrada: {ruta}", "warn")
+            return
+
+        def tarea():
+            return self.motor.cargar_infraestructuras(ruta, layer=layer)
+
+        def on_ok(resultado):
+            ok, msg, faltantes = resultado
+            if ok:
+                if layer:
+                    self._ruta_infra.set(
+                        f"{os.path.basename(ruta)}\n{layer}")
+                else:
+                    self._ruta_infra.set(os.path.basename(ruta))
+                self._ruta_infra_completa = ruta
+                self._layer_infra = layer
+                self.callback_log(msg, "ok")
+                # Aplicar mapeo guardado antes de notificar la tabla
+                if mapeo:
+                    self.motor.establecer_mapeo_campos(mapeo)
+                    self.callback_log(
+                        f"Mapeo de campos restaurado: {mapeo}", "info")
+                self.callback_tabla()
+                self._previsualizar(self.motor.gdf_infra)
+            else:
+                self.callback_log(msg, "error")
+
+        self._ejecutar_en_hilo(tarea, on_ok,
+                                msg_carga="Cargando infraestructuras del proyecto...")
+
+    def cargar_montes_desde_proyecto(self, ruta: str, layer: str = None):
+        """Carga montes desde una ruta guardada en proyecto (sin diálogo)."""
+        if not ruta or not os.path.exists(ruta):
+            self.callback_log(
+                f"Ruta de montes no encontrada: {ruta}", "warn")
+            return
+
+        def tarea():
+            return self.motor.cargar_montes(ruta, layer=layer)
+
+        def on_ok(resultado):
+            ok, msg = resultado
+            if ok:
+                if layer:
+                    self._ruta_montes.set(
+                        f"{os.path.basename(ruta)}\n{layer}")
+                else:
+                    self._ruta_montes.set(os.path.basename(ruta))
+                self._ruta_montes_completa = ruta
+                self._layer_montes = layer
+                self.callback_log(msg, "ok")
+                if self.callback_montes_cargados:
+                    self.callback_montes_cargados()
+            else:
+                self.callback_log(msg, "error")
+
+        self._ejecutar_en_hilo(tarea, on_ok,
+                                msg_carga="Cargando montes del proyecto...")
+
+    def cargar_capas_extra_desde_proyecto(self, capas_data: list):
+        """Recarga capas extra desde la lista guardada en proyecto."""
+        if not capas_data:
+            return
+        errores = self.motor.gestor_capas.cargar_desde_dict(capas_data)
+        self._actualizar_lista_capas()
+        n = len(self.motor.gestor_capas.capas)
+        self.callback_log(
+            f"Capas extra restauradas: {n} cargadas.", "ok")
+        for err in errores:
+            self.callback_log(err, "warn")
+
     def _ejecutar_en_hilo(self, tarea, callback_ok, callback_error=None,
                            msg_carga="Cargando..."):
         """Ejecuta una tarea pesada en un hilo secundario con feedback visual."""
@@ -190,6 +270,8 @@ class PanelCapas:
             ok, msg, faltantes = resultado
             if ok:
                 self._ruta_infra.set(os.path.basename(ruta))
+                self._ruta_infra_completa = ruta
+                self._layer_infra = None
                 self.callback_log(msg, "ok")
                 self.callback_tabla()
                 self._previsualizar(self.motor.gdf_infra)
@@ -218,6 +300,8 @@ class PanelCapas:
             ok, msg = resultado
             if ok:
                 self._ruta_montes.set(os.path.basename(ruta))
+                self._ruta_montes_completa = ruta
+                self._layer_montes = None
                 self.callback_log(msg, "ok")
                 if self.callback_montes_cargados:
                     self.callback_montes_cargados()
@@ -355,6 +439,8 @@ class PanelCapas:
             ok, msg, faltantes = resultado
             if ok:
                 self._ruta_infra.set(f"{os.path.basename(ruta)}\n{capa}")
+                self._ruta_infra_completa = ruta
+                self._layer_infra = capa
                 self.callback_log(msg, "ok")
                 self.callback_tabla()
                 self._previsualizar(self.motor.gdf_infra)
@@ -381,6 +467,8 @@ class PanelCapas:
             ok, msg = resultado
             if ok:
                 self._ruta_montes.set(f"{os.path.basename(ruta)}\n{capa}")
+                self._ruta_montes_completa = ruta
+                self._layer_montes = capa
                 self.callback_log(msg, "ok")
                 if self.callback_montes_cargados:
                     self.callback_montes_cargados()

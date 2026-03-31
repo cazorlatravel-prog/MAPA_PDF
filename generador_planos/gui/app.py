@@ -467,6 +467,13 @@ class App(tk.Tk):
             p.campo_enlace_excel = self.panel_config.campo_enlace_excel
             p.columnas_excel_activas = self.panel_config.columnas_excel_activas
 
+            # Rutas de capas, nombres de capa GDB y mapeo de campos
+            p.ruta_infra = getattr(self.panel_capas, '_ruta_infra_completa', "")
+            p.ruta_montes = getattr(self.panel_capas, '_ruta_montes_completa', "")
+            p.layer_infra = getattr(self.panel_capas, '_layer_infra', "") or ""
+            p.layer_montes = getattr(self.panel_capas, '_layer_montes', "") or ""
+            p.campo_mapeo = self.motor._campo_mapeo or {}
+
             p.modo_gen = self.panel_generacion._modo_gen.get()
             try:
                 p.rango_desde = int(self.panel_generacion._rango_desde.get())
@@ -629,6 +636,21 @@ class App(tk.Tk):
                 self.panel_generacion._incluir_portada.set(p.incluir_portada)
 
             self._campos_visibles_proyecto = p.campos_visibles or []
+
+            # ── Auto-cargar capas desde rutas guardadas ──
+            if p.ruta_infra:
+                layer_infra = getattr(p, 'layer_infra', "") or None
+                mapeo = p.campo_mapeo if p.campo_mapeo else None
+                self.panel_capas.cargar_infra_desde_proyecto(
+                    p.ruta_infra, layer=layer_infra, mapeo=mapeo)
+
+            if p.ruta_montes:
+                layer_montes = getattr(p, 'layer_montes', "") or None
+                self.panel_capas.cargar_montes_desde_proyecto(
+                    p.ruta_montes, layer=layer_montes)
+
+            if p.capas_extra:
+                self.panel_capas.cargar_capas_extra_desde_proyecto(p.capas_extra)
 
             self._escribir_log(f"Proyecto cargado: {p.nombre}", "ok")
         except Exception as e:
