@@ -1617,16 +1617,14 @@ class MaquetadorPlano(ElementosMapaMixin):
             (5, 5), self.fmt_mm[0] - 10, self.fmt_mm[1] - 10,
             fill=False, edgecolor=c_int, linewidth=0.5))
 
-        # Copyright lateral izquierdo (vertical)
+        # Copyright lateral izquierdo (vertical) — dentro del margen interior
         copyright_text = cajetin.get("copyright", "") if cajetin else ""
         if not copyright_text:
-            copyright_text = (
-                "APP PLANOS PDF COPYRIGHT: JOSE CABALLERO SÁNCHEZ (CAZORLA-2026)"
-            )
+            copyright_text = "Estela Gis COPYRIGHT José Caballero (Cazorla 2026)"
         ax.text(
-            1.8, self.fmt_mm[1] / 2, copyright_text,
+            5.5, self.fmt_mm[1] / 2, copyright_text,
             rotation=90, ha="center", va="center",
-            fontsize=3.5, color="#666666", alpha=0.7,
+            fontsize=2.5, color="#999999", alpha=0.35,
         )
 
     def guardar(self, ruta_out: str, dpi_save: int = None):
