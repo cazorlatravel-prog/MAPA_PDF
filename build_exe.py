@@ -50,6 +50,7 @@ app.mainloop()
 COLLECT_ALL = [
     "matplotlib",
     "contextily",
+    "rasterio",
     "geopandas",
     "pyproj",
     "shapely",
@@ -68,6 +69,9 @@ HIDDEN_IMPORTS = [
     "pyproj", "pyproj.database", "pyproj._crs",
     "shapely", "shapely.geometry",
     "contextily", "contextily.tile",
+    "rasterio", "rasterio.sample", "rasterio._io",
+    "rasterio.crs", "rasterio.enums", "rasterio.errors",
+    "rasterio.transform", "rasterio.vrt",
     "PIL", "PIL.Image",
     "numpy",
     "matplotlib", "matplotlib.figure", "matplotlib.pyplot",
@@ -160,7 +164,7 @@ def construir_exe(modo_onefile=False):
 
     # Collect-submodules para paquetes que fallan con solo collect-all
     for pkg in ["matplotlib", "matplotlib.backends", "geopandas",
-                "pyproj", "shapely", "contextily"]:
+                "pyproj", "shapely", "contextily", "rasterio"]:
         cmd.extend(["--collect-submodules", pkg])
 
     # Collect-data para paquetes con archivos de datos necesarios

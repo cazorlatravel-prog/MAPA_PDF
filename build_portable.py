@@ -180,6 +180,7 @@ app.mainloop()
 COLLECT_ALL = [
     "matplotlib",
     "contextily",
+    "rasterio",
     "geopandas",
     "pyproj",
     "shapely",
@@ -202,6 +203,14 @@ HIDDEN_IMPORTS = [
     "shapely.geometry",
     "contextily",
     "contextily.tile",
+    "rasterio",
+    "rasterio.sample",
+    "rasterio._io",
+    "rasterio.crs",
+    "rasterio.enums",
+    "rasterio.errors",
+    "rasterio.transform",
+    "rasterio.vrt",
     "PIL",
     "PIL.Image",
     "numpy",
@@ -328,7 +337,7 @@ def main():
     print("  Verificando dependencias...")
     faltantes = []
     for mod_name in ["matplotlib", "geopandas", "numpy", "pyproj",
-                     "shapely", "contextily", "PIL", "reportlab"]:
+                     "shapely", "contextily", "rasterio", "PIL", "reportlab"]:
         try:
             __import__(mod_name)
         except ImportError:
@@ -408,7 +417,7 @@ def main():
 
     # Collect-submodules para paquetes que fallan con solo collect-all
     for pkg in ["matplotlib", "matplotlib.backends", "geopandas",
-                "pyproj", "shapely", "contextily"]:
+                "pyproj", "shapely", "contextily", "rasterio"]:
         cmd.extend(["--collect-submodules", pkg])
 
     # Collect-data para paquetes con archivos de datos necesarios
