@@ -604,16 +604,17 @@ class GeneradorPlanos:
         maq.dibujar_cabecera(row, cajetin=self._cajetin, plantilla=self._plantilla)
         maq.dibujar_marcos(plantilla=self._plantilla, cajetin=self._cajetin)
 
-        nombre_infra = str(row.get("Nombre_Infra", f"infra_{idx_fila:04d}"))
+        num_visible = idx_fila + 1
+        nombre_infra = str(row.get("Nombre_Infra", f"infra_{num_visible:04d}"))
         nombre_infra_safe = "".join(c for c in nombre_infra if c.isalnum() or c in "_ -")[:40]
 
         if patron_nombre:
             nombre_base = patron_nombre.format(
-                num=f"{idx_fila:04d}", nombre=nombre_infra_safe,
+                num=f"{num_visible:04d}", nombre=nombre_infra_safe,
                 campo=nombre_infra_safe)
             nombre_base = "".join(c for c in nombre_base if c.isalnum() or c in "_ -.")[:80]
         else:
-            nombre_base = f"plano_{idx_fila:04d}_{nombre_infra_safe}"
+            nombre_base = f"plano_{num_visible:04d}_{nombre_infra_safe}"
         nombre_arch = f"{nombre_base}.pdf"
         ruta_out = os.path.join(salida_dir, nombre_arch)
 
@@ -905,7 +906,7 @@ class GeneradorPlanos:
         total = len(indices)
         for i, idx in enumerate(indices):
             self._check_cancelado()
-            nombre = self.gdf_infra.iloc[idx].get("Nombre_Infra", f"#{idx}")
+            nombre = self.gdf_infra.iloc[idx].get("Nombre_Infra", f"#{idx + 1}")
             if callback_log:
                 callback_log(f"\n[{i + 1}/{total}] Generando: {nombre}")
             try:
@@ -1022,7 +1023,7 @@ class GeneradorPlanos:
                 items_idx = []
                 for i, idx in enumerate(indices):
                     nombre = str(self.gdf_infra.iloc[idx].get(
-                        "Nombre_Infra", f"Infraestructura #{idx}"))
+                        "Nombre_Infra", f"Infraestructura #{idx + 1}"))
                     items_idx.append((i + 1, nombre, ""))
                 fig_indice = crear_indice(formato_key, items_idx,
                                            plantilla=self._plantilla)
@@ -1055,7 +1056,7 @@ class GeneradorPlanos:
             # Planos
             for i, idx in enumerate(indices):
                 self._check_cancelado()
-                nombre = self.gdf_infra.iloc[idx].get("Nombre_Infra", f"#{idx}")
+                nombre = self.gdf_infra.iloc[idx].get("Nombre_Infra", f"#{idx + 1}")
                 if callback_log:
                     callback_log(f"\n[{i + 1}/{total}] Generando: {nombre}")
                 try:
