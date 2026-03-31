@@ -33,18 +33,114 @@ ICON_FILE = os.path.join("assets", "icon.ico")
 LAUNCHER_SCRIPT = "_launcher_portable.py"
 
 LAUNCHER_CODE = '''\
-"""Launcher para el ejecutable portable."""
+"""Launcher para el ejecutable portable con splash screen."""
 import sys
 import os
+import tkinter as tk
 
 # Asegurar que el paquete se encuentra
 if getattr(sys, 'frozen', False):
     base = sys._MEIPASS
     sys.path.insert(0, base)
-    # Forzar importación de matplotlib antes de cualquier otro import
-    # para que PyInstaller lo resuelva correctamente
     os.environ["MPLBACKEND"] = "Agg"
 
+
+class SplashScreen:
+    """Ventana splash con barra de progreso real durante la carga."""
+
+    def __init__(self):
+        self.root = tk.Tk()
+        self.root.overrideredirect(True)
+
+        ancho, alto = 500, 300
+        x = (self.root.winfo_screenwidth() - ancho) // 2
+        y = (self.root.winfo_screenheight() - alto) // 2
+        self.root.geometry(f"{ancho}x{alto}+{x}+{y}")
+        self.root.configure(bg="#0F1923")
+        self.root.attributes("-topmost", True)
+
+        borde = tk.Frame(self.root, bg="#10B981", bd=0)
+        borde.place(relx=0, rely=0, relwidth=1, relheight=1)
+        interior = tk.Frame(borde, bg="#0F1923")
+        interior.place(x=1, y=1, relwidth=1, relheight=1, width=-2, height=-2)
+
+        name_frame = tk.Frame(interior, bg="#0F1923")
+        name_frame.pack(pady=(40, 0))
+
+        tk.Label(
+            name_frame, text="Estela",
+            font=("Segoe UI", 32, "bold"), bg="#0F1923", fg="#10B981",
+        ).pack(side="left")
+
+        tk.Label(
+            name_frame, text="Gis",
+            font=("Segoe UI", 32), bg="#0F1923", fg="#E8ECF1",
+        ).pack(side="left")
+
+        tk.Label(
+            interior, text="Planos Forestales",
+            font=("Segoe UI", 12), bg="#0F1923", fg="#8899AA",
+        ).pack(pady=(2, 8))
+
+        tk.Label(
+            interior, text="v2.0",
+            font=("Segoe UI", 9), bg="#0F1923", fg="#506070",
+        ).pack(pady=(0, 16))
+
+        tk.Label(
+            interior,
+            text="\\u00a9 Jose Caballero S\\u00e1nchez (Cazorla 2026)",
+            font=("Segoe UI", 10, "bold"), bg="#0F1923", fg="#10B981",
+        ).pack(pady=(0, 4))
+
+        tk.Label(
+            interior,
+            text="Licencia de uso gratuita, prohibida su comercializaci\\u00f3n.",
+            font=("Segoe UI", 8), bg="#0F1923", fg="#8899AA",
+        ).pack()
+
+        self._estado_var = tk.StringVar(value="Iniciando...")
+        tk.Label(
+            interior, textvariable=self._estado_var,
+            font=("Segoe UI", 8), bg="#0F1923", fg="#506070",
+        ).pack(pady=(14, 4))
+
+        barra_bg = tk.Frame(interior, bg="#243447", height=4)
+        barra_bg.pack(fill="x", padx=50, pady=(0, 0))
+        self._barra = tk.Frame(barra_bg, bg="#10B981", height=4, width=0)
+        self._barra.place(x=0, y=0, height=4)
+        self._barra_bg = barra_bg
+
+        self._pct_var = tk.StringVar(value="0%")
+        tk.Label(
+            interior, textvariable=self._pct_var,
+            font=("Segoe UI", 8), bg="#0F1923", fg="#506070",
+        ).pack(pady=(4, 0))
+
+        self._progreso = 0
+        self.root.update()
+
+    def set_progreso(self, porcentaje, texto=""):
+        self._progreso = porcentaje
+        ancho_total = self._barra_bg.winfo_width() or 400
+        self._barra.place(x=0, y=0, height=4, width=int(ancho_total * porcentaje / 100))
+        self._pct_var.set(f"{porcentaje}%")
+        if texto:
+            self._estado_var.set(texto)
+        self.root.update()
+
+    def cerrar(self):
+        self.root.destroy()
+
+
+# Mostrar splash ANTES de las importaciones pesadas
+splash = SplashScreen()
+splash.set_progreso(5, "Cargando bibliotecas base...")
+
+splash.set_progreso(10, "Cargando numpy...")
+import numpy  # noqa: F401
+
+splash.set_progreso(15, "Cargando matplotlib...")
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -52,7 +148,29 @@ import matplotlib.backends.backend_agg
 import matplotlib.backends.backend_pdf
 import matplotlib.backends.backend_svg
 
+splash.set_progreso(30, "Cargando geopandas...")
+import geopandas  # noqa: F401
+
+splash.set_progreso(40, "Cargando PIL / Pillow...")
+import PIL  # noqa: F401
+
+splash.set_progreso(48, "Cargando contextily...")
+import contextily  # noqa: F401
+
+splash.set_progreso(55, "Cargando pyproj...")
+import pyproj  # noqa: F401
+
+splash.set_progreso(62, "Cargando reportlab...")
+import reportlab  # noqa: F401
+
+splash.set_progreso(70, "Cargando interfaz gr\\u00e1fica...")
 from generador_planos.gui.app import App
+
+splash.set_progreso(85, "Inicializando aplicaci\\u00f3n...")
+splash.set_progreso(95, "Preparando ventana principal...")
+splash.set_progreso(100, "\\u00a1Listo!")
+splash.root.after(300, splash.cerrar)
+splash.root.mainloop()
 
 app = App()
 app.mainloop()

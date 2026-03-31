@@ -2,13 +2,14 @@
 Panel de seleccion de campos a mostrar en el plano.
 Campos dinamicos: se actualizan al cargar un shapefile, mostrando
 las columnas reales de la capa + campos calculados automaticamente.
+Permite reordenar campos mediante drag-and-drop.
 """
 
 import tkinter as tk
 
 from .estilos import (
     COLOR_PANEL, COLOR_TEXTO, COLOR_TEXTO_GRIS, COLOR_BORDE, COLOR_ACENTO,
-    COLOR_ENTRY,
+    COLOR_ENTRY, COLOR_HOVER,
     FONT_SMALL, FONT_BOLD,
     crear_frame_seccion, crear_label,
 )
@@ -19,13 +20,16 @@ _CAMPOS_DEFECTO = list(ETIQUETAS_CAMPOS.keys())
 
 
 class PanelCampos:
-    """Panel con checkboxes para seleccionar campos visibles en el plano."""
+    """Panel con checkboxes para seleccionar campos visibles en el plano.
+    Soporta reordenación mediante drag-and-drop."""
 
     def __init__(self, parent):
         self._parent_frame = crear_frame_seccion(parent,
                                                   "\U0001f3f7  CAMPOS EN EL PLANO")
         self._check_campos = {}
-        self._widgets = []
+        self._widgets = []          # list of row frames
+        self._campos_orden = []     # ordered field names
+        self._drag_data = None      # drag state
 
         # Selector de campo encabezado
         enc_f = tk.Frame(self._parent_frame, bg=COLOR_PANEL)
@@ -68,26 +72,113 @@ class PanelCampos:
             w.destroy()
         self._widgets.clear()
         self._check_campos.clear()
+        self._campos_orden = list(campos)
 
         self._actualizar_combo_encabezado(campos)
 
         f = self._parent_frame
         for i, campo in enumerate(campos):
             var = tk.BooleanVar(value=True)
+            self._check_campos[campo] = var
+
+            row_frame = tk.Frame(f, bg=COLOR_PANEL)
+            row_frame.grid(row=i + 2, column=0, sticky="ew", pady=1)
+            row_frame._campo = campo
+
+            # Drag handle
+            handle = tk.Label(
+                row_frame, text="\u2261", font=("Segoe UI", 11),
+                bg=COLOR_PANEL, fg=COLOR_TEXTO_GRIS, cursor="fleur",
+                padx=2,
+            )
+            handle.pack(side="left")
+
             etiq = ETIQUETAS_CAMPOS.get(campo, campo)
             cb = tk.Checkbutton(
-                f, text=etiq, variable=var,
+                row_frame, text=etiq, variable=var,
                 font=FONT_SMALL, bg=COLOR_PANEL, fg=COLOR_TEXTO,
                 selectcolor=COLOR_ENTRY, activebackground=COLOR_PANEL,
                 activeforeground=COLOR_ACENTO, cursor="hand2",
                 command=self._actualizar_count, bd=0,
                 highlightthickness=0,
             )
-            cb.grid(row=i + 2, column=0, sticky="w", pady=1)
-            self._check_campos[campo] = var
-            self._widgets.append(cb)
+            cb.pack(side="left", fill="x", expand=True)
+
+            # Bind drag events on the handle
+            handle.bind("<ButtonPress-1>", lambda e, rf=row_frame: self._drag_start(e, rf))
+            handle.bind("<B1-Motion>", self._drag_motion)
+            handle.bind("<ButtonRelease-1>", self._drag_end)
+
+            self._widgets.append(row_frame)
 
         self._actualizar_count()
+
+    # ── Drag-and-drop ──────────────────────────────────────────────────
+
+    def _drag_start(self, event, row_frame):
+        """Start dragging a row."""
+        self._drag_data = {
+            "widget": row_frame,
+            "start_y": event.y_root,
+            "index": self._widgets.index(row_frame),
+        }
+        # Highlight the dragged row
+        row_frame.configure(bg=COLOR_HOVER)
+        for child in row_frame.winfo_children():
+            child.configure(bg=COLOR_HOVER)
+
+    def _drag_motion(self, event):
+        """Handle mouse motion during drag."""
+        if not self._drag_data:
+            return
+
+        dragged = self._drag_data["widget"]
+        drag_idx = self._widgets.index(dragged)
+
+        # Find which row we're hovering over
+        for i, row in enumerate(self._widgets):
+            if row is dragged:
+                continue
+            ry = row.winfo_rooty()
+            rh = row.winfo_height()
+            mid = ry + rh // 2
+            if event.y_root < mid and i < drag_idx:
+                self._swap_rows(drag_idx, i)
+                break
+            elif event.y_root > mid and i > drag_idx:
+                self._swap_rows(drag_idx, i)
+                break
+
+    def _drag_end(self, event):
+        """Finish dragging."""
+        if not self._drag_data:
+            return
+        dragged = self._drag_data["widget"]
+        dragged.configure(bg=COLOR_PANEL)
+        for child in dragged.winfo_children():
+            child.configure(bg=COLOR_PANEL)
+        self._drag_data = None
+
+    def _swap_rows(self, from_idx, to_idx):
+        """Swap two rows in the list and re-grid them."""
+        widgets = self._widgets
+        campos = self._campos_orden
+
+        # Swap in lists
+        widgets[from_idx], widgets[to_idx] = widgets[to_idx], widgets[from_idx]
+        campos[from_idx], campos[to_idx] = campos[to_idx], campos[from_idx]
+
+        # Re-grid all rows
+        for i, row in enumerate(widgets):
+            row.grid_configure(row=i + 2)
+
+        # Update _check_campos order to match
+        new_check = {}
+        for campo in campos:
+            new_check[campo] = self._check_campos[campo]
+        self._check_campos = new_check
+
+    # ── Selection helpers ──────────────────────────────────────────────
 
     def _sel_todos(self):
         for v in self._check_campos.values():
@@ -116,7 +207,8 @@ class PanelCampos:
             self._combo_encabezado.set("(automatico)")
 
     def obtener_campos_activos(self) -> list:
-        return [c for c, v in self._check_campos.items() if v.get()]
+        return [c for c in self._campos_orden
+                if self._check_campos.get(c, tk.BooleanVar(value=False)).get()]
 
     def obtener_campo_encabezado(self) -> str | None:
         val = self._combo_encabezado.get()
