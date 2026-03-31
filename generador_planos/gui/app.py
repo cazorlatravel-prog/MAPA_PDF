@@ -359,6 +359,66 @@ class App(tk.Tk):
             self.panel_campos._actualizar_count()
             self._campos_visibles_proyecto = []
 
+        # Restaurar orden de campos personalizado
+        if hasattr(self, "_campos_orden_proyecto") and self._campos_orden_proyecto:
+            self.panel_campos.restaurar_orden(self._campos_orden_proyecto)
+            self._campos_orden_proyecto = []
+
+        # Restaurar estado UI de simbología
+        if hasattr(self, "_simbologia_ui_proyecto") and self._simbologia_ui_proyecto:
+            sui = self._simbologia_ui_proyecto
+            if "grosor_infra" in sui:
+                self.panel_simbologia._grosor_infra.set(sui["grosor_infra"])
+            if "alpha_infra" in sui:
+                self.panel_simbologia._alpha_infra.set(sui["alpha_infra"])
+            if "trazo_infra" in sui:
+                self.panel_simbologia._trazo_infra.set(sui["trazo_infra"])
+            if "marcador" in sui:
+                self.panel_simbologia._marcador.set(sui["marcador"])
+            if "color_montes" in sui:
+                self.panel_simbologia._color_montes = sui["color_montes"]
+                self.panel_simbologia._lbl_col_montes.configure(
+                    bg=sui["color_montes"])
+            if "campo_categoria" in sui and sui["campo_categoria"] != "(ninguno)":
+                self.panel_simbologia._campo_categoria.set(sui["campo_categoria"])
+                self.panel_simbologia._on_campo_cat_changed()
+            if "campo_cat_montes" in sui and sui["campo_cat_montes"] != "(ninguno)":
+                self.panel_simbologia._campo_cat_montes.set(sui["campo_cat_montes"])
+                self.panel_simbologia._on_campo_cat_montes_changed()
+            # Aplicar simbología restaurada al motor
+            self.panel_simbologia._aplicar()
+            self._simbologia_ui_proyecto = {}
+
+        # Restaurar filtros
+        if hasattr(self, "_filtros_proyecto") and self._filtros_proyecto:
+            flt = self._filtros_proyecto
+            if flt.get("busqueda"):
+                self.panel_filtros._busqueda.set(flt["busqueda"])
+            if flt.get("campo_filtro") and flt["campo_filtro"] != "(todos)":
+                self.panel_filtros._campo_filtro.set(flt["campo_filtro"])
+                self.panel_filtros._on_campo_changed()
+            if flt.get("valor_filtro") and flt["valor_filtro"] != "(todos)":
+                self.panel_filtros._valor_filtro.set(flt["valor_filtro"])
+            if flt.get("sup_min"):
+                self.panel_filtros._sup_min.delete(0, "end")
+                self.panel_filtros._sup_min.insert(0, flt["sup_min"])
+            if flt.get("sup_max"):
+                self.panel_filtros._sup_max.delete(0, "end")
+                self.panel_filtros._sup_max.insert(0, flt["sup_max"])
+            if flt.get("lon_min"):
+                self.panel_filtros._lon_min.delete(0, "end")
+                self.panel_filtros._lon_min.insert(0, flt["lon_min"])
+            if flt.get("lon_max"):
+                self.panel_filtros._lon_max.delete(0, "end")
+                self.panel_filtros._lon_max.insert(0, flt["lon_max"])
+            # Aplicar filtros si hay algo activo
+            hay_filtro = any(flt.get(k) for k in [
+                "busqueda", "sup_min", "sup_max", "lon_min", "lon_max"])
+            hay_filtro = hay_filtro or flt.get("campo_filtro", "(todos)") != "(todos)"
+            if hay_filtro:
+                self.panel_filtros._aplicar_filtros()
+            self._filtros_proyecto = {}
+
     def _on_montes_cargados(self):
         self.panel_simbologia.actualizar_campo_categoria_montes()
         if self.motor.gdf_montes is not None:
@@ -486,6 +546,31 @@ class App(tk.Tk):
             p.campo_agrupacion = self.panel_generacion._campo_agrupacion.get()
             p.multipagina = self.panel_generacion._multipagina.get()
             p.incluir_portada = self.panel_generacion._incluir_portada.get()
+
+            # Estado UI de simbología
+            p.simbologia_ui = {
+                "grosor_infra": self.panel_simbologia._grosor_infra.get(),
+                "alpha_infra": self.panel_simbologia._alpha_infra.get(),
+                "trazo_infra": self.panel_simbologia._trazo_infra.get(),
+                "marcador": self.panel_simbologia._marcador.get(),
+                "color_montes": self.panel_simbologia._color_montes,
+                "campo_categoria": self.panel_simbologia._campo_categoria.get(),
+                "campo_cat_montes": self.panel_simbologia._campo_cat_montes.get(),
+            }
+
+            # Filtros activos
+            p.filtros = {
+                "busqueda": self.panel_filtros._busqueda.get(),
+                "campo_filtro": self.panel_filtros._campo_filtro.get(),
+                "valor_filtro": self.panel_filtros._valor_filtro.get(),
+                "sup_min": self.panel_filtros._sup_min.get().strip(),
+                "sup_max": self.panel_filtros._sup_max.get().strip(),
+                "lon_min": self.panel_filtros._lon_min.get().strip(),
+                "lon_max": self.panel_filtros._lon_max.get().strip(),
+            }
+
+            # Orden de campos personalizado
+            p.campos_orden = list(self.panel_campos._campos_orden)
 
             p.guardar(ruta)
             self._escribir_log(f"Proyecto guardado: {ruta}", "ok")
@@ -636,6 +721,9 @@ class App(tk.Tk):
                 self.panel_generacion._incluir_portada.set(p.incluir_portada)
 
             self._campos_visibles_proyecto = p.campos_visibles or []
+            self._campos_orden_proyecto = getattr(p, 'campos_orden', []) or []
+            self._simbologia_ui_proyecto = getattr(p, 'simbologia_ui', {}) or {}
+            self._filtros_proyecto = getattr(p, 'filtros', {}) or {}
 
             # ── Auto-cargar capas desde rutas guardadas ──
             if p.ruta_infra:

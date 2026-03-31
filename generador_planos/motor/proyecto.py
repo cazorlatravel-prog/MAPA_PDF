@@ -67,6 +67,12 @@ class Proyecto:
     plantilla: dict[str, str]
     capas_extra: list[dict[str, Any]]
     simbologia: dict[str, Any]
+    # Simbología UI
+    simbologia_ui: dict[str, Any]
+    # Filtros
+    filtros: dict[str, Any]
+    # Orden de campos
+    campos_orden: list[str]
 
     def __init__(self) -> None:
         self.nombre = "Proyecto sin nombre"
@@ -150,6 +156,15 @@ class Proyecto:
         # Simbología (dict serializable)
         self.simbologia = {}
 
+        # Estado UI de simbología (grosor, alpha, trazo, marcador, etc.)
+        self.simbologia_ui = {}
+
+        # Filtros activos
+        self.filtros = {}
+
+        # Orden de campos personalizado
+        self.campos_orden = []
+
     def to_dict(self) -> dict[str, Any]:
         self.fecha_modificacion = datetime.now().isoformat()
         return {
@@ -192,6 +207,9 @@ class Proyecto:
             "plantilla": self.plantilla,
             "capas_extra": self.capas_extra,
             "simbologia": self.simbologia,
+            "simbologia_ui": self.simbologia_ui,
+            "filtros": self.filtros,
+            "campos_orden": self.campos_orden,
             "origen_datos_tabla": self.origen_datos_tabla,
             "ruta_excel_tabla": self.ruta_excel_tabla,
             "hoja_excel_tabla": self.hoja_excel_tabla,
@@ -218,6 +236,7 @@ class Proyecto:
             "modo_gen", "rango_desde", "rango_hasta", "campo_agrupacion",
             "multipagina", "incluir_portada",
             "cajetin", "plantilla", "capas_extra", "simbologia",
+            "simbologia_ui", "filtros", "campos_orden",
             "origen_datos_tabla", "ruta_excel_tabla", "hoja_excel_tabla",
             "campo_enlace_shp", "campo_enlace_excel", "columnas_excel_activas",
         ]:

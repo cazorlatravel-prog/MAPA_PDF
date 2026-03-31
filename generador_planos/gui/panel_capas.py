@@ -152,13 +152,38 @@ class PanelCapas:
 
         f.columnconfigure(0, weight=1)
 
+    def _pedir_nueva_ruta(self, ruta_original: str, tipo_capa: str) -> str | None:
+        """Pide al usuario una nueva ruta cuando el archivo no se encuentra."""
+        respuesta = messagebox.askyesno(
+            "Archivo no encontrado",
+            f"No se encuentra la capa de {tipo_capa}:\n\n"
+            f"{ruta_original}\n\n"
+            f"¿Desea seleccionar la nueva ubicación del archivo?")
+        if not respuesta:
+            return None
+
+        es_gdb = ruta_original.lower().rstrip("/\\").endswith(".gdb")
+        if es_gdb:
+            nueva = filedialog.askdirectory(
+                title=f"Seleccionar nueva ubicación GDB ({tipo_capa})")
+        else:
+            nueva = filedialog.askopenfilename(
+                title=f"Seleccionar nueva ubicación ({tipo_capa})",
+                filetypes=[("Shapefile", "*.shp"), ("Todos", "*.*")])
+        return nueva if nueva else None
+
     def cargar_infra_desde_proyecto(self, ruta: str, layer: str = None,
                                      mapeo: dict = None):
         """Carga infraestructuras desde una ruta guardada en proyecto (sin diálogo)."""
-        if not ruta or not os.path.exists(ruta):
-            self.callback_log(
-                f"Ruta de infraestructuras no encontrada: {ruta}", "warn")
+        if not ruta:
             return
+        if not os.path.exists(ruta):
+            nueva = self._pedir_nueva_ruta(ruta, "infraestructuras")
+            if not nueva:
+                self.callback_log(
+                    f"Capa de infraestructuras omitida (no encontrada).", "warn")
+                return
+            ruta = nueva
 
         def tarea():
             return self.motor.cargar_infraestructuras(ruta, layer=layer)
@@ -189,10 +214,15 @@ class PanelCapas:
 
     def cargar_montes_desde_proyecto(self, ruta: str, layer: str = None):
         """Carga montes desde una ruta guardada en proyecto (sin diálogo)."""
-        if not ruta or not os.path.exists(ruta):
-            self.callback_log(
-                f"Ruta de montes no encontrada: {ruta}", "warn")
+        if not ruta:
             return
+        if not os.path.exists(ruta):
+            nueva = self._pedir_nueva_ruta(ruta, "montes")
+            if not nueva:
+                self.callback_log(
+                    f"Capa de montes omitida (no encontrada).", "warn")
+                return
+            ruta = nueva
 
         def tarea():
             return self.motor.cargar_montes(ruta, layer=layer)
@@ -220,7 +250,21 @@ class PanelCapas:
         """Recarga capas extra desde la lista guardada en proyecto."""
         if not capas_data:
             return
-        errores = self.motor.gestor_capas.cargar_desde_dict(capas_data)
+        # Verificar rutas y pedir nuevas si no se encuentran
+        for d in capas_data:
+            ruta = d.get("ruta", "")
+            if ruta and not os.path.exists(ruta):
+                nombre = d.get("nombre", "desconocida")
+                nueva = self._pedir_nueva_ruta(ruta, f"capa '{nombre}'")
+                if nueva:
+                    d["ruta"] = nueva
+                else:
+                    d["_omitir"] = True
+                    self.callback_log(
+                        f"Capa extra '{nombre}' omitida (no encontrada).", "warn")
+
+        capas_validas = [d for d in capas_data if not d.get("_omitir")]
+        errores = self.motor.gestor_capas.cargar_desde_dict(capas_validas)
         self._actualizar_lista_capas()
         n = len(self.motor.gestor_capas.capas)
         self.callback_log(

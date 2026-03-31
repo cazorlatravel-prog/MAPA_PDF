@@ -206,6 +206,35 @@ class PanelCampos:
         if self._combo_encabezado.get() not in opciones:
             self._combo_encabezado.set("(automatico)")
 
+    def restaurar_orden(self, orden: list):
+        """Restaura el orden de campos desde un proyecto guardado."""
+        # Solo reordenar campos que existen actualmente
+        campos_actuales = set(self._campos_orden)
+        orden_valido = [c for c in orden if c in campos_actuales]
+        # Añadir campos nuevos que no estaban en el orden guardado
+        restantes = [c for c in self._campos_orden if c not in orden_valido]
+        nuevo_orden = orden_valido + restantes
+
+        if nuevo_orden == self._campos_orden:
+            return
+
+        self._campos_orden = nuevo_orden
+        # Reordenar check_campos para mantener coherencia
+        new_check = {}
+        for campo in nuevo_orden:
+            new_check[campo] = self._check_campos[campo]
+        self._check_campos = new_check
+
+        # Re-grid widgets según nuevo orden
+        for i, campo in enumerate(nuevo_orden):
+            for w in self._widgets:
+                if getattr(w, '_campo', None) == campo:
+                    w.grid_configure(row=i + 2)
+                    break
+        # Reordenar la lista de widgets también
+        widget_map = {getattr(w, '_campo', None): w for w in self._widgets}
+        self._widgets = [widget_map[c] for c in nuevo_orden if c in widget_map]
+
     def obtener_campos_activos(self) -> list:
         return [c for c in self._campos_orden
                 if self._check_campos.get(c, tk.BooleanVar(value=False)).get()]
