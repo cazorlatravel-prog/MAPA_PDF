@@ -840,9 +840,9 @@ class PanelGeneracion:
                 )
                 self._after_seguro(0, lambda: self._mostrar_preview(fig))
             except Exception as e:
+                msg = f"Error en vista previa: {e}"
                 self._after_seguro(
-                    0, lambda: self.callback_log(
-                        f"Error en vista previa: {e}", "error"))
+                    0, lambda: self.callback_log(msg, "error"))
 
         threading.Thread(target=_worker, daemon=True).start()
 
@@ -919,9 +919,9 @@ class PanelGeneracion:
                 )
                 self._after_seguro(0, lambda: self._mostrar_preview(fig))
             except Exception as e:
+                msg = f"Error en mapa gu\u00eda: {e}"
                 self._after_seguro(
-                    0, lambda: self.callback_log(
-                        f"Error en mapa gu\u00eda: {e}", "error"))
+                    0, lambda: self.callback_log(msg, "error"))
 
         threading.Thread(target=_worker, daemon=True).start()
 
