@@ -906,11 +906,15 @@ def _construir_vrt_xml_manual(vrt_path, archivos):
     n_bandas = primera["count"]
     dtypes = primera["dtypes"]
 
-    # Verificar compatibilidad básica entre rásters
+    # Verificar compatibilidad básica entre rásters. Usamos _crs_iguales
+    # (comparación por EPSG cuando sea posible) en lugar de == sobre objetos
+    # CRS de rasterio, porque dos hojas con el mismo EPSG pueden tener WKTs
+    # distintos (según la versión de PROJ/GDAL que los escribió) y la
+    # comparación directa las marcaría erróneamente como incompatibles.
     incompatibles = []
     for s in fuentes[1:]:
         nombre = os.path.basename(s["path"])
-        if s["crs"] != crs:
+        if not _crs_iguales(s["crs"], crs):
             incompatibles.append(f"CRS distinto en {nombre}")
         if s["count"] != n_bandas:
             incompatibles.append(f"Número de bandas distinto en {nombre}")
