@@ -373,6 +373,13 @@ def construir_vrt_desde_carpeta(carpeta: str) -> str:
     El VRT se guarda junto a la carpeta con nombre '<carpeta>.vrt'.
     Si ya existe y es más reciente que los archivos, lo reutiliza.
 
+    Estrategia de construcción (en orden de preferencia):
+      1. Comando ``gdalbuildvrt`` (si está en el PATH).
+      2. ``osgeo.gdal.BuildVRT`` (si el binding Python de GDAL está instalado).
+      3. Construcción manual del XML VRT usando ``rasterio`` para leer los
+         metadatos de cada ráster. No requiere ``gdalbuildvrt`` ni el
+         paquete ``osgeo``.
+
     Returns:
         Ruta al fichero .vrt generado.
     """
@@ -393,6 +400,8 @@ def construir_vrt_desde_carpeta(carpeta: str) -> str:
         raise FileNotFoundError(
             f"No se encontraron archivos ráster en: {carpeta}")
 
+    archivos = sorted(archivos)
+
     # Comprobar si el VRT existente es válido (más reciente que los rásters)
     if vrt_path.exists():
         vrt_mtime = vrt_path.stat().st_mtime
@@ -400,23 +409,228 @@ def construir_vrt_desde_carpeta(carpeta: str) -> str:
         if vrt_mtime > max_raster_mtime:
             return str(vrt_path)
 
-    # Construir VRT con gdalbuildvrt (viene con GDAL/rasterio)
+    # 1) Intentar con gdalbuildvrt (el método más robusto si está disponible)
     try:
-        cmd = ["gdalbuildvrt", str(vrt_path)] + sorted(archivos)
+        cmd = ["gdalbuildvrt", str(vrt_path)] + archivos
         subprocess.run(cmd, check=True, capture_output=True, text=True)
-    except FileNotFoundError:
-        # gdalbuildvrt no disponible, construir con rasterio/GDAL Python
-        try:
-            from osgeo import gdal
-            gdal.BuildVRT(str(vrt_path), sorted(archivos))
-        except ImportError:
-            raise ImportError(
-                "Se necesita GDAL para generar el mosaico virtual.\n"
-                "Instálalo con: pip install gdal\n"
-                "O crea un archivo .vrt manualmente con: "
-                "gdalbuildvrt mosaico.vrt carpeta/*.tif")
+        return str(vrt_path)
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        pass
 
-    return str(vrt_path)
+    # 2) Intentar con el binding Python de GDAL (osgeo.gdal)
+    try:
+        from osgeo import gdal  # type: ignore
+        gdal.BuildVRT(str(vrt_path), archivos)
+        return str(vrt_path)
+    except ImportError:
+        pass
+    except Exception:
+        pass
+
+    # 3) Último recurso: construir el XML del VRT manualmente usando rasterio.
+    #    Rasterio viene bundled en el .exe portable y no requiere osgeo.
+    try:
+        _construir_vrt_xml_manual(vrt_path, archivos)
+        return str(vrt_path)
+    except ImportError as e:
+        raise ImportError(
+            "Se necesita 'rasterio' o GDAL para generar el mosaico virtual.\n"
+            "Instala rasterio con: pip install rasterio\n"
+            "O GDAL con: pip install gdal\n"
+            "O crea un archivo .vrt manualmente con: "
+            "gdalbuildvrt mosaico.vrt carpeta/*.tif") from e
+
+
+# Mapeo de dtypes de numpy/rasterio a tipos de datos GDAL (para VRT XML).
+_NUMPY_TO_GDAL_DTYPE = {
+    "uint8": "Byte",
+    "int8": "Int8",
+    "uint16": "UInt16",
+    "int16": "Int16",
+    "uint32": "UInt32",
+    "int32": "Int32",
+    "uint64": "UInt64",
+    "int64": "Int64",
+    "float32": "Float32",
+    "float64": "Float64",
+    "complex64": "CFloat32",
+    "complex128": "CFloat64",
+}
+
+
+def _construir_vrt_xml_manual(vrt_path, archivos):
+    """Construye un archivo VRT manualmente escribiendo el XML directamente.
+
+    Usa ``rasterio`` para leer los metadatos de cada ráster (transform,
+    tamaño, CRS, dtype, número de bandas, nodata). El VRT generado es
+    compatible con el formato que produce ``gdalbuildvrt``.
+
+    Requiere que todos los rásters compartan el mismo CRS y número de bandas.
+    La resolución de salida se toma como la más fina (píxel más pequeño) del
+    conjunto.
+    """
+    import rasterio
+    from xml.etree import ElementTree as ET
+
+    # Leer metadatos de cada ráster
+    fuentes = []
+    for fp in archivos:
+        with rasterio.open(fp) as src:
+            fuentes.append({
+                "path": str(fp),
+                "width": src.width,
+                "height": src.height,
+                "count": src.count,
+                "dtypes": list(src.dtypes),
+                "crs": src.crs,
+                "transform": src.transform,
+                "bounds": tuple(src.bounds),
+                "nodata": src.nodata,
+                "block_shapes": list(src.block_shapes),
+                "colorinterp": [ci.name for ci in src.colorinterp],
+            })
+
+    if not fuentes:
+        raise RuntimeError("No se pudieron abrir los rásters con rasterio")
+
+    primera = fuentes[0]
+    crs = primera["crs"]
+    n_bandas = primera["count"]
+    dtypes = primera["dtypes"]
+
+    # Verificar compatibilidad básica entre rásters
+    incompatibles = []
+    for s in fuentes[1:]:
+        nombre = os.path.basename(s["path"])
+        if s["crs"] != crs:
+            incompatibles.append(f"CRS distinto en {nombre}")
+        if s["count"] != n_bandas:
+            incompatibles.append(f"Número de bandas distinto en {nombre}")
+    if incompatibles:
+        raise ValueError(
+            "Los rásters no son compatibles para crear un mosaico:\n"
+            + "\n".join(incompatibles[:5]))
+
+    # Unión de bounds y resolución más fina
+    xmins = [s["bounds"][0] for s in fuentes]
+    ymins = [s["bounds"][1] for s in fuentes]
+    xmaxs = [s["bounds"][2] for s in fuentes]
+    ymaxs = [s["bounds"][3] for s in fuentes]
+    union_xmin = min(xmins)
+    union_ymin = min(ymins)
+    union_xmax = max(xmaxs)
+    union_ymax = max(ymaxs)
+
+    pxw = min(abs(s["transform"].a) for s in fuentes)
+    pxh = min(abs(s["transform"].e) for s in fuentes)
+    if pxw <= 0 or pxh <= 0:
+        raise ValueError("Resolución de píxel inválida en los rásters fuente")
+
+    out_w = max(1, int(round((union_xmax - union_xmin) / pxw)))
+    out_h = max(1, int(round((union_ymax - union_ymin) / pxh)))
+
+    # Construir XML del VRT
+    root = ET.Element("VRTDataset", {
+        "rasterXSize": str(out_w),
+        "rasterYSize": str(out_h),
+    })
+
+    if crs is not None:
+        try:
+            srs_elem = ET.SubElement(root, "SRS")
+            srs_elem.text = crs.to_wkt()
+        except Exception:
+            pass
+
+    geot = ET.SubElement(root, "GeoTransform")
+    geot.text = (
+        f"  {union_xmin:.16e},  {pxw:.16e},  0.0000000000000000e+00, "
+        f" {union_ymax:.16e},  0.0000000000000000e+00, {-pxh:.16e}"
+    )
+
+    for banda in range(1, n_bandas + 1):
+        gdal_dtype = _NUMPY_TO_GDAL_DTYPE.get(
+            str(dtypes[banda - 1]), "Float32")
+
+        vrt_band = ET.SubElement(root, "VRTRasterBand", {
+            "dataType": gdal_dtype,
+            "band": str(banda),
+        })
+
+        # ColorInterp (solo si rasterio lo expone y no es 'undefined')
+        try:
+            ci_name = primera["colorinterp"][banda - 1]
+            if ci_name and ci_name.lower() != "undefined":
+                ci_elem = ET.SubElement(vrt_band, "ColorInterp")
+                ci_elem.text = ci_name.capitalize()
+        except (IndexError, KeyError):
+            pass
+
+        # NoDataValue de la banda (si coincide en todas las fuentes)
+        nodatas = [s["nodata"] for s in fuentes]
+        if nodatas and nodatas[0] is not None and all(
+                n == nodatas[0] for n in nodatas):
+            nd = ET.SubElement(vrt_band, "NoDataValue")
+            nd.text = repr(nodatas[0])
+
+        for s in fuentes:
+            src_pxw = abs(s["transform"].a)
+            src_pxh = abs(s["transform"].e)
+            src_xmin = s["bounds"][0]
+            src_ymax = s["bounds"][3]
+
+            dst_x_off = (src_xmin - union_xmin) / pxw
+            dst_y_off = (union_ymax - src_ymax) / pxh
+            dst_x_size = s["width"] * (src_pxw / pxw)
+            dst_y_size = s["height"] * (src_pxh / pxh)
+
+            csrc = ET.SubElement(vrt_band, "ComplexSource")
+
+            fn = ET.SubElement(csrc, "SourceFilename",
+                               {"relativeToVRT": "0"})
+            fn.text = s["path"]
+
+            sb = ET.SubElement(csrc, "SourceBand")
+            sb.text = str(banda)
+
+            try:
+                block_h, block_w = s["block_shapes"][banda - 1]
+            except (IndexError, TypeError, ValueError):
+                block_h, block_w = s["height"], s["width"]
+            ET.SubElement(csrc, "SourceProperties", {
+                "RasterXSize": str(s["width"]),
+                "RasterYSize": str(s["height"]),
+                "DataType": _NUMPY_TO_GDAL_DTYPE.get(
+                    str(s["dtypes"][banda - 1]), "Float32"),
+                "BlockXSize": str(block_w),
+                "BlockYSize": str(block_h),
+            })
+
+            ET.SubElement(csrc, "SrcRect", {
+                "xOff": "0",
+                "yOff": "0",
+                "xSize": str(s["width"]),
+                "ySize": str(s["height"]),
+            })
+
+            ET.SubElement(csrc, "DstRect", {
+                "xOff": f"{dst_x_off:.6f}",
+                "yOff": f"{dst_y_off:.6f}",
+                "xSize": f"{dst_x_size:.6f}",
+                "ySize": f"{dst_y_size:.6f}",
+            })
+
+            if s["nodata"] is not None:
+                nd_src = ET.SubElement(csrc, "NODATA")
+                nd_src.text = repr(s["nodata"])
+
+    tree = ET.ElementTree(root)
+    try:
+        ET.indent(tree, space="  ")
+    except AttributeError:
+        # Python < 3.9: ET.indent no existe, pero no es crítico
+        pass
+    tree.write(str(vrt_path), encoding="UTF-8", xml_declaration=False)
 
 
 def descargar_wfs(url: str, capa: str, xmin, ymin, xmax, ymax,
