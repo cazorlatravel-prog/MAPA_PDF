@@ -373,6 +373,11 @@ def construir_vrt_desde_carpeta(carpeta: str) -> str:
     El VRT se guarda junto a la carpeta con nombre '<carpeta>.vrt'.
     Si ya existe y es más reciente que los archivos, lo reutiliza.
 
+    Si las hojas tienen CRS heterogéneos (p. ej. hojas MTN en distintos
+    husos UTM), reproyecta sobre la marcha las hojas minoritarias al CRS
+    dominante antes de montar el mosaico. Esto evita el error
+    'CRS distinto en X.tif' que se producía cuando se mezclaban husos.
+
     Estrategia de construcción (en orden de preferencia):
       1. Comando ``gdalbuildvrt`` (si está en el PATH).
       2. ``osgeo.gdal.BuildVRT`` (si el binding Python de GDAL está instalado).
@@ -409,9 +414,14 @@ def construir_vrt_desde_carpeta(carpeta: str) -> str:
         if vrt_mtime > max_raster_mtime:
             return str(vrt_path)
 
+    # Homogeneizar CRS: si hay hojas en distintos husos, reproyecta las
+    # minoritarias al CRS dominante. Si rasterio no está disponible o todos
+    # los rásters ya comparten CRS, devuelve la lista tal cual.
+    archivos_mosaico = _homogeneizar_crs_rasters(archivos, carpeta_p)
+
     # 1) Intentar con gdalbuildvrt (el método más robusto si está disponible)
     try:
-        cmd = ["gdalbuildvrt", str(vrt_path)] + archivos
+        cmd = ["gdalbuildvrt", str(vrt_path)] + archivos_mosaico
         subprocess.run(cmd, check=True, capture_output=True, text=True)
         return str(vrt_path)
     except (FileNotFoundError, subprocess.CalledProcessError):
@@ -420,7 +430,7 @@ def construir_vrt_desde_carpeta(carpeta: str) -> str:
     # 2) Intentar con el binding Python de GDAL (osgeo.gdal)
     try:
         from osgeo import gdal  # type: ignore
-        gdal.BuildVRT(str(vrt_path), archivos)
+        gdal.BuildVRT(str(vrt_path), archivos_mosaico)
         return str(vrt_path)
     except ImportError:
         pass
@@ -430,7 +440,7 @@ def construir_vrt_desde_carpeta(carpeta: str) -> str:
     # 3) Último recurso: construir el XML del VRT manualmente usando rasterio.
     #    Rasterio viene bundled en el .exe portable y no requiere osgeo.
     try:
-        _construir_vrt_xml_manual(vrt_path, archivos)
+        _construir_vrt_xml_manual(vrt_path, archivos_mosaico)
         return str(vrt_path)
     except ImportError as e:
         raise ImportError(
@@ -439,6 +449,244 @@ def construir_vrt_desde_carpeta(carpeta: str) -> str:
             "O GDAL con: pip install gdal\n"
             "O crea un archivo .vrt manualmente con: "
             "gdalbuildvrt mosaico.vrt carpeta/*.tif") from e
+
+
+# ---------------------------------------------------------------------------
+# Homogeneización de CRS para mosaicos de hojas cartográficas heterogéneas
+# ---------------------------------------------------------------------------
+
+def _crs_iguales(a, b) -> bool:
+    """Comparación robusta entre dos CRS de rasterio."""
+    if a is None or b is None:
+        return a is None and b is None
+    try:
+        ea = a.to_epsg() if hasattr(a, "to_epsg") else None
+        eb = b.to_epsg() if hasattr(b, "to_epsg") else None
+        if ea is not None and eb is not None:
+            return ea == eb
+    except Exception:
+        pass
+    try:
+        return a.to_wkt() == b.to_wkt()
+    except Exception:
+        return a == b
+
+
+def _elegir_crs_destino(crs_por_archivo):
+    """Elige el CRS de destino para un mosaico heterogéneo.
+
+    Estrategia:
+      1. El CRS más frecuente entre las hojas.
+      2. En caso de empate, prioriza EPSG:25830 (ETRS89/UTM 30N, por defecto
+         en España) si alguna hoja lo usa.
+      3. Si no, el primer CRS válido encontrado.
+    """
+    from collections import Counter
+
+    validos = [c for c in crs_por_archivo if c is not None]
+    if not validos:
+        return None
+
+    # Contar por WKT (único identificador sólido para cualquier CRS)
+    counts = Counter()
+    wkt_a_crs = {}
+    for c in validos:
+        try:
+            key = c.to_wkt()
+        except Exception:
+            continue
+        counts[key] += 1
+        wkt_a_crs.setdefault(key, c)
+
+    if not counts:
+        return validos[0]
+
+    # Ordenar por (frecuencia desc, preferencia-25830 desc)
+    def _prioridad(item):
+        wkt, freq = item
+        crs = wkt_a_crs[wkt]
+        try:
+            prefer_25830 = 1 if crs.to_epsg() == 25830 else 0
+        except Exception:
+            prefer_25830 = 0
+        return (freq, prefer_25830)
+
+    wkt_ganador, _ = max(counts.items(), key=_prioridad)
+    return wkt_a_crs[wkt_ganador]
+
+
+def _homogeneizar_crs_rasters(archivos, carpeta_p):
+    """Asegura que todos los rásters compartan el mismo CRS para el mosaico.
+
+    Lee los metadatos con rasterio. Si hay CRS heterogéneos:
+      - Elige el CRS dominante como destino.
+      - Reproyecta las hojas minoritarias a ese CRS creando VRTs warpeados
+        (o GeoTIFFs si no hay GDAL) en una carpeta caché oculta dentro de
+        ``carpeta_p`` para que se puedan reutilizar entre ejecuciones.
+
+    Si rasterio no está disponible, devuelve la lista de archivos original
+    (comportamiento previo: el error de CRS lo lanzará más adelante la
+    construcción del VRT).
+
+    Args:
+        archivos: lista de rutas a rásters ordenados.
+        carpeta_p: Path a la carpeta raíz que contiene los rásters.
+
+    Returns:
+        Lista de rutas lista para pasar a ``gdalbuildvrt`` / ``BuildVRT`` /
+        ``_construir_vrt_xml_manual``. Contiene rutas originales para los
+        rásters que ya estaban en el CRS destino y rutas warpeadas para los
+        que había que reproyectar.
+    """
+    try:
+        import rasterio
+    except ImportError:
+        return list(archivos)
+
+    # Leer CRS de cada archivo
+    crs_por_archivo = []
+    for fp in archivos:
+        try:
+            with rasterio.open(fp) as src:
+                crs_por_archivo.append(src.crs)
+        except Exception:
+            crs_por_archivo.append(None)
+
+    # ¿Son todos iguales?
+    primero_valido = next((c for c in crs_por_archivo if c is not None), None)
+    if primero_valido is None:
+        return list(archivos)
+    if all(_crs_iguales(c, primero_valido) for c in crs_por_archivo if c is not None):
+        return list(archivos)
+
+    # CRS heterogéneos: elegir destino y warpear los que no coincidan
+    crs_destino = _elegir_crs_destino(crs_por_archivo)
+    if crs_destino is None:
+        return list(archivos)
+
+    try:
+        epsg_destino = crs_destino.to_epsg()
+    except Exception:
+        epsg_destino = None
+    sufijo_dir = f"_{epsg_destino}" if epsg_destino else ""
+    cache_dir = carpeta_p / f".mosaico_warped{sufijo_dir}"
+
+    resultado = []
+    for fp, crs in zip(archivos, crs_por_archivo):
+        if crs is not None and _crs_iguales(crs, crs_destino):
+            resultado.append(fp)
+            continue
+        try:
+            fp_warpeado = _warpear_fuente(fp, crs_destino, cache_dir)
+            resultado.append(fp_warpeado)
+        except Exception as e:
+            # Si no se puede reproyectar una hoja concreta, abortamos con un
+            # mensaje claro para el usuario.
+            raise RuntimeError(
+                "No se pudo reproyectar al CRS común "
+                f"({epsg_destino or 'destino'}) la hoja '{os.path.basename(fp)}': {e}"
+            ) from e
+
+    return resultado
+
+
+def _warpear_fuente(ruta_origen: str, crs_destino, cache_dir) -> str:
+    """Crea una versión reproyectada (warpeada) de un ráster.
+
+    Intenta, por orden:
+      1. ``gdalwarp -of VRT`` (si está en el PATH) → genera un VRT warpeado
+         que no copia los píxeles a disco (sólo metadatos de reproyección).
+      2. ``osgeo.gdal.Warp(format='VRT')`` equivalente vía binding Python.
+      3. ``rasterio`` reproyectando a un GeoTIFF intermedio (usa más disco,
+         pero es pura Python y funciona con la instalación bundled).
+
+    El resultado se cachea en ``cache_dir`` y se reutiliza si es más reciente
+    que el fichero de origen.
+    """
+    import subprocess
+    from pathlib import Path as _P
+
+    cache_p = _P(cache_dir)
+    cache_p.mkdir(parents=True, exist_ok=True)
+
+    origen_p = _P(ruta_origen)
+    try:
+        epsg = crs_destino.to_epsg()
+    except Exception:
+        epsg = None
+    sufijo = f"_{epsg}" if epsg else "_warped"
+
+    vrt_out = cache_p / f"{origen_p.stem}{sufijo}.vrt"
+    tif_out = cache_p / f"{origen_p.stem}{sufijo}.tif"
+
+    origen_mtime = origen_p.stat().st_mtime
+    if vrt_out.exists() and vrt_out.stat().st_mtime > origen_mtime:
+        return str(vrt_out)
+    if tif_out.exists() and tif_out.stat().st_mtime > origen_mtime:
+        return str(tif_out)
+
+    t_srs = f"EPSG:{epsg}" if epsg else None
+    if t_srs is None:
+        try:
+            t_srs = crs_destino.to_wkt()
+        except Exception:
+            t_srs = None
+    if t_srs is None:
+        raise ValueError("CRS de destino inválido")
+
+    # 1) gdalwarp CLI
+    try:
+        cmd = [
+            "gdalwarp", "-overwrite", "-of", "VRT",
+            "-t_srs", t_srs,
+            str(origen_p), str(vrt_out),
+        ]
+        subprocess.run(cmd, check=True, capture_output=True, text=True)
+        return str(vrt_out)
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        pass
+
+    # 2) osgeo.gdal.Warp
+    try:
+        from osgeo import gdal  # type: ignore
+        res = gdal.Warp(str(vrt_out), str(origen_p), format="VRT", dstSRS=t_srs)
+        if res is not None:
+            res = None  # cerrar dataset
+            return str(vrt_out)
+    except ImportError:
+        pass
+    except Exception:
+        pass
+
+    # 3) rasterio → GeoTIFF intermedio (más pesado pero pura Python)
+    import rasterio
+    from rasterio.warp import calculate_default_transform, reproject, Resampling
+
+    with rasterio.open(str(origen_p)) as src:
+        transform, width, height = calculate_default_transform(
+            src.crs, crs_destino, src.width, src.height, *src.bounds)
+        kwargs = src.meta.copy()
+        kwargs.update({
+            "crs": crs_destino,
+            "transform": transform,
+            "width": width,
+            "height": height,
+            "driver": "GTiff",
+            "compress": "lzw",
+            "tiled": True,
+        })
+        with rasterio.open(str(tif_out), "w", **kwargs) as dst:
+            for i in range(1, src.count + 1):
+                reproject(
+                    source=rasterio.band(src, i),
+                    destination=rasterio.band(dst, i),
+                    src_transform=src.transform,
+                    src_crs=src.crs,
+                    dst_transform=transform,
+                    dst_crs=crs_destino,
+                    resampling=Resampling.bilinear,
+                )
+    return str(tif_out)
 
 
 # Mapeo de dtypes de numpy/rasterio a tipos de datos GDAL (para VRT XML).
