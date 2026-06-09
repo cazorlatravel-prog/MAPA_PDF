@@ -407,11 +407,12 @@ def construir_vrt_desde_carpeta(carpeta: str) -> str:
 
     archivos = sorted(archivos)
 
-    # Comprobar si el VRT existente es válido (más reciente que los rásters)
+    # Comprobar si el VRT existente es válido (más reciente que los rásters
+    # y con todas sus fuentes referenciadas aún presentes en disco)
     if vrt_path.exists():
         vrt_mtime = vrt_path.stat().st_mtime
         max_raster_mtime = max(os.path.getmtime(f) for f in archivos)
-        if vrt_mtime > max_raster_mtime:
+        if vrt_mtime > max_raster_mtime and _vrt_fuentes_existen(vrt_path):
             return str(vrt_path)
 
     # Homogeneizar CRS: si hay hojas en distintos husos, reproyecta las
@@ -419,13 +420,27 @@ def construir_vrt_desde_carpeta(carpeta: str) -> str:
     # los rásters ya comparten CRS, devuelve la lista tal cual.
     archivos_mosaico = _homogeneizar_crs_rasters(archivos, carpeta_p)
 
-    # 1) Intentar con gdalbuildvrt (el método más robusto si está disponible)
+    # 1) Intentar con gdalbuildvrt (el método más robusto si está disponible).
+    #    La lista de entradas va en un fichero auxiliar para no exceder el
+    #    límite de longitud de línea de comandos de Windows (~32 KB) con
+    #    carpetas que contienen cientos de hojas.
+    lista_txt = None
     try:
-        cmd = ["gdalbuildvrt", str(vrt_path)] + archivos_mosaico
+        import tempfile
+        fd, lista_txt = tempfile.mkstemp(suffix=".txt", text=True)
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write("\n".join(archivos_mosaico))
+        cmd = ["gdalbuildvrt", "-input_file_list", lista_txt, str(vrt_path)]
         subprocess.run(cmd, check=True, capture_output=True, text=True)
         return str(vrt_path)
-    except (FileNotFoundError, subprocess.CalledProcessError):
+    except (FileNotFoundError, subprocess.CalledProcessError, OSError):
         pass
+    finally:
+        if lista_txt:
+            try:
+                os.unlink(lista_txt)
+            except OSError:
+                pass
 
     # 2) Intentar con el binding Python de GDAL (osgeo.gdal)
     try:
@@ -454,6 +469,29 @@ def construir_vrt_desde_carpeta(carpeta: str) -> str:
 # ---------------------------------------------------------------------------
 # Homogeneización de CRS para mosaicos de hojas cartográficas heterogéneas
 # ---------------------------------------------------------------------------
+
+def _vrt_fuentes_existen(vrt_path) -> bool:
+    """Comprueba que todas las fuentes referenciadas por un VRT existen.
+
+    Un VRT cacheado puede apuntar a rutas absolutas (p. ej. dentro de
+    ``.mosaico_warped*``) que el usuario haya borrado o movido; en ese caso
+    hay que regenerarlo en vez de devolver un mosaico roto.
+    """
+    try:
+        from xml.etree import ElementTree as ET
+        tree = ET.parse(str(vrt_path))
+        for el in tree.iter("SourceFilename"):
+            ruta = (el.text or "").strip()
+            if not ruta:
+                continue
+            if el.get("relativeToVRT") == "1":
+                ruta = str(Path(vrt_path).parent / ruta)
+            if not os.path.exists(ruta):
+                return False
+        return True
+    except Exception:
+        return False
+
 
 def _crs_iguales(a, b) -> bool:
     """Comparación robusta entre dos CRS de rasterio."""
@@ -557,11 +595,17 @@ def _homogeneizar_crs_rasters(archivos, carpeta_p):
         except Exception:
             crs_por_archivo.append(None)
 
-    # ¿Son todos iguales?
+    # ¿Son todos iguales? Un CRS None (ráster sin proyección o ilegible)
+    # también cuenta como heterogéneo: si lo dejásemos pasar, el builder
+    # manual del VRT lo rechazaría más adelante con un mensaje engañoso de
+    # "CRS distinto". Al tratarlo aquí, _warpear_fuente produce un error
+    # claro y accionable ("el ráster no tiene un CRS definido...").
     primero_valido = next((c for c in crs_por_archivo if c is not None), None)
     if primero_valido is None:
         return list(archivos)
-    if all(_crs_iguales(c, primero_valido) for c in crs_por_archivo if c is not None):
+    hay_sin_crs = any(c is None for c in crs_por_archivo)
+    if not hay_sin_crs and all(
+            _crs_iguales(c, primero_valido) for c in crs_por_archivo):
         return list(archivos)
 
     # CRS heterogéneos: elegir destino y warpear los que no coincidan
@@ -669,10 +713,37 @@ def _warpear_fuente(ruta_origen: str, crs_destino, cache_dir) -> str:
     vrt_out = cache_p / f"{origen_p.stem}{sufijo}.vrt"
     tif_out = cache_p / f"{origen_p.stem}{sufijo}.tif"
 
+    def _cache_warp_valida(path_out) -> bool:
+        """True si el warpeado cacheado abre bien y tiene el CRS destino.
+
+        Una ejecución anterior interrumpida puede haber dejado un fichero
+        parcial/corrupto; si lo devolviéramos, el mosaico fallaría después
+        con un error confuso de CRS.
+        """
+        try:
+            import rasterio as _rio
+        except ImportError:
+            return True  # sin rasterio no podemos validar; asumir válido
+        try:
+            with _rio.open(str(path_out)) as _ds:
+                return (_crs_tiene_definicion(_ds.crs)
+                        and _crs_iguales(_ds.crs, crs_destino))
+        except Exception:
+            return False
+
+    def _limpiar_parcial(path_out):
+        try:
+            if path_out.exists():
+                path_out.unlink()
+        except OSError:
+            pass
+
     origen_mtime = origen_p.stat().st_mtime
-    if vrt_out.exists() and vrt_out.stat().st_mtime > origen_mtime:
+    if (vrt_out.exists() and vrt_out.stat().st_mtime > origen_mtime
+            and _cache_warp_valida(vrt_out)):
         return str(vrt_out)
-    if tif_out.exists() and tif_out.stat().st_mtime > origen_mtime:
+    if (tif_out.exists() and tif_out.stat().st_mtime > origen_mtime
+            and _cache_warp_valida(tif_out)):
         return str(tif_out)
 
     t_srs = f"EPSG:{epsg}" if epsg else None
@@ -714,6 +785,7 @@ def _warpear_fuente(ruta_origen: str, crs_destino, cache_dir) -> str:
     except FileNotFoundError:
         errores.append("gdalwarp CLI no disponible en PATH")
     except subprocess.CalledProcessError as e:
+        _limpiar_parcial(vrt_out)
         errores.append(
             f"gdalwarp CLI (VRT): {_extraer_mensaje_stderr(e.stderr)}")
 
@@ -727,8 +799,10 @@ def _warpear_fuente(ruta_origen: str, crs_destino, cache_dir) -> str:
             if res is not None:
                 res = None  # cerrar dataset
                 return str(vrt_out)
+            _limpiar_parcial(vrt_out)
             errores.append("osgeo.gdal.Warp (VRT): devolvió None")
         except Exception as e:
+            _limpiar_parcial(vrt_out)
             errores.append(f"osgeo.gdal.Warp (VRT): {e}")
     except ImportError:
         errores.append("binding osgeo.gdal no disponible")
@@ -750,6 +824,7 @@ def _warpear_fuente(ruta_origen: str, crs_destino, cache_dir) -> str:
     except FileNotFoundError:
         pass  # CLI ya registrada como no disponible
     except subprocess.CalledProcessError as e:
+        _limpiar_parcial(tif_out)
         errores.append(
             f"gdalwarp CLI (GeoTIFF): {_extraer_mensaje_stderr(e.stderr)}")
 
@@ -765,8 +840,10 @@ def _warpear_fuente(ruta_origen: str, crs_destino, cache_dir) -> str:
             if res is not None:
                 res = None  # cerrar dataset
                 return str(tif_out)
+            _limpiar_parcial(tif_out)
             errores.append("osgeo.gdal.Warp (GeoTIFF): devolvió None")
         except Exception as e:
+            _limpiar_parcial(tif_out)
             errores.append(f"osgeo.gdal.Warp (GeoTIFF): {e}")
     except ImportError:
         pass  # ya registrado antes
@@ -912,16 +989,24 @@ def _construir_vrt_xml_manual(vrt_path, archivos):
     # distintos (según la versión de PROJ/GDAL que los escribió) y la
     # comparación directa las marcaría erróneamente como incompatibles.
     incompatibles = []
+    if not _crs_tiene_definicion(crs):
+        incompatibles.append(
+            f"{os.path.basename(primera['path'])} no tiene CRS definido")
     for s in fuentes[1:]:
         nombre = os.path.basename(s["path"])
-        if not _crs_iguales(s["crs"], crs):
+        if not _crs_tiene_definicion(s["crs"]):
+            incompatibles.append(f"{nombre} no tiene CRS definido")
+        elif not _crs_iguales(s["crs"], crs):
             incompatibles.append(f"CRS distinto en {nombre}")
         if s["count"] != n_bandas:
             incompatibles.append(f"Número de bandas distinto en {nombre}")
     if incompatibles:
         raise ValueError(
             "Los rásters no son compatibles para crear un mosaico:\n"
-            + "\n".join(incompatibles[:5]))
+            + "\n".join(incompatibles[:5])
+            + ("\n..." if len(incompatibles) > 5 else "")
+            + "\n\nRevisa el CRS de esas hojas (QGIS → Propiedades) o "
+            "asígnalo con 'gdal_edit.py -a_srs EPSG:<codigo> hoja.tif'.")
 
     # Unión de bounds y resolución más fina
     xmins = [s["bounds"][0] for s in fuentes]

@@ -284,6 +284,20 @@ class GeneradorPlanos:
         if threading.current_thread() is not threading.main_thread():
             matplotlib.use("Agg")
 
+    @staticmethod
+    def _cerrar_figuras_nuevas(fignums_antes):
+        """Cierra las figuras pyplot creadas después de ``fignums_antes``.
+
+        Cuando un plano falla a medio dibujar, su figura queda abierta en el
+        registro global de pyplot; sin esto, cada plano con error acumula
+        memoria durante lotes grandes.
+        """
+        for num in set(plt.get_fignums()) - set(fignums_antes):
+            try:
+                plt.close(num)
+            except Exception:
+                pass
+
     def _dibujar_capas_mapa(self, ax_map, gdf_sel, indices, xmin, xmax,
                              ymin, ymax, transparencia, color_infra):
         """Dibuja fondo de montes, capas extra, infra fondo e infra seleccionadas."""
@@ -909,6 +923,7 @@ class GeneradorPlanos:
             nombre = self.gdf_infra.iloc[idx].get("Nombre_Infra", f"#{idx + 1}")
             if callback_log:
                 callback_log(f"\n[{i + 1}/{total}] Generando: {nombre}")
+            _figs_antes = plt.get_fignums()
             try:
                 ruta = self.generar_plano(
                     idx_fila=idx, formato_key=formato_key,
@@ -921,8 +936,10 @@ class GeneradorPlanos:
                 )
                 rutas.append(ruta)
             except GeneracionCancelada:
+                self._cerrar_figuras_nuevas(_figs_antes)
                 raise
             except Exception as e:
+                self._cerrar_figuras_nuevas(_figs_antes)
                 tb = traceback.format_exc()
                 if callback_log:
                     callback_log(f"  \u2717 Error: {e}\n{tb}")
@@ -959,6 +976,7 @@ class GeneradorPlanos:
                 if callback_progreso:
                     callback_progreso(i + 1, total)
                 continue
+            _figs_antes = plt.get_fignums()
             try:
                 ruta = self.generar_plano_agrupado(
                     indices=indices, campo_grupo=campo_grupo,
@@ -973,8 +991,10 @@ class GeneradorPlanos:
                 )
                 rutas.append(ruta)
             except GeneracionCancelada:
+                self._cerrar_figuras_nuevas(_figs_antes)
                 raise
             except Exception as e:
+                self._cerrar_figuras_nuevas(_figs_antes)
                 tb = traceback.format_exc()
                 if callback_log:
                     callback_log(f"  \u2717 Error: {e}\n{tb}")
@@ -1059,6 +1079,7 @@ class GeneradorPlanos:
                 nombre = self.gdf_infra.iloc[idx].get("Nombre_Infra", f"#{idx + 1}")
                 if callback_log:
                     callback_log(f"\n[{i + 1}/{total}] Generando: {nombre}")
+                fig = None
                 try:
                     row = self.gdf_infra.iloc[idx]
                     geom = row.geometry
@@ -1154,14 +1175,21 @@ class GeneradorPlanos:
                     maq.dibujar_marcos(plantilla=self._plantilla, cajetin=self._cajetin)
 
                     pdf.savefig(fig, dpi=self.dpi_guardado or 300, facecolor="white")
-                    plt.close(fig)
 
                     if callback_log:
                         callback_log(f"  \u2713 P\u00e1gina {i + 1} a\u00f1adida")
+                except GeneracionCancelada:
+                    raise
                 except Exception as e:
                     tb = traceback.format_exc()
                     if callback_log:
                         callback_log(f"  \u2717 Error: {e}\n{tb}")
+                finally:
+                    # Cerrar siempre la figura, tambi\u00e9n cuando el dibujo
+                    # falla: si no, cada plano con error acumula una figura
+                    # abierta y la memoria crece durante lotes grandes.
+                    if fig is not None:
+                        plt.close(fig)
 
                 if callback_progreso:
                     callback_progreso(i + 1, total)

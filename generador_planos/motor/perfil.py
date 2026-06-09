@@ -44,11 +44,12 @@ def estimar_pendiente(geom: BaseGeometry) -> float:
     Sin DEM real, devuelve 0 pero estructura preparada para DEM.
     """
     if not hasattr(geom, "coords") and hasattr(geom, "geoms"):
-        # MultiLineString: tomar la primera línea
+        # MultiLineString: tomar la primera parte con coordenadas
         for g in geom.geoms:
             if hasattr(g, "coords"):
                 geom = g
                 break
+        else:
             return 0.0
 
     if not hasattr(geom, "coords") or len(list(geom.coords)) < 2:

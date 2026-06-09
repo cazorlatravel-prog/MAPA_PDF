@@ -141,29 +141,36 @@ class PanelFiltros:
             if campo in gdf.columns:
                 mask &= (gdf[campo].astype(str) == valor).values
 
-        sup_min_txt = self._sup_min.get().strip()
-        sup_max_txt = self._sup_max.get().strip()
-        if (sup_min_txt or sup_max_txt) and "Superficie" in gdf.columns:
-            try:
-                sup_vals = gdf["Superficie"].astype(float)
-                if sup_min_txt:
-                    mask &= (sup_vals >= float(sup_min_txt)).values
-                if sup_max_txt:
-                    mask &= (sup_vals <= float(sup_max_txt)).values
-            except (ValueError, TypeError):
-                pass
+        import pandas as pd
 
-        lon_min_txt = self._lon_min.get().strip()
-        lon_max_txt = self._lon_max.get().strip()
-        if (lon_min_txt or lon_max_txt) and "Longitud" in gdf.columns:
+        def _parse_num(txt):
+            # Aceptar coma decimal (locale español) además de punto
             try:
-                lon_vals = gdf["Longitud"].astype(float)
-                if lon_min_txt:
-                    mask &= (lon_vals >= float(lon_min_txt)).values
-                if lon_max_txt:
-                    mask &= (lon_vals <= float(lon_max_txt)).values
+                return float(txt.replace(",", "."))
             except (ValueError, TypeError):
-                pass
+                return None
+
+        sup_min = _parse_num(self._sup_min.get().strip())
+        sup_max = _parse_num(self._sup_max.get().strip())
+        if (sup_min is not None or sup_max is not None) \
+                and "Superficie" in gdf.columns:
+            # to_numeric con coerce: una celda no numérica se convierte en
+            # NaN (queda excluida) en vez de invalidar todo el filtro
+            sup_vals = pd.to_numeric(gdf["Superficie"], errors="coerce")
+            if sup_min is not None:
+                mask &= (sup_vals >= sup_min).values
+            if sup_max is not None:
+                mask &= (sup_vals <= sup_max).values
+
+        lon_min = _parse_num(self._lon_min.get().strip())
+        lon_max = _parse_num(self._lon_max.get().strip())
+        if (lon_min is not None or lon_max is not None) \
+                and "Longitud" in gdf.columns:
+            lon_vals = pd.to_numeric(gdf["Longitud"], errors="coerce")
+            if lon_min is not None:
+                mask &= (lon_vals >= lon_min).values
+            if lon_max is not None:
+                mask &= (lon_vals <= lon_max).values
 
         indices = list(np.where(mask)[0])
         self._lbl_resultado.configure(

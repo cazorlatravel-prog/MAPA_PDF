@@ -189,9 +189,14 @@ def crear_mapa_guia(formato_key: str, gdf_infra, indices: list,
         except Exception:
             pass
 
-    # Colores para las infraestructuras
+    # Colores para las infraestructuras (plt.cm.get_cmap fue eliminado
+    # en matplotlib >= 3.9; matplotlib.colormaps existe desde 3.5)
     n = len(indices)
-    cmap = plt.cm.get_cmap("tab20", max(n, 1))
+    try:
+        import matplotlib
+        cmap = matplotlib.colormaps["tab20"]
+    except (AttributeError, KeyError):
+        cmap = plt.cm.get_cmap("tab20")
 
     for i, idx in enumerate(indices):
         row = gdf_infra.iloc[idx]

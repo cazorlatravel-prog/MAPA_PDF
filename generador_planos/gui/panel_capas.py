@@ -703,6 +703,8 @@ class PanelCapas:
                 self.motor.establecer_mapeo_campos(mapeo)
                 self.callback_log(
                     f"Mapeo de campos aplicado: {mapeo}", "info")
+                # Refrescar tabla y paneles dependientes con el mapeo nuevo
+                self.callback_tabla()
             dialog.destroy()
 
         crear_boton(dialog, "Aplicar mapeo", aplicar,

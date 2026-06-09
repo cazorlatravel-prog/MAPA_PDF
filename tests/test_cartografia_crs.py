@@ -227,3 +227,115 @@ class TestConstruirVrtXmlManual:
         vrt_path = tmp_path / "mosaico.vrt"
         with pytest.raises(ValueError, match="CRS distinto"):
             cartografia._construir_vrt_xml_manual(vrt_path, archivos)
+
+    def test_hoja_sin_crs_mensaje_claro(self, tmp_path, monkeypatch):
+        """Regresión: una hoja sin proyección debe reportarse como
+        'no tiene CRS definido', no como el engañoso 'CRS distinto'."""
+        crs_ok = _StubCRS(epsg=25830, wkt="PROJCS[UTM30N]")
+        crs_vacio = _StubCRS(epsg=None, wkt="", is_valid=False)
+
+        archivos = [
+            str(tmp_path / "h_ok.tif"),
+            str(tmp_path / "h_sin_crs.tif"),
+        ]
+        for fp in archivos:
+            Path(fp).touch()
+
+        _instalar_fake_rasterio(
+            monkeypatch,
+            {archivos[0]: crs_ok, archivos[1]: crs_vacio},
+        )
+
+        vrt_path = tmp_path / "mosaico.vrt"
+        with pytest.raises(ValueError, match="no tiene CRS definido"):
+            cartografia._construir_vrt_xml_manual(vrt_path, archivos)
+
+
+# ---------------------------------------------------------------------------
+# _homogeneizar_crs_rasters: hojas sin CRS no deben saltarse la corrección
+# ---------------------------------------------------------------------------
+
+
+class TestHomogeneizarCrsSinCrs:
+    def test_hoja_sin_crs_pasa_por_warpeo(self, tmp_path, monkeypatch):
+        """Regresión: antes, si una hoja no tenía CRS y el resto compartían
+        el mismo, la comprobación de homogeneidad la ignoraba y devolvía
+        la lista original; el builder manual fallaba después con un
+        'CRS distinto' engañoso. Ahora la hoja sin CRS debe pasar por
+        ``_warpear_fuente`` (que da un error claro si no es posible)."""
+        crs_ok = _StubCRS(epsg=25830, wkt="PROJCS[UTM30N]")
+        crs_vacio = _StubCRS(epsg=None, wkt="", is_valid=False)
+
+        archivos = [
+            str(tmp_path / "h_ok1.tif"),
+            str(tmp_path / "h_ok2.tif"),
+            str(tmp_path / "h_sin_crs.tif"),
+        ]
+        for fp in archivos:
+            Path(fp).touch()
+
+        _instalar_fake_rasterio(
+            monkeypatch,
+            {archivos[0]: crs_ok, archivos[1]: crs_ok,
+             archivos[2]: crs_vacio},
+        )
+
+        warpeados = []
+
+        def _fake_warpear(fp, crs_destino, cache_dir):
+            warpeados.append(str(fp))
+            return str(fp) + ".warped.vrt"
+
+        monkeypatch.setattr(cartografia, "_warpear_fuente", _fake_warpear)
+
+        resultado = cartografia._homogeneizar_crs_rasters(
+            archivos, tmp_path)
+
+        assert warpeados == [archivos[2]]
+        assert resultado[:2] == archivos[:2]
+        assert resultado[2].endswith(".warped.vrt")
+
+    def test_todos_mismo_crs_devuelve_original(self, tmp_path, monkeypatch):
+        crs_ok = _StubCRS(epsg=25830, wkt="PROJCS[UTM30N]")
+        archivos = [str(tmp_path / "a.tif"), str(tmp_path / "b.tif")]
+        for fp in archivos:
+            Path(fp).touch()
+
+        _instalar_fake_rasterio(
+            monkeypatch, {archivos[0]: crs_ok, archivos[1]: crs_ok})
+
+        resultado = cartografia._homogeneizar_crs_rasters(archivos, tmp_path)
+        assert resultado == archivos
+
+
+# ---------------------------------------------------------------------------
+# _vrt_fuentes_existen: invalidación de VRT cacheados con fuentes borradas
+# ---------------------------------------------------------------------------
+
+
+class TestVrtFuentesExisten:
+    def _escribir_vrt(self, vrt_path, rutas):
+        fuentes = "\n".join(
+            f'<ComplexSource><SourceFilename relativeToVRT="0">{r}'
+            "</SourceFilename></ComplexSource>" for r in rutas)
+        vrt_path.write_text(
+            '<VRTDataset rasterXSize="10" rasterYSize="10">'
+            f'<VRTRasterBand dataType="Byte" band="1">{fuentes}'
+            "</VRTRasterBand></VRTDataset>")
+
+    def test_fuentes_presentes(self, tmp_path):
+        tif = tmp_path / "hoja.tif"
+        tif.touch()
+        vrt = tmp_path / "mosaico.vrt"
+        self._escribir_vrt(vrt, [str(tif)])
+        assert cartografia._vrt_fuentes_existen(vrt) is True
+
+    def test_fuente_borrada(self, tmp_path):
+        vrt = tmp_path / "mosaico.vrt"
+        self._escribir_vrt(vrt, [str(tmp_path / "borrada.tif")])
+        assert cartografia._vrt_fuentes_existen(vrt) is False
+
+    def test_xml_corrupto(self, tmp_path):
+        vrt = tmp_path / "mosaico.vrt"
+        vrt.write_text("esto no es XML")
+        assert cartografia._vrt_fuentes_existen(vrt) is False

@@ -6,6 +6,7 @@ progreso, portada, botón GENERAR.
 import os
 import shutil
 import threading
+import traceback
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 
@@ -617,6 +618,10 @@ class PanelGeneracion:
                     self._after_seguro(0, self._fin_generacion)
                 except GeneracionCancelada:
                     self._after_seguro(0, self._fin_cancelacion)
+                except Exception as e:
+                    tb = traceback.format_exc()
+                    self._after_seguro(
+                        0, lambda e=e, tb=tb: self._fin_error(e, tb))
 
             threading.Thread(target=_worker_agrupado, daemon=True).start()
         else:
@@ -677,6 +682,10 @@ class PanelGeneracion:
                     self._after_seguro(0, self._fin_generacion)
                 except GeneracionCancelada:
                     self._after_seguro(0, self._fin_cancelacion)
+                except Exception as e:
+                    tb = traceback.format_exc()
+                    self._after_seguro(
+                        0, lambda e=e, tb=tb: self._fin_error(e, tb))
 
             threading.Thread(target=_worker, daemon=True).start()
 
@@ -717,6 +726,10 @@ class PanelGeneracion:
                 self._after_seguro(0, self._fin_generacion)
             except GeneracionCancelada:
                 self._after_seguro(0, self._fin_cancelacion)
+            except Exception as e:
+                tb = traceback.format_exc()
+                self._after_seguro(
+                    0, lambda e=e, tb=tb: self._fin_error(e, tb))
 
         threading.Thread(target=_worker_lotes, daemon=True).start()
 
@@ -749,6 +762,25 @@ class PanelGeneracion:
             "Cancelado",
             "Generaci\u00f3n detenida.\n\n"
             "Los planos generados antes de parar se han conservado.",
+        )
+
+    def _fin_error(self, error, tb=""):
+        """Restaura la UI tras un error no controlado en la generación.
+
+        Sin esto, una excepción en el hilo de trabajo dejaba el botón
+        GENERAR deshabilitado para siempre y la app parecía colgada.
+        """
+        self._btn_generar.configure(state="normal", text="  GENERAR PLANOS  ")
+        self._btn_parar.configure(state="disabled", text="⏹  PARAR GENERACIÓN  ")
+        self._lbl_progreso.configure(text="Generación interrumpida por un error")
+        detalle = f"\n{tb}" if tb else ""
+        self.callback_log(
+            f"\n✗ Error durante la generación: {error}{detalle}", "error")
+        messagebox.showerror(
+            "Error en la generación",
+            "La generación se ha detenido por un error:\n\n"
+            f"{error}\n\n"
+            "Consulta el registro para más detalles.",
         )
 
     def _parar_generacion(self):
