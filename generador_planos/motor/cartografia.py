@@ -31,18 +31,28 @@ except ImportError:
 # Directorio de caché de teselas
 _TILE_CACHE_DIR = Path.home() / ".mapa_pdf_cache" / "tiles"
 
-# Caché de Transformers de pyproj (son costosos de crear)
-_TRANSFORMER_CACHE = {}
+# Caché de Transformers de pyproj POR HILO. Los Transformer no son seguros
+# para compartir entre hilos (la generación corre en workers y la descarga
+# de teselas usa un ThreadPoolExecutor): un Transformer compartido puede
+# devolver coordenadas erróneas de forma intermitente.
+import threading as _threading
+
+_TRANSFORMER_TLS = _threading.local()
 
 
 def _get_transformer(from_crs: str, to_crs: str):
-    """Devuelve un Transformer cacheado para la combinación de CRS."""
+    """Devuelve un Transformer cacheado para la combinación de CRS.
+
+    La caché es thread-local: cada hilo construye y reutiliza los suyos.
+    """
+    cache = getattr(_TRANSFORMER_TLS, "cache", None)
+    if cache is None:
+        cache = _TRANSFORMER_TLS.cache = {}
     key = (from_crs, to_crs)
-    if key not in _TRANSFORMER_CACHE:
+    if key not in cache:
         from pyproj import Transformer
-        _TRANSFORMER_CACHE[key] = Transformer.from_crs(
-            from_crs, to_crs, always_xy=True)
-    return _TRANSFORMER_CACHE[key]
+        cache[key] = Transformer.from_crs(from_crs, to_crs, always_xy=True)
+    return cache[key]
 
 
 CAPAS_BASE = {
@@ -160,6 +170,27 @@ for _wms_name, _wms_info in CAPAS_WMS.items():
 # Descarga manual de teselas (fallback si contextily falla con IGN)
 # ---------------------------------------------------------------------------
 
+def _verificar_respuesta_imagen(resp):
+    """Lanza un error claro si el servidor devolvió algo que no es imagen.
+
+    Muchos WMS/WMTS responden HTTP 200 con un XML ServiceExceptionReport
+    (capa errónea, BBOX inválido...); sin esta comprobación el error real
+    se perdía y el usuario solo veía un fondo gris.
+    """
+    ctype = resp.headers.get("Content-Type", "").lower()
+    if not ctype or ctype.startswith("image/"):
+        # Sin cabecera no se puede juzgar: PIL validará el contenido
+        return
+    # Extraer un fragmento legible del cuerpo para el diagnóstico
+    try:
+        detalle = resp.content[:400].decode("utf-8", errors="replace").strip()
+    except Exception:
+        detalle = f"contenido no decodificable ({ctype or 'tipo desconocido'})"
+    raise ValueError(
+        f"El servidor devolvió '{ctype or 'desconocido'}' en vez de una "
+        f"imagen. Respuesta: {detalle}")
+
+
 def _lat_lon_to_tile(lat, lon, zoom):
     """Convierte lat/lon a coordenadas de tile XYZ."""
     n = 2 ** zoom
@@ -190,6 +221,7 @@ def _descargar_tesela(url_template, z, x, y, timeout=10):
     }
     resp = requests.get(url, headers=headers, timeout=timeout)
     resp.raise_for_status()
+    _verificar_respuesta_imagen(resp)
     img = Image.open(io.BytesIO(resp.content))
 
     # Guardar en caché
@@ -275,14 +307,17 @@ def _descargar_wms(ax, wms_url, xmin, xmax, ymin, ymax, crs_epsg=25830):
     A diferencia de tiles, solicita una sola imagen que cubre todo el extent,
     lo que da mejor calidad a escalas cartográficas específicas (1:25.000, etc.).
     """
-    # Calcular tamaño de imagen proporcional al extent del eje
+    # Tamaño de imagen proporcional al extent del eje (~2 m/píxel). Si hay
+    # que recortar al máximo de 4096 px, se reduce AMBOS lados por el mismo
+    # factor para conservar el aspect ratio del BBOX (si no, el servidor
+    # renderiza la imagen deformada).
     extent_x = xmax - xmin
     extent_y = ymax - ymin
-    aspect = extent_x / max(extent_y, 1)
-
-    # Resolución: ~2 m/pixel para buena calidad impresa (máx 4096 px por lado)
-    height = min(4096, max(512, int(extent_y / 2)))
-    width = min(4096, max(512, int(height * aspect)))
+    width = max(512, int(extent_x / 2))
+    height = max(512, int(extent_y / 2))
+    factor = min(1.0, 4096.0 / max(width, height))
+    width = max(1, int(width * factor))
+    height = max(1, int(height * factor))
 
     # BBOX: en WMS 1.3.0 con EPSG:25830 el orden es (minx,miny,maxx,maxy)
     bbox_str = f"{xmin},{ymin},{xmax},{ymax}"
@@ -308,6 +343,7 @@ def _descargar_wms(ax, wms_url, xmin, xmax, ymin, ymax, crs_epsg=25830):
         }
         resp = requests.get(url, headers=headers, timeout=60)
         resp.raise_for_status()
+        _verificar_respuesta_imagen(resp)
         img = Image.open(io.BytesIO(resp.content))
 
         try:
@@ -341,11 +377,31 @@ def añadir_fondo_raster_local(ax, ruta_raster: str, xmin, xmax, ymin, ymax):
             "Instálala con: pip install rasterio")
 
     with rasterio.open(ruta_raster) as src:
+        # Avisar si el CRS del ráster no coincide con el del plano: se
+        # dibujaría desplazado en silencio.
+        try:
+            epsg_src = src.crs.to_epsg() if src.crs else None
+        except Exception:
+            epsg_src = None
+        if epsg_src is not None and epsg_src != 25830:
+            warnings.warn(
+                f"El ráster '{os.path.basename(ruta_raster)}' está en "
+                f"EPSG:{epsg_src}, pero el plano usa EPSG:25830. "
+                "Reproyéctalo o el fondo saldrá desplazado.")
+
         # Recortar al extent del plano
         window = from_bounds(xmin, ymin, xmax, ymax, src.transform)
         # Leer bandas visibles (máx 3 para RGB)
         n_bands = min(src.count, 3)
         data = src.read(list(range(1, n_bands + 1)), window=window)
+
+        # Si el plano no intersecta el ráster, la ventana queda vacía.
+        # Hay que fallar para que el llamador haga fallback a WMS en vez
+        # de dar por bueno un fondo en blanco.
+        if data.size == 0 or data.shape[1] == 0 or data.shape[2] == 0:
+            raise ValueError(
+                "El ráster no cubre la extensión del plano "
+                f"({os.path.basename(ruta_raster)})")
 
         # Calcular extent real de la ventana leída
         win_transform = src.window_transform(window)
@@ -1181,12 +1237,15 @@ def descargar_wfs(url: str, capa: str, xmin, ymin, xmax, ymax,
 def descargar_wms_custom(ax, url: str, capa: str, xmin, xmax, ymin, ymax,
                          crs_epsg: int = 25830, formato: str = "image/png"):
     """Descarga una imagen WMS GetMap de un servicio personalizado del usuario."""
+    # Mismo criterio que _descargar_wms: reducir ambos lados por el mismo
+    # factor al aplicar el máximo de 4096 px para no deformar la imagen.
     extent_x = xmax - xmin
     extent_y = ymax - ymin
-    aspect = extent_x / max(extent_y, 1)
-
-    height = min(4096, max(512, int(extent_y / 2)))
-    width = min(4096, max(512, int(height * aspect)))
+    width = max(512, int(extent_x / 2))
+    height = max(512, int(extent_y / 2))
+    factor = min(1.0, 4096.0 / max(width, height))
+    width = max(1, int(width * factor))
+    height = max(1, int(height * factor))
 
     bbox_str = f"{xmin},{ymin},{xmax},{ymax}"
     base_url = url.split("?")[0]
@@ -1222,6 +1281,7 @@ def descargar_wms_custom(ax, url: str, capa: str, xmin, xmax, ymin, ymax,
         resp = requests.get(base_url, params=params, timeout=60,
                             headers={"User-Agent": "GeneradorPlanosForestales/1.0"})
         resp.raise_for_status()
+        _verificar_respuesta_imagen(resp)
         img = Image.open(io.BytesIO(resp.content))
 
         try:
@@ -1280,8 +1340,10 @@ def añadir_fondo_cartografico(ax, gdf_view, proveedor_key: str, xmin=None, xmax
 
     if ctx is not None:
         proveedor = PROVIDERS_CTX.get(proveedor_key)
-        if proveedor is not None and not isinstance(proveedor, dict) or (
-                isinstance(proveedor, dict) and not proveedor.get("wms")):
+        # Usar contextily salvo con entradas WMS (esas no son tiles)
+        if (proveedor is not None
+                and (not isinstance(proveedor, dict)
+                     or not proveedor.get("wms"))):
             try:
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore")

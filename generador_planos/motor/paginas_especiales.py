@@ -95,7 +95,9 @@ def crear_indice(formato_key: str, items: list,
             fontweight="bold", color=c_fondo)
 
     mx = min(len(items), 35)
-    rh = 0.85 / max(mx + 1, 1)
+    # Altura de fila acotada: una página de continuación con pocas
+    # entradas no debe estirar las filas hasta ocupar toda la hoja
+    rh = 0.85 / max(mx + 1, 12)
     for i, (num, nombre, extra) in enumerate(items[:mx]):
         y = 0.88 - i * rh
         if i % 2 == 0:
@@ -162,6 +164,11 @@ def crear_mapa_guia(formato_key: str, gdf_infra, indices: list,
     gdf_sel = gdf_infra.iloc[indices]
     geom_union = unary_union(gdf_sel.geometry)
     bounds = geom_union.bounds  # minx, miny, maxx, maxy
+    if not bounds or any(b != b for b in bounds):  # NaN con indices vacíos
+        plt.close(fig)
+        raise ValueError(
+            "No hay geometrías válidas para el mapa guía "
+            "(selección vacía o geometrías nulas)")
     dx = bounds[2] - bounds[0]
     dy = bounds[3] - bounds[1]
     # Margen del 15 %

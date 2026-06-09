@@ -951,8 +951,28 @@ class MaquetadorPlano(ElementosMapaMixin):
         # ═══════════════════════════════════════════════════════════════
         # ZONA INFERIOR: Barra de escala gráfica profesional
         # ═══════════════════════════════════════════════════════════════
-        barra_m = BARRA_ESCALA_M.get(self.escala, 1000)
-        barra_frac = 0.55
+        # La barra debe medir físicamente lo que dicen sus etiquetas a la
+        # escala del plano: frac = (metros -> mm de papel) / mm del panel.
+        try:
+            panel_w_mm = self.ax_esc.get_position().width * self.fmt_mm[0]
+        except Exception:
+            panel_w_mm = (self.fmt_mm[0] - MARGENES_MM["izq"]
+                          - MARGENES_MM["der"]) * 0.28
+
+        def _frac_barra(metros):
+            return (metros * 1000.0 / self.escala) / max(panel_w_mm, 1e-6)
+
+        # Elegir la mayor longitud "redonda" (divisible entre 4 para las
+        # subdivisiones) cuya barra + subdivisión izquierda (1/4 extra)
+        # quepa en el panel con margen.
+        _candidatos = [20000, 10000, 5000, 4000, 2000, 1000,
+                       500, 400, 200, 100]
+        barra_m = _candidatos[-1]
+        for _m in _candidatos:
+            if _frac_barra(_m) * 1.25 <= 0.80:
+                barra_m = _m
+                break
+        barra_frac = _frac_barra(barra_m)
         esc_y = 0.10
         bar_h = 0.022
 

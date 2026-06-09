@@ -546,7 +546,10 @@ class PanelGeneracion:
             sels = tabla.selection()
             if not sels:
                 return []
-            return [tabla.index(s) for s in sels]
+            # El iid de cada fila es la posición real en el gdf (ver
+            # app._poblar_tabla); tabla.index() daría la posición visual,
+            # que no coincide cuando la tabla está filtrada.
+            return [int(s) for s in sels]
         elif modo == "rango":
             try:
                 desde = int(self._rango_desde.get())
@@ -940,7 +943,8 @@ class PanelGeneracion:
                 messagebox.showinfo("Info",
                                      "Selecciona una infraestructura en la tabla.")
                 return
-            idx = tabla.index(sels[0])
+            # iid = posición real en el gdf (ver app._poblar_tabla)
+            idx = int(sels[0])
         elif modo == "rango":
             try:
                 idx = max(0, int(self._rango_desde.get()) - 1)
@@ -952,6 +956,8 @@ class PanelGeneracion:
         self.callback_log("Generando vista previa...", "info")
 
         def _worker():
+            import matplotlib.pyplot as plt
+            _figs_antes = set(plt.get_fignums())
             try:
                 fig = self.motor.generar_vista_previa(
                     idx_fila=idx,
@@ -965,6 +971,12 @@ class PanelGeneracion:
                 )
                 self._after_seguro(0, lambda: self._mostrar_preview(fig))
             except Exception as e:
+                # Cerrar la figura a medio dibujar para no fugar memoria
+                for num in set(plt.get_fignums()) - _figs_antes:
+                    try:
+                        plt.close(num)
+                    except Exception:
+                        pass
                 msg = f"Error en vista previa: {e}"
                 self._after_seguro(
                     0, lambda: self.callback_log(msg, "error"))
@@ -1036,6 +1048,8 @@ class PanelGeneracion:
             "info")
 
         def _worker():
+            import matplotlib.pyplot as plt
+            _figs_antes = set(plt.get_fignums())
             try:
                 fig = self.motor.generar_mapa_guia(
                     indices=indices,
@@ -1044,6 +1058,12 @@ class PanelGeneracion:
                 )
                 self._after_seguro(0, lambda: self._mostrar_preview(fig))
             except Exception as e:
+                # Cerrar la figura a medio dibujar para no fugar memoria
+                for num in set(plt.get_fignums()) - _figs_antes:
+                    try:
+                        plt.close(num)
+                    except Exception:
+                        pass
                 msg = f"Error en mapa gu\u00eda: {e}"
                 self._after_seguro(
                     0, lambda: self.callback_log(msg, "error"))

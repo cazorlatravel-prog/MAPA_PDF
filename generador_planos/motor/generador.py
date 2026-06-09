@@ -1045,10 +1045,16 @@ class GeneradorPlanos:
                     nombre = str(self.gdf_infra.iloc[idx].get(
                         "Nombre_Infra", f"Infraestructura #{idx + 1}"))
                     items_idx.append((i + 1, nombre, ""))
-                fig_indice = crear_indice(formato_key, items_idx,
-                                           plantilla=self._plantilla)
-                pdf.savefig(fig_indice, dpi=self.dpi_guardado or 300, facecolor="white")
-                plt.close(fig_indice)
+                # Paginar el \u00edndice: caben ~35 entradas por p\u00e1gina; antes
+                # los planos a partir del 36 desaparec\u00edan del \u00edndice.
+                _por_pagina = 35
+                for _ini in range(0, len(items_idx), _por_pagina):
+                    fig_indice = crear_indice(
+                        formato_key, items_idx[_ini:_ini + _por_pagina],
+                        plantilla=self._plantilla)
+                    pdf.savefig(fig_indice, dpi=self.dpi_guardado or 300,
+                                facecolor="white")
+                    plt.close(fig_indice)
                 if callback_log:
                     callback_log("  \u2713 \u00cdndice a\u00f1adido")
 
@@ -1147,7 +1153,8 @@ class GeneradorPlanos:
                                                      proveedor=proveedor,
                                                      campo_mapeo=self._campo_mapeo)
                     else:
-                        items_ley = self._construir_items_leyenda(gdf_sel, color_infra)
+                        items_ley = self._construir_items_leyenda(
+                            gdf_sel, color_infra, xmin, xmax, ymin, ymax)
                         maq.dibujar_leyenda(items_ley)
                         _fila_panel = _filas_tabla[0] if _filas_tabla else row
                         maq.dibujar_panel_atributos(_fila_panel, campos,
@@ -1161,7 +1168,8 @@ class GeneradorPlanos:
                                 wms_custom=self.wms_custom_localizacion,
                                 wfs_custom=self.wfs_custom_localizacion,
                                 ruta_capa_loc=self.ruta_capa_localizacion)
-                        items_cat = self._construir_items_categoria(gdf_sel)
+                        items_cat = self._construir_items_categoria(
+                            gdf_sel, xmin, xmax, ymin, ymax)
                         maq.dibujar_barra_escala(proveedor, cx_utm=cx, cy_utm=cy,
                                                   cajetin=self._cajetin,
                                                   items_categoria=items_cat)
@@ -1215,41 +1223,53 @@ class GeneradorPlanos:
 
         rutas = []
         total = len(lotes)
-        for i, lote in enumerate(lotes):
-            self._check_cancelado()
-            if callback_log:
-                callback_log(
-                    f"\n[{i + 1}/{total}] Lote: {lote.get('nombre', lote['ruta_shp'])}")
-
-            ok, msg, faltantes = self.cargar_infraestructuras(lote["ruta_shp"])
-            if not ok:
+        # cargar_infraestructuras() reasigna self.gdf_infra para cada lote.
+        # Guardar el estado actual para restaurarlo al terminar: si no, la
+        # tabla de la GUI mostrar\u00eda los datos originales pero las siguientes
+        # generaciones usar\u00edan el shapefile del \u00faltimo lote.
+        gdf_infra_original = self.gdf_infra
+        campo_mapeo_original = self._campo_mapeo
+        try:
+            for i, lote in enumerate(lotes):
+                self._check_cancelado()
                 if callback_log:
-                    callback_log(f"  \u2717 {msg}", "error")
+                    callback_log(
+                        f"\n[{i + 1}/{total}] Lote: {lote.get('nombre', lote['ruta_shp'])}")
+
+                ok, msg, faltantes = self.cargar_infraestructuras(lote["ruta_shp"])
+                if not ok:
+                    if callback_log:
+                        callback_log(f"  \u2717 {msg}", "error")
+                    if callback_progreso:
+                        callback_progreso(i + 1, total)
+                    continue
+
+                formato = lote.get("formato", "A3 Horizontal")
+                carpeta = lote.get("carpeta_salida", ".")
+                os.makedirs(carpeta, exist_ok=True)
+
+                indices = list(range(len(self.gdf_infra)))
+                try:
+                    resultados = self.generar_serie(
+                        indices=indices, formato_key=formato,
+                        proveedor=proveedor, transparencia=transparencia,
+                        campos=campos, color_infra=color_infra,
+                        salida_dir=carpeta, escala_manual=escala_manual,
+                        callback_log=callback_log,
+                        campo_encabezado=campo_encabezado,
+                    )
+                    rutas.extend(resultados)
+                except GeneracionCancelada:
+                    raise
+                except Exception as e:
+                    tb = traceback.format_exc()
+                    if callback_log:
+                        callback_log(f"  \u2717 Error en lote: {e}\n{tb}", "error")
+
                 if callback_progreso:
                     callback_progreso(i + 1, total)
-                continue
-
-            formato = lote.get("formato", "A3 Horizontal")
-            carpeta = lote.get("carpeta_salida", ".")
-            os.makedirs(carpeta, exist_ok=True)
-
-            indices = list(range(len(self.gdf_infra)))
-            try:
-                resultados = self.generar_serie(
-                    indices=indices, formato_key=formato,
-                    proveedor=proveedor, transparencia=transparencia,
-                    campos=campos, color_infra=color_infra,
-                    salida_dir=carpeta, escala_manual=escala_manual,
-                    callback_log=callback_log,
-                    campo_encabezado=campo_encabezado,
-                )
-                rutas.extend(resultados)
-            except Exception as e:
-                tb = traceback.format_exc()
-                if callback_log:
-                    callback_log(f"  \u2717 Error en lote: {e}\n{tb}", "error")
-
-            if callback_progreso:
-                callback_progreso(i + 1, total)
+        finally:
+            self.gdf_infra = gdf_infra_original
+            self._campo_mapeo = campo_mapeo_original
 
         return rutas

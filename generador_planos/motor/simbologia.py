@@ -108,7 +108,12 @@ class ConfigSimbologia:
 
     @classmethod
     def from_dict(cls, d: dict[str, str | float]) -> ConfigSimbologia:
-        d = {k: v for k, v in d.items() if k != "hatch"}
+        # Aceptar solo los kwargs conocidos: un proyecto guardado por otra
+        # versión (clave nueva, renombrada o espuria) no debe romper la
+        # carga completa del proyecto con un TypeError.
+        import inspect
+        permitidos = set(inspect.signature(cls.__init__).parameters) - {"self"}
+        d = {k: v for k, v in d.items() if k in permitidos}
         return cls(**d)
 
 
@@ -139,14 +144,25 @@ class GestorSimbologia:
         )
 
     def generar_por_categoria(self, campo: str, valores: list[str]) -> None:
-        """Genera simbología automática por categoría de un campo."""
-        self.categorias[campo] = {}
+        """Genera simbología automática por categoría de un campo.
+
+        Conserva la simbología ya existente para los valores conocidos
+        (p. ej. colores personalizados restaurados de un proyecto); solo
+        asigna color de paleta a los valores nuevos.
+        """
+        previas = self.categorias.get(campo, {})
+        nuevas = {}
         for i, valor in enumerate(valores):
+            v = str(valor)
+            if v in previas:
+                nuevas[v] = previas[v]
+                continue
             color = PALETA_CATEGORIAS[i % len(PALETA_CATEGORIAS)]
-            self.categorias[campo][str(valor)] = ConfigSimbologia(
+            nuevas[v] = ConfigSimbologia(
                 color=color, linewidth=2.0, facecolor=color + "55",
-                label=str(valor),
+                label=v,
             )
+        self.categorias[campo] = nuevas
 
     def generar_por_categoria_montes(self, campo: str, valores: list[str]) -> None:
         """Genera simbología automática por categoría para montes."""
@@ -156,13 +172,19 @@ class GestorSimbologia:
             "#66BB6A", "#81C784", "#A5D6A7", "#558B2F", "#33691E",
             "#827717", "#9E9D24", "#AFB42B", "#C0CA33", "#D4E157",
         ]
-        self.categorias_montes[campo] = {}
+        previas = self.categorias_montes.get(campo, {})
+        nuevas = {}
         for i, valor in enumerate(valores):
+            v = str(valor)
+            if v in previas:
+                nuevas[v] = previas[v]
+                continue
             color = paleta_montes[i % len(paleta_montes)]
-            self.categorias_montes[campo][str(valor)] = ConfigSimbologia(
+            nuevas[v] = ConfigSimbologia(
                 color=color, linewidth=0.8, facecolor=color,
-                alpha=0.3, label=str(valor),
+                alpha=0.3, label=v,
             )
+        self.categorias_montes[campo] = nuevas
 
     def obtener_simbologia_monte(self, campo_cat: str, valor: str) -> ConfigSimbologia:
         """Obtiene la simbología para un monte según su categoría."""

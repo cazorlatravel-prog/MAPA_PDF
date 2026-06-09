@@ -352,7 +352,10 @@ class App(tk.Tk):
                 v = row.get(col)
                 vals.append("\u2014" if v is None or str(v) == "nan" else str(v))
             tag = "par" if i % 2 == 0 else "impar"
-            self._tabla.insert("", "end", values=vals, tags=(tag,))
+            # iid = posici\u00f3n real en el GeoDataFrame. Con la tabla filtrada,
+            # Treeview.index() devolver\u00eda la posici\u00f3n visual (0,1,2...) y la
+            # generaci\u00f3n usar\u00eda infraestructuras equivocadas.
+            self._tabla.insert("", "end", iid=str(i), values=vals, tags=(tag,))
 
         n = len(list(indices)) if not isinstance(indices, range) else len(indices)
         self._escribir_log(f"Tabla actualizada: {n} infraestructuras.", "info")
@@ -820,7 +823,23 @@ class App(tk.Tk):
         self.bind("<Control-l>", self._atajo_limpiar_log)
         self.bind("<Control-L>", self._atajo_limpiar_log)
 
+    def _foco_en_texto(self) -> bool:
+        """True si el foco está en un widget de edición de texto.
+
+        Los atajos no deben dispararse mientras el usuario escribe en un
+        Entry/Combobox/Text (p. ej. Ctrl+S por costumbre al editar el
+        patrón de nombre abriría el diálogo de guardar proyecto).
+        """
+        try:
+            w = self.focus_get()
+        except Exception:
+            return False
+        return isinstance(w, (tk.Entry, tk.Text, ttk.Entry, ttk.Combobox,
+                              tk.Spinbox))
+
     def _atajo_generar(self, event=None):
+        if self._foco_en_texto():
+            return
         try:
             self.panel_generacion._iniciar_generacion()
         except Exception as e:
@@ -828,6 +847,8 @@ class App(tk.Tk):
         return "break"
 
     def _atajo_vista_previa(self, event=None):
+        if self._foco_en_texto():
+            return
         try:
             self.panel_generacion._vista_previa()
         except Exception as e:
@@ -835,6 +856,8 @@ class App(tk.Tk):
         return "break"
 
     def _atajo_guardar(self, event=None):
+        if self._foco_en_texto():
+            return
         try:
             self._guardar_proyecto()
         except Exception as e:
@@ -842,6 +865,8 @@ class App(tk.Tk):
         return "break"
 
     def _atajo_cargar(self, event=None):
+        if self._foco_en_texto():
+            return
         try:
             self._cargar_proyecto()
         except Exception as e:
@@ -849,6 +874,8 @@ class App(tk.Tk):
         return "break"
 
     def _atajo_limpiar_log(self, event=None):
+        if self._foco_en_texto():
+            return
         try:
             self._limpiar_log()
         except Exception as e:

@@ -399,9 +399,10 @@ class PanelConfig:
 
     @property
     def escala_manual(self) -> int:
-        txt = self._escala_manual.get().replace(",", "").strip()
-        if txt.startswith("0"):
-            return None
+        # No descartar por empezar en "0": un "0500" tecleado debe ser 500,
+        # no escala automática. "0" y "0 (Automática)" siguen dando None
+        # (val<=0 y ValueError respectivamente).
+        txt = self._escala_manual.get().replace(",", "").replace(".", "").strip()
         try:
             val = int(txt)
             return val if val > 0 else None
