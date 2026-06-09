@@ -16,6 +16,7 @@ from .estilos import (
     COLOR_FONDO_APP, COLOR_HEADER,
     FONT_BOLD, FONT_SMALL, FONT_LABEL, FONT_SECCION, FONT_BOTON,
     crear_frame_seccion, crear_boton, crear_entry, crear_label,
+    crear_tooltip,
 )
 from ..motor.maquetacion import ETIQUETAS_CAMPOS
 from ..motor.generador import GeneracionCancelada
@@ -129,22 +130,32 @@ class PanelGeneracion:
 
         # ── Opciones PDF ──
         self._multipagina = tk.BooleanVar(value=False)
-        tk.Checkbutton(
+        _chk_multi = tk.Checkbutton(
             f, text="PDF multipagina (un solo archivo)",
             variable=self._multipagina, font=FONT_SMALL,
             bg=COLOR_PANEL, fg=COLOR_TEXTO, selectcolor=COLOR_ENTRY,
             activebackground=COLOR_PANEL, activeforeground=COLOR_ACENTO,
             cursor="hand2", bd=0, highlightthickness=0,
-        ).grid(row=8, column=0, columnspan=2, sticky="w", pady=(8, 0))
+        )
+        _chk_multi.grid(row=8, column=0, columnspan=2, sticky="w", pady=(8, 0))
+        crear_tooltip(
+            _chk_multi,
+            "Genera un \u00fanico PDF con todos los planos como p\u00e1ginas,\n"
+            "en lugar de un archivo independiente por infraestructura.")
 
         self._incluir_portada = tk.BooleanVar(value=False)
-        tk.Checkbutton(
+        _chk_portada = tk.Checkbutton(
             f, text="Incluir portada e \u00edndice",
             variable=self._incluir_portada, font=FONT_SMALL,
             bg=COLOR_PANEL, fg=COLOR_TEXTO, selectcolor=COLOR_ENTRY,
             activebackground=COLOR_PANEL, activeforeground=COLOR_ACENTO,
             cursor="hand2", bd=0, highlightthickness=0,
-        ).grid(row=9, column=0, columnspan=2, sticky="w", pady=(2, 0))
+        )
+        _chk_portada.grid(row=9, column=0, columnspan=2, sticky="w", pady=(2, 0))
+        crear_tooltip(
+            _chk_portada,
+            "A\u00f1ade una portada con t\u00edtulo e \u00edndice al PDF multip\u00e1gina\n"
+            "(solo aplica con la opci\u00f3n de PDF multip\u00e1gina activada).")
 
         # ── Progreso ──
         crear_label(f, "Progreso:", tipo="secundario").grid(
@@ -164,12 +175,20 @@ class PanelGeneracion:
         btn_preview_f.columnconfigure(0, weight=1)
         btn_preview_f.columnconfigure(1, weight=1)
 
-        crear_boton(btn_preview_f, "Vista previa",
-                    self._vista_previa, icono="\U0001f50d").grid(
-                    row=0, column=0, sticky="ew", padx=(0, 3))
-        crear_boton(btn_preview_f, "Mapa gu\u00eda",
-                    self._mapa_guia, icono="\U0001f5fa").grid(
-                    row=0, column=1, sticky="ew", padx=(3, 0))
+        _btn_preview = crear_boton(btn_preview_f, "Vista previa",
+                    self._vista_previa, icono="\U0001f50d")
+        _btn_preview.grid(row=0, column=0, sticky="ew", padx=(0, 3))
+        _btn_guia = crear_boton(btn_preview_f, "Mapa gu\u00eda",
+                    self._mapa_guia, icono="\U0001f5fa")
+        _btn_guia.grid(row=0, column=1, sticky="ew", padx=(3, 0))
+        crear_tooltip(
+            _btn_preview,
+            "Genera una vista previa r\u00e1pida en pantalla del primer plano\n"
+            "seg\u00fan el modo de selecci\u00f3n actual (F5).")
+        crear_tooltip(
+            _btn_guia,
+            "Muestra un mapa gu\u00eda con todas las infraestructuras\n"
+            "seleccionadas numeradas sobre el territorio.")
 
         # ── Boton GENERAR ──
         self._btn_generar = crear_boton(
@@ -178,6 +197,10 @@ class PanelGeneracion:
             estilo="primario",
         )
         self._btn_generar.grid(row=14, column=0, columnspan=2, sticky="ew", pady=(6, 4))
+        crear_tooltip(
+            self._btn_generar,
+            "Genera los planos según el modo seleccionado (Ctrl+G).\n"
+            "Requiere haber cargado el shapefile de infraestructuras.")
 
         # ── Boton PARAR ──
         self._btn_parar = crear_boton(
@@ -187,6 +210,10 @@ class PanelGeneracion:
         )
         self._btn_parar.grid(row=15, column=0, columnspan=2, sticky="ew", pady=(0, 4))
         self._btn_parar.configure(state="disabled")
+        crear_tooltip(
+            self._btn_parar,
+            "Detiene la generación en curso.\n"
+            "Los planos ya generados se conservan.")
 
         # ── Boton abrir carpeta ──
         crear_boton(f, "Abrir carpeta de salida",
@@ -598,7 +625,7 @@ class PanelGeneracion:
                         f"\n{'=' * 50}\nGenerando {len(valores_sel)} planos agrupados "
                         f"por {campo_grupo}...", "info")
 
-                    self.motor.generar_serie_agrupada(
+                    rutas = self.motor.generar_serie_agrupada(
                         campo_grupo=campo_grupo,
                         valores=valores_sel,
                         formato_key=cfg["formato"],
@@ -615,7 +642,10 @@ class PanelGeneracion:
                         patron_nombre=patron_nombre,
                     )
 
-                    self._after_seguro(0, self._fin_generacion)
+                    n_ok = len(rutas or [])
+                    total = len(valores_sel)
+                    self._after_seguro(
+                        0, lambda: self._fin_generacion(n_ok, total))
                 except GeneracionCancelada:
                     self._after_seguro(0, self._fin_cancelacion)
                 except Exception as e:
@@ -648,7 +678,7 @@ class PanelGeneracion:
                         nombre_multi = "".join(c for c in nombre_multi if c.isalnum() or c in "_ -.")[:80]
                         nombre_multi = nombre_multi.strip("_- ") or "planos_forestales_completo"
                         ruta_pdf = os.path.join(carpeta, f"{nombre_multi}.pdf")
-                        self.motor.generar_pdf_multipagina(
+                        ruta = self.motor.generar_pdf_multipagina(
                             indices=indices,
                             formato_key=cfg["formato"],
                             proveedor=cfg["proveedor"],
@@ -663,8 +693,11 @@ class PanelGeneracion:
                             campo_encabezado=campo_encabezado,
                             patron_nombre=patron_nombre,
                         )
+                        # Multipágina: 1 PDF esperado (cuenta 1 si devuelve ruta)
+                        n_ok = 1 if ruta else 0
+                        total = 1
                     else:
-                        self.motor.generar_serie(
+                        rutas = self.motor.generar_serie(
                             indices=indices,
                             formato_key=cfg["formato"],
                             proveedor=cfg["proveedor"],
@@ -678,8 +711,11 @@ class PanelGeneracion:
                             campo_encabezado=campo_encabezado,
                             patron_nombre=patron_nombre,
                         )
+                        n_ok = len(rutas or [])
+                        total = len(indices)
 
-                    self._after_seguro(0, self._fin_generacion)
+                    self._after_seguro(
+                        0, lambda: self._fin_generacion(n_ok, total))
                 except GeneracionCancelada:
                     self._after_seguro(0, self._fin_cancelacion)
                 except Exception as e:
@@ -711,7 +747,7 @@ class PanelGeneracion:
                 self.callback_log(
                     f"\n{'=' * 50}\nIniciando generaci\u00f3n por lotes...", "info")
 
-                self.motor.generar_lotes_csv(
+                rutas = self.motor.generar_lotes_csv(
                     ruta_csv=self._ruta_csv_completa,
                     proveedor=cfg["proveedor"],
                     transparencia=cfg["transparencia"],
@@ -723,7 +759,12 @@ class PanelGeneracion:
                     campo_encabezado=campo_encabezado,
                 )
 
-                self._after_seguro(0, self._fin_generacion)
+                # El total esperado de planos por lotes no se conoce de
+                # antemano (depende de cada shapefile del CSV); se reporta
+                # el número generado dejando total=None.
+                n_ok = len(rutas or [])
+                self._after_seguro(
+                    0, lambda: self._fin_generacion(n_ok, None))
             except GeneracionCancelada:
                 self._after_seguro(0, self._fin_cancelacion)
             except Exception as e:
@@ -740,16 +781,68 @@ class PanelGeneracion:
                 text=f"{actual}/{total} planos generados")
         self._after_seguro(0, _update)
 
-    def _fin_generacion(self):
+    def _fin_generacion(self, n_ok=None, total=None):
+        """Restaura la UI y muestra un resumen honesto del resultado.
+
+        - n_ok == total  \u2192 todo correcto.
+        - 0 < n_ok < total \u2192 algunos planos fallaron (aviso).
+        - n_ok == 0 \u2192 no se gener\u00f3 nada (error).
+        - n_ok is None \u2192 comportamiento gen\u00e9rico (compatibilidad).
+        - total is None \u2192 total desconocido (p.ej. lotes); solo se reporta n_ok.
+        """
         cfg = self.get_config()
+        carpeta = cfg["salida"]
         self._btn_generar.configure(state="normal", text="  GENERAR PLANOS  ")
         self._btn_parar.configure(state="disabled", text="\u23f9  PARAR GENERACI\u00d3N  ")
-        self.callback_log(
-            f"\n\u2713 Proceso finalizado. Planos guardados en:\n{cfg['salida']}", "ok")
-        messagebox.showinfo(
-            "Completado",
-            f"Planos generados correctamente.\n\nCarpeta: {cfg['salida']}",
-        )
+
+        # Compatibilidad: sin informaci\u00f3n de conteo, resumen gen\u00e9rico
+        if n_ok is None:
+            self.callback_log(
+                f"\n\u2713 Proceso finalizado. Planos guardados en:\n{carpeta}", "ok")
+            messagebox.showinfo(
+                "Completado",
+                f"Planos generados correctamente.\n\nCarpeta: {carpeta}",
+            )
+            return
+
+        if n_ok == 0:
+            self.callback_log(
+                "\n\u2717 No se gener\u00f3 ning\u00fan plano. "
+                "Revisa el registro para ver los errores.", "error")
+            messagebox.showerror(
+                "Sin resultados",
+                "No se gener\u00f3 ning\u00fan plano; revisa el registro.",
+            )
+            return
+
+        # Total desconocido (lotes): solo se reporta lo generado
+        if total is None:
+            self.callback_log(
+                f"\n\u2713 Proceso finalizado: {n_ok} planos generados en:\n{carpeta}",
+                "ok")
+            messagebox.showinfo(
+                "Completado",
+                f"\u2713 {n_ok} planos generados correctamente.\n\nCarpeta: {carpeta}",
+            )
+            return
+
+        if n_ok == total:
+            self.callback_log(
+                f"\n\u2713 {n_ok} planos generados correctamente en:\n{carpeta}", "ok")
+            messagebox.showinfo(
+                "Completado",
+                f"\u2713 {n_ok} planos generados correctamente.\n\nCarpeta: {carpeta}",
+            )
+        else:
+            self.callback_log(
+                f"\n\u26a0 {n_ok} de {total} planos generados; "
+                "revisa el registro para ver los errores.", "warn")
+            messagebox.showwarning(
+                "Generaci\u00f3n incompleta",
+                f"{n_ok} de {total} generados; "
+                "revisa el registro para ver los errores.\n\n"
+                f"Carpeta: {carpeta}",
+            )
 
     def _fin_cancelacion(self):
         self._btn_generar.configure(state="normal", text="  GENERAR PLANOS  ")

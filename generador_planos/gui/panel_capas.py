@@ -18,12 +18,15 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 from .estilos import (
-    COLOR_PANEL, COLOR_TEXTO, COLOR_TEXTO_GRIS, COLOR_BORDE, COLOR_ENTRY,
+    COLOR_PANEL, COLOR_PANEL_ALT, COLOR_TEXTO, COLOR_TEXTO_GRIS,
+    COLOR_BORDE, COLOR_ENTRY,
     COLOR_ACENTO, COLOR_ACENTO2, COLOR_ACENTO3, COLOR_ERROR, COLOR_HEADER,
     COLOR_HOVER, COLOR_FONDO_APP,
     FONT_BOLD, FONT_SMALL, FONT_SECCION, FONT_BOTON,
     crear_frame_seccion, crear_boton, crear_entry, crear_label,
+    crear_tooltip,
 )
+from . import recientes
 from ..motor.maquetacion import ETIQUETAS_CAMPOS
 from ..motor.capas_extra import TIPOS_CAPA
 
@@ -56,13 +59,44 @@ class PanelCapas:
                  wraplength=260, justify="left").grid(row=1, column=0, sticky="ew")
 
         btn_infra_f = tk.Frame(f, bg=COLOR_PANEL)
-        btn_infra_f.grid(row=2, column=0, sticky="ew", pady=(6, 10))
+        btn_infra_f.grid(row=2, column=0, sticky="ew", pady=(6, 4))
         btn_infra_f.columnconfigure(0, weight=1)
         btn_infra_f.columnconfigure(1, weight=1)
-        crear_boton(btn_infra_f, "Cargar SHP", self._cargar_infra,
-                    icono="\U0001f4e5").grid(row=0, column=0, sticky="ew", padx=(0, 3))
-        crear_boton(btn_infra_f, "Cargar GDB", self._cargar_infra_gdb,
-                    icono="\U0001f4c1").grid(row=0, column=1, sticky="ew", padx=(3, 0))
+        _btn_infra_shp = crear_boton(btn_infra_f, "Cargar SHP", self._cargar_infra,
+                    icono="\U0001f4e5")
+        _btn_infra_shp.grid(row=0, column=0, sticky="ew", padx=(0, 3))
+        _btn_infra_gdb = crear_boton(btn_infra_f, "Cargar GDB", self._cargar_infra_gdb,
+                    icono="\U0001f4c1")
+        _btn_infra_gdb.grid(row=0, column=1, sticky="ew", padx=(3, 0))
+        crear_tooltip(
+            _btn_infra_shp,
+            "Carga el shapefile (.shp) de infraestructuras.\n"
+            "Es la capa principal: una entidad por plano generado.")
+        crear_tooltip(
+            _btn_infra_gdb,
+            "Carga las infraestructuras desde una geodatabase (.gdb).\n"
+            "Permite elegir la capa dentro de la GDB.")
+
+        # Menú de shapefiles recientes (fila propia dentro del frame de botones)
+        self._mb_recientes = tk.Menubutton(
+            btn_infra_f, text="Recientes ▾", font=FONT_SMALL,
+            bg=COLOR_BORDE, fg=COLOR_TEXTO, activebackground=COLOR_ACENTO,
+            activeforeground="#FFFFFF", relief="flat", cursor="hand2",
+            bd=0, highlightthickness=0, padx=8, pady=3,
+        )
+        self._menu_recientes = tk.Menu(
+            self._mb_recientes, tearoff=0,
+            bg=COLOR_PANEL_ALT, fg=COLOR_TEXTO,
+            activebackground=COLOR_ACENTO, activeforeground="#FFFFFF",
+            font=FONT_SMALL)
+        self._mb_recientes.configure(menu=self._menu_recientes)
+        self._mb_recientes.grid(row=1, column=0, columnspan=2, sticky="w",
+                                pady=(4, 0))
+        crear_tooltip(
+            self._mb_recientes,
+            "Vuelve a abrir un shapefile de infraestructuras\n"
+            "cargado recientemente.")
+        self._menu_recientes_actualizar()
 
         # ── Montes ──
         crear_label(f, "Capa Montes (opcional)", tipo="titulo").grid(
@@ -77,10 +111,18 @@ class PanelCapas:
         btn_montes_f.grid(row=5, column=0, sticky="ew", pady=(6, 4))
         btn_montes_f.columnconfigure(0, weight=1)
         btn_montes_f.columnconfigure(1, weight=1)
-        crear_boton(btn_montes_f, "Cargar SHP", self._cargar_montes,
-                    icono="\U0001f332").grid(row=0, column=0, sticky="ew", padx=(0, 3))
-        crear_boton(btn_montes_f, "Cargar GDB", self._cargar_montes_gdb,
-                    icono="\U0001f4c1").grid(row=0, column=1, sticky="ew", padx=(3, 0))
+        _btn_montes_shp = crear_boton(btn_montes_f, "Cargar SHP", self._cargar_montes,
+                    icono="\U0001f332")
+        _btn_montes_shp.grid(row=0, column=0, sticky="ew", padx=(0, 3))
+        _btn_montes_gdb = crear_boton(btn_montes_f, "Cargar GDB", self._cargar_montes_gdb,
+                    icono="\U0001f4c1")
+        _btn_montes_gdb.grid(row=0, column=1, sticky="ew", padx=(3, 0))
+        crear_tooltip(
+            _btn_montes_shp,
+            "Carga el shapefile (.shp) de montes (capa opcional de fondo).")
+        crear_tooltip(
+            _btn_montes_gdb,
+            "Carga la capa de montes desde una geodatabase (.gdb).")
 
         # ── Transparencia infraestructuras ──
         transp_infra_header = tk.Frame(f, bg=COLOR_PANEL)
@@ -95,8 +137,13 @@ class PanelCapas:
         self.transparencia_infra = tk.DoubleVar(value=0.35)
         self.transparencia_infra.trace_add("write", lambda *_: self._lbl_transp_infra.configure(
             text=f"{self.transparencia_infra.get():.2f}"))
-        ttk.Scale(f, from_=0.0, to=1.0, variable=self.transparencia_infra,
-                  orient="horizontal").grid(row=7, column=0, sticky="ew", pady=(2, 4))
+        _sc_transp_infra = ttk.Scale(f, from_=0.0, to=1.0,
+                  variable=self.transparencia_infra, orient="horizontal")
+        _sc_transp_infra.grid(row=7, column=0, sticky="ew", pady=(2, 4))
+        crear_tooltip(
+            _sc_transp_infra,
+            "Transparencia del relleno de las infraestructuras.\n"
+            "0 = opaco · 1 = totalmente transparente.")
 
         # ── Transparencia montes ──
         transp_header = tk.Frame(f, bg=COLOR_PANEL)
@@ -110,8 +157,13 @@ class PanelCapas:
         self.transparencia = tk.DoubleVar(value=0.3)
         self.transparencia.trace_add("write", lambda *_: self._lbl_transp.configure(
             text=f"{self.transparencia.get():.2f}"))
-        ttk.Scale(f, from_=0.0, to=1.0, variable=self.transparencia,
-                  orient="horizontal").grid(row=9, column=0, sticky="ew", pady=(2, 4))
+        _sc_transp_montes = ttk.Scale(f, from_=0.0, to=1.0,
+                  variable=self.transparencia, orient="horizontal")
+        _sc_transp_montes.grid(row=9, column=0, sticky="ew", pady=(2, 4))
+        crear_tooltip(
+            _sc_transp_montes,
+            "Transparencia de la capa de montes.\n"
+            "0 = opaco · 1 = totalmente transparente.")
 
         # ── Capas extra ──
         crear_label(f, "Capas adicionales:", tipo="titulo").grid(
@@ -198,6 +250,7 @@ class PanelCapas:
                     self._ruta_infra.set(os.path.basename(ruta))
                 self._ruta_infra_completa = ruta
                 self._layer_infra = layer
+                self._registrar_reciente_infra(ruta)
                 self.callback_log(msg, "ok")
                 # Aplicar mapeo guardado antes de notificar la tabla
                 if mapeo:
@@ -299,6 +352,44 @@ class PanelCapas:
 
         threading.Thread(target=_worker, daemon=True).start()
 
+    # ── Shapefiles recientes ────────────────────────────────────────────
+
+    def _menu_recientes_actualizar(self):
+        """Reconstruye el menú de shapefiles recientes."""
+        menu = self._menu_recientes
+        menu.delete(0, "end")
+        lista = recientes.cargar_recientes().get(recientes.TIPO_SHAPEFILE, [])
+        if not lista:
+            menu.add_command(label="(sin recientes)", state="disabled")
+            return
+        for ruta in lista:
+            existe = os.path.exists(ruta)
+            etiqueta = os.path.basename(ruta) or ruta
+            if existe:
+                menu.add_command(
+                    label=etiqueta,
+                    command=lambda r=ruta: self._cargar_infra_reciente(r))
+            else:
+                menu.add_command(label=f"{etiqueta} (no encontrado)",
+                                 state="disabled")
+
+    def _cargar_infra_reciente(self, ruta: str):
+        """Carga un shapefile reciente a través de la ruta de carga sin diálogo."""
+        if not os.path.exists(ruta):
+            messagebox.showwarning(
+                "Archivo no encontrado",
+                f"El archivo ya no existe:\n{ruta}")
+            self._menu_recientes_actualizar()
+            return
+        # Reutiliza la ruta de carga existente (maneja capa/mapeo)
+        self.cargar_infra_desde_proyecto(ruta)
+
+    def _registrar_reciente_infra(self, ruta: str):
+        """Registra un shapefile como reciente y refresca el menú."""
+        if ruta and ruta.lower().endswith(".shp"):
+            recientes.agregar_reciente(recientes.TIPO_SHAPEFILE, ruta)
+            self._menu_recientes_actualizar()
+
     def _cargar_infra(self):
         ruta = filedialog.askopenfilename(
             title="Seleccionar Shapefile de Infraestructuras",
@@ -316,6 +407,7 @@ class PanelCapas:
                 self._ruta_infra.set(os.path.basename(ruta))
                 self._ruta_infra_completa = ruta
                 self._layer_infra = None
+                self._registrar_reciente_infra(ruta)
                 self.callback_log(msg, "ok")
                 self.callback_tabla()
                 self._previsualizar(self.motor.gdf_infra)

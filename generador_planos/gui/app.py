@@ -10,10 +10,11 @@ from tkinter import ttk, filedialog, messagebox
 
 from .estilos import (
     COLOR_FONDO_APP, COLOR_ACENTO, COLOR_ACENTO2, COLOR_TEXTO_GRIS,
-    COLOR_PANEL, COLOR_TEXTO, COLOR_BORDE, COLOR_HEADER, COLOR_ENTRY,
+    COLOR_PANEL, COLOR_PANEL_ALT, COLOR_TEXTO, COLOR_BORDE, COLOR_HEADER,
+    COLOR_ENTRY,
     FONT_BOLD, FONT_MONO, FONT_SMALL, FONT_SUBTITULO, FONT_SECCION,
     FONT_BOTON,
-    aplicar_estilos, crear_boton,
+    aplicar_estilos, crear_boton, crear_tooltip,
 )
 from .panel_capas import PanelCapas
 from .panel_config import PanelConfig
@@ -23,6 +24,7 @@ from .panel_simbologia import PanelSimbologia
 from .panel_cajetin import PanelCajetin
 from .panel_generacion import PanelGeneracion
 from .panel_info import PanelInfo
+from . import recientes
 from ..motor.generador import GeneradorPlanos
 from ..motor.proyecto import Proyecto
 
@@ -43,6 +45,7 @@ class App(tk.Tk):
 
         aplicar_estilos(self)
         self._construir_ui()
+        self._configurar_atajos()
 
     def _construir_ui(self):
         # ── Barra superior ──
@@ -207,6 +210,22 @@ class App(tk.Tk):
             bd=0, highlightthickness=0,
             activebackground=COLOR_ACENTO, activeforeground="#FFFFFF")
         btn_cargar.pack(side="left")
+
+        # Menú de proyectos recientes
+        self._mb_recientes_proy = tk.Menubutton(
+            btn_f, text="▾", font=FONT_BOTON,
+            bg=COLOR_BORDE, fg=COLOR_TEXTO, relief="flat", cursor="hand2",
+            padx=6, pady=3, bd=0, highlightthickness=0,
+            activebackground=COLOR_ACENTO, activeforeground="#FFFFFF")
+        self._menu_recientes_proy = tk.Menu(
+            self._mb_recientes_proy, tearoff=0,
+            bg=COLOR_PANEL_ALT, fg=COLOR_TEXTO,
+            activebackground=COLOR_ACENTO, activeforeground="#FFFFFF",
+            font=FONT_SMALL)
+        self._mb_recientes_proy.configure(menu=self._menu_recientes_proy)
+        self._mb_recientes_proy.pack(side="left", padx=(2, 0))
+        crear_tooltip(self._mb_recientes_proy, "Proyectos abiertos recientemente")
+        self._actualizar_menu_recientes_proyecto()
 
         btn_info = tk.Button(
             btn_f, text="\u2139\ufe0f  Info", command=self._mostrar_info,
@@ -573,18 +592,27 @@ class App(tk.Tk):
             p.campos_orden = list(self.panel_campos._campos_orden)
 
             p.guardar(ruta)
+            recientes.agregar_reciente(recientes.TIPO_PROYECTO, ruta)
+            self._actualizar_menu_recientes_proyecto()
             self._escribir_log(f"Proyecto guardado: {ruta}", "ok")
         except Exception as e:
             self._escribir_log(f"Error al guardar proyecto: {e}", "error")
             messagebox.showerror("Error", str(e))
 
-    def _cargar_proyecto(self):
-        ruta = filedialog.askopenfilename(
-            title="Cargar proyecto",
-            filetypes=[("Proyecto JSON", "*.json")],
-            initialdir=self._ultimo_dir_proyecto,
-        )
+    def _cargar_proyecto(self, ruta: str = None):
         if not ruta:
+            ruta = filedialog.askopenfilename(
+                title="Cargar proyecto",
+                filetypes=[("Proyecto JSON", "*.json")],
+                initialdir=self._ultimo_dir_proyecto,
+            )
+        if not ruta:
+            return
+        if not os.path.exists(ruta):
+            messagebox.showwarning(
+                "Archivo no encontrado",
+                f"El proyecto ya no existe:\n{ruta}")
+            self._actualizar_menu_recientes_proyecto()
             return
         self._ultimo_dir_proyecto = os.path.dirname(ruta)
 
@@ -740,10 +768,92 @@ class App(tk.Tk):
             if p.capas_extra:
                 self.panel_capas.cargar_capas_extra_desde_proyecto(p.capas_extra)
 
+            recientes.agregar_reciente(recientes.TIPO_PROYECTO, ruta)
+            self._actualizar_menu_recientes_proyecto()
             self._escribir_log(f"Proyecto cargado: {p.nombre}", "ok")
         except Exception as e:
             self._escribir_log(f"Error al cargar proyecto: {e}", "error")
             messagebox.showerror("Error", str(e))
+
+    def _actualizar_menu_recientes_proyecto(self):
+        """Reconstruye el menú de proyectos recientes en la barra superior."""
+        menu = self._menu_recientes_proy
+        menu.delete(0, "end")
+        lista = recientes.cargar_recientes().get(recientes.TIPO_PROYECTO, [])
+        if not lista:
+            menu.add_command(label="(sin recientes)", state="disabled")
+            return
+        for ruta in lista:
+            existe = os.path.exists(ruta)
+            etiqueta = os.path.basename(ruta) or ruta
+            if existe:
+                menu.add_command(
+                    label=etiqueta,
+                    command=lambda r=ruta: self._cargar_proyecto(r))
+            else:
+                menu.add_command(label=f"{etiqueta} (no encontrado)",
+                                 state="disabled")
+
+    def _limpiar_log(self):
+        """Vacía el registro de proceso."""
+        self._log.configure(state="normal")
+        self._log.delete("1.0", "end")
+        self._log.configure(state="disabled")
+        self._escribir_log("Registro limpiado.", "info")
+
+    # ── Atajos de teclado ─────────────────────────────────────────────────
+
+    def _configurar_atajos(self):
+        """Vincula atajos de teclado a las acciones principales.
+
+        Cada manejador es tolerante: los validadores subyacentes ya
+        comprueban si hay datos cargados, por lo que un atajo pulsado
+        prematuramente simplemente no hace nada perjudicial.
+        """
+        self.bind("<Control-g>", self._atajo_generar)
+        self.bind("<Control-G>", self._atajo_generar)
+        self.bind("<F5>", self._atajo_vista_previa)
+        self.bind("<Control-s>", self._atajo_guardar)
+        self.bind("<Control-S>", self._atajo_guardar)
+        self.bind("<Control-o>", self._atajo_cargar)
+        self.bind("<Control-O>", self._atajo_cargar)
+        self.bind("<Control-l>", self._atajo_limpiar_log)
+        self.bind("<Control-L>", self._atajo_limpiar_log)
+
+    def _atajo_generar(self, event=None):
+        try:
+            self.panel_generacion._iniciar_generacion()
+        except Exception as e:
+            self._escribir_log(f"Atajo generar: {e}", "warn")
+        return "break"
+
+    def _atajo_vista_previa(self, event=None):
+        try:
+            self.panel_generacion._vista_previa()
+        except Exception as e:
+            self._escribir_log(f"Atajo vista previa: {e}", "warn")
+        return "break"
+
+    def _atajo_guardar(self, event=None):
+        try:
+            self._guardar_proyecto()
+        except Exception as e:
+            self._escribir_log(f"Atajo guardar: {e}", "warn")
+        return "break"
+
+    def _atajo_cargar(self, event=None):
+        try:
+            self._cargar_proyecto()
+        except Exception as e:
+            self._escribir_log(f"Atajo cargar: {e}", "warn")
+        return "break"
+
+    def _atajo_limpiar_log(self, event=None):
+        try:
+            self._limpiar_log()
+        except Exception as e:
+            self._escribir_log(f"Atajo limpiar log: {e}", "warn")
+        return "break"
 
     def _mostrar_info(self):
         """Abre la ventana de informacion tecnica y manual de usuario."""

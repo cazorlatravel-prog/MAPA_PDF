@@ -72,6 +72,8 @@ CAPAS_BASE = {
         "&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}"
     ),
     "Stamen Terrain": "https://stamen-tiles.a.ssl.fastly.net/terrain/{z}/{x}/{y}.png",
+    "Google Satélite": "https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}",
+    "Google Satélite Híbrido": "https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}",
 }
 
 # Proveedores WMS directos (imagen completa, no tiles).
@@ -95,6 +97,15 @@ CAPAS_WMS = {
         ),
         "attribution": "© IGN España – MTN50",
     },
+    "Topográfico Andalucía (MTA10)": {
+        "url": (
+            "https://www.ideandalucia.es/wms/mta10r_2001-2013?"
+            "SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0"
+            "&LAYERS=mta10r_2001-2013&STYLES="
+            "&CRS=EPSG:25830&FORMAT=image/png"
+        ),
+        "attribution": "© Junta de Andalucía – IECA, MTA10",
+    },
 }
 
 # PROVIDERS_CTX se construye siempre para que el desplegable de la GUI
@@ -106,8 +117,12 @@ _PROV_META = {
     "IGN Base": {"max_zoom": 18, "attribution": "© IGN España"},
     "PNOA Máxima Actualidad": {"max_zoom": 20, "attribution": "© IGN España"},
     "Stamen Terrain": {"max_zoom": 18, "attribution": "Stamen Design"},
+    "Google Satélite": {"max_zoom": 20, "attribution": "© Google"},
+    "Google Satélite Híbrido": {"max_zoom": 20, "attribution": "© Google"},
     "IGN MTN25 (WMS 1:25.000)": {"max_zoom": 18, "attribution": "© IGN España – MTN25"},
     "IGN MTN50 (WMS 1:50.000)": {"max_zoom": 18, "attribution": "© IGN España – MTN50"},
+    "Topográfico Andalucía (MTA10)": {
+        "max_zoom": 18, "attribution": "© Junta de Andalucía – IECA, MTA10"},
 }
 
 if ctx is not None:

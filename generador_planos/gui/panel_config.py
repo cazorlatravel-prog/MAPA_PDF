@@ -14,6 +14,7 @@ from .estilos import (
     COLOR_ACENTO, COLOR_HOVER,
     FONT_BOLD, FONT_SMALL, FONT_LABEL,
     crear_frame_seccion, crear_boton, crear_entry, crear_label,
+    crear_tooltip,
 )
 from ..motor.escala import FORMATOS, ESCALAS
 from ..motor.cartografia import PROVIDERS_CTX
@@ -48,6 +49,12 @@ class PanelConfig:
                                state="readonly", font=FONT_LABEL)
         self._cb_prov.grid(row=3, column=0, sticky="ew", pady=(2, 4))
         self._cb_prov.bind("<<ComboboxSelected>>", self._on_proveedor_changed)
+        crear_tooltip(
+            self._cb_prov,
+            "Cartografía de fondo del mapa principal:\n"
+            "· Proveedores online (OSM, IGN…): descarga teselas (necesita internet).\n"
+            "· Ráster local: usa un GeoTIFF/ECW/VRT o carpeta de hojas tuya.\n"
+            "· WMS/WFS propio: conecta a tu servidor de mapas.")
 
         # Raster local para mapa general
         self._ruta_raster = tk.StringVar(value="")
@@ -208,6 +215,10 @@ class PanelConfig:
             values=_ESCALAS_LOC,
             font=FONT_SMALL, width=12)
         self._cb_escala_loc.pack(side="left", padx=(2, 0))
+        crear_tooltip(
+            self._cb_escala_loc,
+            "Escala del mapa de localización (recuadro de situación).\n"
+            "Valores mayores abarcan más territorio alrededor de la zona.")
 
         # ── Escala manual ──
         crear_label(f, "Escala (0 = automatica):", tipo="titulo").grid(
@@ -223,6 +234,11 @@ class PanelConfig:
             font=FONT_SMALL, width=12,
         )
         self._cb_escala.pack(side="left", padx=(2, 0))
+        crear_tooltip(
+            self._cb_escala,
+            "Escala del mapa principal (1:N).\n"
+            "0 = automática: se ajusta a cada infraestructura.\n"
+            "Un valor fijo usa la misma escala en todos los planos.")
 
         # ── Color infraestructura ──
         crear_label(f, "Color infraestructura:", tipo="titulo").grid(
@@ -242,10 +258,15 @@ class PanelConfig:
         crear_label(f, "Calidad PDF:", tipo="titulo").grid(
             row=13, column=0, sticky="w")
         self._calidad_pdf = tk.StringVar(value="Alta (400 DPI)")
-        ttk.Combobox(f, textvariable=self._calidad_pdf,
+        cb_calidad = ttk.Combobox(f, textvariable=self._calidad_pdf,
                      values=list(CALIDADES_PDF.keys()),
-                     state="readonly", font=FONT_LABEL).grid(
-                     row=14, column=0, sticky="ew", pady=(2, 8))
+                     state="readonly", font=FONT_LABEL)
+        cb_calidad.grid(row=14, column=0, sticky="ew", pady=(2, 8))
+        crear_tooltip(
+            cb_calidad,
+            "Resolución de salida del PDF (DPI).\n"
+            "Mayor calidad = más nitidez pero archivos más grandes "
+            "y generación más lenta.")
 
         # ── Origen datos tabla ──
         crear_label(f, "Datos de tabla:", tipo="titulo").grid(
@@ -334,8 +355,13 @@ class PanelConfig:
         cb_preset.bind("<<ComboboxSelected>>", self._on_preset_nombre)
 
         self.patron_nombre = tk.StringVar(value="plano_{num}_{nombre}")
-        crear_entry(f, textvariable=self.patron_nombre).grid(
-            row=20, column=0, sticky="ew", pady=(2, 0))
+        entry_patron = crear_entry(f, textvariable=self.patron_nombre)
+        entry_patron.grid(row=20, column=0, sticky="ew", pady=(2, 0))
+        crear_tooltip(
+            entry_patron,
+            "Patrón del nombre de cada archivo PDF. Variables disponibles:\n"
+            "{num} = número de plano · {nombre} = nombre de la "
+            "infraestructura · {campo} = valor del campo de agrupación.")
 
         self._lbl_preview_nombre = tk.Label(
             f, text="Ej: plano_0001_CortafuegosNorte.pdf",

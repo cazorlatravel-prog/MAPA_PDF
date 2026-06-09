@@ -230,6 +230,26 @@ def crear_frame_seccion(parent, titulo: str, colapsable: bool = False) -> tk.Fra
     return inner
 
 
+def _ajustar_brillo(color_hex: str, factor: float) -> str:
+    """Aclara (factor>1) u oscurece (factor<1) un color hexadecimal.
+
+    Devuelve el mismo color si no se puede interpretar (p.ej. nombres).
+    """
+    try:
+        c = color_hex.strip()
+        if not c.startswith("#") or len(c) != 7:
+            return color_hex
+        r = int(c[1:3], 16)
+        g = int(c[3:5], 16)
+        b = int(c[5:7], 16)
+        r = max(0, min(255, int(r * factor)))
+        g = max(0, min(255, int(g * factor)))
+        b = max(0, min(255, int(b * factor)))
+        return f"#{r:02X}{g:02X}{b:02X}"
+    except Exception:
+        return color_hex
+
+
 def crear_boton(parent, texto, comando, icono="", ancho=None,
                 color_bg=None, color_fg=None, estilo="normal") -> tk.Button:
     """Crea un boton estilizado con hover effects."""
@@ -264,12 +284,24 @@ def crear_boton(parent, texto, comando, icono="", ancho=None,
 
     btn = tk.Button(parent, **kwargs)
 
+    # Color de hover calculado a partir del color real del botón
+    # (un toque más claro). El leave restaura siempre el color exacto.
+    hover_calc = _ajustar_brillo(color_bg, 1.18)
+
     # Hover effects
     def _on_enter(e):
-        btn.configure(bg=hover_bg)
+        try:
+            if str(btn["state"]) == "disabled":
+                return
+        except Exception:
+            return
+        btn.configure(bg=hover_calc)
 
     def _on_leave(e):
-        btn.configure(bg=color_bg)
+        try:
+            btn.configure(bg=color_bg)
+        except Exception:
+            pass
 
     btn.bind("<Enter>", _on_enter)
     btn.bind("<Leave>", _on_leave)
@@ -316,3 +348,80 @@ def crear_label(parent, text, tipo="normal", **kwargs) -> tk.Label:
     opts = dict(text=text, font=font, bg=COLOR_PANEL, fg=fg)
     opts.update(kwargs)
     return tk.Label(parent, **opts)
+
+
+# ── Tooltips ─────────────────────────────────────────────────────────────
+
+class Tooltip:
+    """Tooltip ligero para cualquier widget.
+
+    Muestra un pequeño Toplevel oscuro tras ~500 ms sobre el widget y lo
+    destruye al salir o al pulsar. Es seguro aunque el widget se destruya.
+    """
+
+    def __init__(self, widget, texto, retardo=500, wraplength=320):
+        self.widget = widget
+        self.texto = texto
+        self.retardo = retardo
+        self.wraplength = wraplength
+        self._after_id = None
+        self._tip = None
+        widget.bind("<Enter>", self._programar, add="+")
+        widget.bind("<Leave>", self._ocultar, add="+")
+        widget.bind("<ButtonPress>", self._ocultar, add="+")
+        widget.bind("<Destroy>", self._ocultar, add="+")
+
+    def _programar(self, _evento=None):
+        self._cancelar()
+        try:
+            self._after_id = self.widget.after(self.retardo, self._mostrar)
+        except Exception:
+            self._after_id = None
+
+    def _cancelar(self):
+        if self._after_id is not None:
+            try:
+                self.widget.after_cancel(self._after_id)
+            except Exception:
+                pass
+            self._after_id = None
+
+    def _mostrar(self):
+        self._after_id = None
+        if self._tip is not None:
+            return
+        try:
+            if not self.widget.winfo_exists():
+                return
+            x = self.widget.winfo_rootx() + 12
+            y = self.widget.winfo_rooty() + self.widget.winfo_height() + 6
+        except Exception:
+            return
+        try:
+            self._tip = tk.Toplevel(self.widget)
+            self._tip.wm_overrideredirect(True)
+            self._tip.wm_geometry(f"+{x}+{y}")
+            self._tip.configure(bg=COLOR_BORDE)
+            tk.Label(
+                self._tip, text=self.texto, justify="left",
+                bg=COLOR_PANEL_ALT, fg=COLOR_TEXTO,
+                font=FONT_SMALL, wraplength=self.wraplength,
+                relief="flat", bd=0, padx=8, pady=6,
+                highlightthickness=1, highlightbackground=COLOR_ACENTO,
+            ).pack(padx=1, pady=1)
+        except Exception:
+            self._tip = None
+
+    def _ocultar(self, _evento=None):
+        self._cancelar()
+        if self._tip is not None:
+            try:
+                self._tip.destroy()
+            except Exception:
+                pass
+            self._tip = None
+
+
+def crear_tooltip(widget, texto, **kwargs) -> Tooltip:
+    """Atajo para asociar un tooltip a un widget."""
+    return Tooltip(widget, texto, **kwargs)
