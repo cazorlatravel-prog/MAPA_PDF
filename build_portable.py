@@ -43,6 +43,11 @@ if getattr(sys, 'frozen', False):
     base = sys._MEIPASS
     sys.path.insert(0, base)
     os.environ["MPLBACKEND"] = "Agg"
+    # Si el PC tiene QGIS/ArcGIS/OSGeo4W, estas variables apuntan a una
+    # GDAL/PROJ externa y rasterio/pyogrio la preferirían a la empaquetada,
+    # provocando errores de versión de proj.db. Usar siempre la interna.
+    for _var in ("GDAL_DATA", "PROJ_LIB", "PROJ_DATA", "GDAL_DRIVER_PATH"):
+        os.environ.pop(_var, None)
 
 
 class SplashScreen:
@@ -192,6 +197,7 @@ COLLECT_ALL = [
     "pyogrio",
     "xyzservices",
     "adjustText",
+    "openpyxl",
 ]
 
 HIDDEN_IMPORTS = [
@@ -211,9 +217,13 @@ HIDDEN_IMPORTS = [
     "rasterio.errors",
     "rasterio.transform",
     "rasterio.vrt",
+    "rasterio.warp",
+    "rasterio.windows",
     "PIL",
     "PIL.Image",
     "numpy",
+    "pandas",
+    "openpyxl",
     "matplotlib",
     "matplotlib.figure",
     "matplotlib.pyplot",
@@ -229,12 +239,21 @@ HIDDEN_IMPORTS = [
     "certifi",
     "xyzservices",
     "pyogrio",
+    "tkinter",
+    "tkinter.ttk",
+    "tkinter.filedialog",
+    "tkinter.messagebox",
+    "tkinter.colorchooser",
     "generador_planos",
     "generador_planos.motor",
     "generador_planos.motor.generador",
     "generador_planos.motor.escala",
     "generador_planos.motor.cartografia",
     "generador_planos.motor.maquetacion",
+    "generador_planos.motor._elementos_mapa",
+    "generador_planos.motor._utils_geo",
+    "generador_planos.motor.paginas_especiales",
+    "generador_planos.motor.plantillas_layout",
     "generador_planos.motor.simbologia",
     "generador_planos.motor.capas_extra",
     "generador_planos.motor.perfil",
@@ -242,6 +261,7 @@ HIDDEN_IMPORTS = [
     "generador_planos.gui",
     "generador_planos.gui.app",
     "generador_planos.gui.estilos",
+    "generador_planos.gui.recientes",
     "generador_planos.gui.panel_capas",
     "generador_planos.gui.panel_config",
     "generador_planos.gui.panel_campos",
@@ -249,6 +269,7 @@ HIDDEN_IMPORTS = [
     "generador_planos.gui.panel_simbologia",
     "generador_planos.gui.panel_cajetin",
     "generador_planos.gui.panel_generacion",
+    "generador_planos.gui.panel_info",
     "adjustText",
 ]
 
@@ -256,6 +277,10 @@ EXCLUDE = [
     "pytest", "pip",
     "IPython", "jupyter", "notebook", "sphinx",
     "tkinter.test",
+    # Bindings Qt/wx: --collect-submodules matplotlib.backends los
+    # arrastraría si están instalados (p. ej. en conda), sumando >100 MB
+    # y pudiendo abortar el build por "multiple Qt bindings".
+    "PyQt5", "PyQt6", "PySide2", "PySide6", "wx", "gi",
 ]
 
 
@@ -326,6 +351,10 @@ def crear_zip(exe_path):
 
 
 def main():
+    # Trabajar siempre desde la carpeta del proyecto: las rutas relativas
+    # (launcher, assets/icon.ico, paquete generador_planos) dependen de ello
+    os.chdir(os.path.dirname(os.path.abspath(__file__)))
+
     print()
     print("=" * 60)
     print("  EstelaGis — Planos Forestales")
@@ -333,11 +362,15 @@ def main():
     print("=" * 60)
     print()
 
-    # Verificar dependencias principales
+    # Verificar dependencias principales. Si falta alguna, PyInstaller NO
+    # falla: la deja fuera y la función correspondiente (Excel, GDB,
+    # etiquetas sin solape...) simplemente no funciona en el .exe.
     print("  Verificando dependencias...")
     faltantes = []
-    for mod_name in ["matplotlib", "geopandas", "numpy", "pyproj",
-                     "shapely", "contextily", "rasterio", "PIL", "reportlab"]:
+    for mod_name in ["matplotlib", "geopandas", "numpy", "pandas", "pyproj",
+                     "shapely", "contextily", "rasterio", "PIL", "reportlab",
+                     "openpyxl", "pyogrio", "adjustText", "xyzservices",
+                     "requests", "certifi"]:
         try:
             __import__(mod_name)
         except ImportError:
@@ -406,9 +439,10 @@ def main():
     for sp in site_dirs:
         cmd.extend(["--paths", sp])
 
-    # Icono
+    # Icono (del .exe y, vía --add-data, de la ventana de la app)
     if os.path.exists(ICON_FILE):
         cmd.extend(["--icon", ICON_FILE])
+        cmd.extend(["--add-data", f"{ICON_FILE}{os.pathsep}assets"])
         print(f"  Icono: {ICON_FILE}")
 
     # Collect-all para paquetes complejos
@@ -439,15 +473,14 @@ def main():
     print("  Construyendo... (puede tardar 5-15 minutos)")
     print()
 
-    result = subprocess.run(cmd)
-
-    # Limpiar launcher temporal
-    if os.path.exists(LAUNCHER_SCRIPT):
-        os.remove(LAUNCHER_SCRIPT)
-
-    # Limpiar archivo de metadatos temporal
-    if os.path.exists(version_file):
-        os.remove(version_file)
+    try:
+        result = subprocess.run(cmd)
+    finally:
+        # Limpiar temporales también si se interrumpe con Ctrl+C
+        if os.path.exists(LAUNCHER_SCRIPT):
+            os.remove(LAUNCHER_SCRIPT)
+        if os.path.exists(version_file):
+            os.remove(version_file)
 
     if result.returncode == 0:
         exe_path = os.path.join("dist", f"{APP_NAME}.exe")

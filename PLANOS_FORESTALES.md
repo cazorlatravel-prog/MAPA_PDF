@@ -35,7 +35,8 @@ Opciones disponibles mediante `contextily`:
 - `OpenStreetMap` — teselas estándar
 - `PNOA Ortofoto (IGN)` — WMTS IGN España
 - `IGN Topográfico (MTN)` — WMTS IGN España
-- `Stamen Terrain` — terreno con relieve
+- `Google Satélite` / `Google Satélite Híbrido` — imagen de satélite (con o sin etiquetas)
+- `Topográfico Andalucía (MTA10)` — mapa topográfico de la Junta de Andalucía (WMS)
 
 > ⚠️ Las URLs de IGN son WMTS con parámetros `{z}/{y}/{x}`. Verificar compatibilidad con contextily o implementar descarga manual de teselas si falla.
 

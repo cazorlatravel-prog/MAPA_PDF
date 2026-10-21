@@ -374,15 +374,17 @@ class PanelCapas:
                                  state="disabled")
 
     def _cargar_infra_reciente(self, ruta: str):
-        """Carga un shapefile reciente a través de la ruta de carga sin diálogo."""
+        """Carga un shapefile reciente por la misma ruta que 'Cargar SHP'."""
         if not os.path.exists(ruta):
             messagebox.showwarning(
                 "Archivo no encontrado",
                 f"El archivo ya no existe:\n{ruta}")
             self._menu_recientes_actualizar()
             return
-        # Reutiliza la ruta de carga existente (maneja capa/mapeo)
-        self.cargar_infra_desde_proyecto(ruta)
+        # Misma ruta completa que el botón (tabla, previsualización,
+        # diálogo de mapeo de campos y mensajes de error). Antes pasaba por
+        # cargar_infra_desde_proyecto, que omite el mapeo de campos.
+        self._cargar_infra_ruta(ruta)
 
     def _registrar_reciente_infra(self, ruta: str):
         """Registra un shapefile como reciente y refresca el menú."""
@@ -397,6 +399,10 @@ class PanelCapas:
         )
         if not ruta:
             return
+        self._cargar_infra_ruta(ruta)
+
+    def _cargar_infra_ruta(self, ruta: str):
+        """Carga el shapefile de infraestructuras `ruta` en segundo plano."""
 
         def tarea():
             return self.motor.cargar_infraestructuras(ruta)
@@ -704,10 +710,13 @@ class PanelCapas:
         sel = self._lista_capas.curselection()
         if not sel:
             return
-        nombre = self._lista_capas.get(sel[0]).split(" (")[0]
-        self.motor.gestor_capas.eliminar_capa(nombre)
+        # Borrar por posición (la lista se construye en el mismo orden que
+        # gestor_capas.capas); por nombre fallaba con nombres que contienen
+        # " (" y borraba duplicados a la vez.
+        nombre = self.motor.gestor_capas.eliminar_capa_indice(sel[0])
         self._actualizar_lista_capas()
-        self.callback_log(f"Capa '{nombre}' eliminada.", "info")
+        if nombre:
+            self.callback_log(f"Capa '{nombre}' eliminada.", "info")
 
     def _actualizar_lista_capas(self):
         self._lista_capas.delete(0, "end")

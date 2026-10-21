@@ -32,6 +32,10 @@ if getattr(sys, 'frozen', False):
     base = sys._MEIPASS
     sys.path.insert(0, base)
     os.environ["MPLBACKEND"] = "Agg"
+    # Evitar que una GDAL/PROJ externa (QGIS, ArcGIS, OSGeo4W) sustituya
+    # a la empaquetada: provoca errores de versión de proj.db
+    for _var in ("GDAL_DATA", "PROJ_LIB", "PROJ_DATA", "GDAL_DRIVER_PATH"):
+        os.environ.pop(_var, None)
 
 import matplotlib
 matplotlib.use("Agg")
@@ -61,6 +65,8 @@ COLLECT_ALL = [
     "certifi",
     "pyogrio",
     "xyzservices",
+    "adjustText",
+    "openpyxl",
 ]
 
 # Módulos ocultos que PyInstaller puede no detectar automáticamente
@@ -71,25 +77,33 @@ HIDDEN_IMPORTS = [
     "contextily", "contextily.tile",
     "rasterio", "rasterio.sample", "rasterio._io",
     "rasterio.crs", "rasterio.enums", "rasterio.errors",
-    "rasterio.transform", "rasterio.vrt",
+    "rasterio.transform", "rasterio.vrt", "rasterio.warp", "rasterio.windows",
     "PIL", "PIL.Image",
-    "numpy",
+    "numpy", "pandas", "openpyxl",
     "matplotlib", "matplotlib.figure", "matplotlib.pyplot",
     "matplotlib.backends", "matplotlib.backends.backend_agg",
     "matplotlib.backends.backend_tkagg", "matplotlib.backends.backend_pdf",
+    "matplotlib.backends.backend_svg",
     "reportlab", "reportlab.lib", "reportlab.pdfgen",
-    "requests", "certifi", "xyzservices", "pyogrio",
+    "requests", "certifi", "xyzservices", "pyogrio", "adjustText",
+    "tkinter", "tkinter.ttk", "tkinter.filedialog", "tkinter.messagebox",
+    "tkinter.colorchooser",
     "generador_planos",
     "generador_planos.motor", "generador_planos.motor.generador",
     "generador_planos.motor.escala", "generador_planos.motor.cartografia",
     "generador_planos.motor.maquetacion", "generador_planos.motor.simbologia",
+    "generador_planos.motor._elementos_mapa", "generador_planos.motor._utils_geo",
+    "generador_planos.motor.paginas_especiales",
+    "generador_planos.motor.plantillas_layout",
     "generador_planos.motor.capas_extra", "generador_planos.motor.perfil",
     "generador_planos.motor.proyecto",
     "generador_planos.gui", "generador_planos.gui.app",
-    "generador_planos.gui.estilos", "generador_planos.gui.panel_capas",
+    "generador_planos.gui.estilos", "generador_planos.gui.recientes",
+    "generador_planos.gui.panel_capas",
     "generador_planos.gui.panel_config", "generador_planos.gui.panel_campos",
     "generador_planos.gui.panel_filtros", "generador_planos.gui.panel_simbologia",
     "generador_planos.gui.panel_cajetin", "generador_planos.gui.panel_generacion",
+    "generador_planos.gui.panel_info",
 ]
 
 
@@ -147,9 +161,10 @@ def construir_exe(modo_onefile=False):
     for sp in site_dirs:
         cmd.extend(["--paths", sp])
 
-    # Icono
+    # Icono (del .exe y, vía --add-data, de la ventana de la app)
     if os.path.exists(ICON_FILE):
         cmd.extend(["--icon", ICON_FILE])
+        cmd.extend(["--add-data", f"{ICON_FILE}{os.pathsep}assets"])
         print(f"  Icono: {ICON_FILE}")
 
     # Modo un solo archivo o carpeta
@@ -175,9 +190,11 @@ def construir_exe(modo_onefile=False):
     for mod in HIDDEN_IMPORTS:
         cmd.extend(["--hidden-import", mod])
 
-    # Excluir módulos innecesarios para reducir tamaño
+    # Excluir módulos innecesarios para reducir tamaño (y bindings Qt/wx
+    # que --collect-submodules matplotlib.backends arrastraría si existen)
     for excl in ["pytest", "pip",
-                 "IPython", "jupyter", "notebook", "sphinx"]:
+                 "IPython", "jupyter", "notebook", "sphinx",
+                 "PyQt5", "PyQt6", "PySide2", "PySide6", "wx", "gi"]:
         cmd.extend(["--exclude-module", excl])
 
     # Script principal
@@ -213,6 +230,9 @@ def construir_exe(modo_onefile=False):
 
 
 def main():
+    # Rutas relativas (launcher, assets, paquete) respecto al proyecto
+    os.chdir(os.path.dirname(os.path.abspath(__file__)))
+
     print("\n  EstelaGis - Constructor de ejecutable\n")
 
     if not verificar_pyinstaller():

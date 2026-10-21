@@ -7,19 +7,9 @@ Cada capa se carga, reproyecta y almacena con un nombre y simbología asociada.
 import geopandas as gpd
 
 from .simbologia import GestorSimbologia, ConfigSimbologia, SIMBOLOGIA_CAPAS_EXTRA
-
-
-def _leer_geodatos(ruta: str, layer: str = None) -> gpd.GeoDataFrame:
-    """Lee un shapefile o geodatabase con fallback al driver OpenFileGDB."""
-    kwargs = {}
-    if layer:
-        kwargs["layer"] = layer
-    if ruta.lower().rstrip("/\\").endswith(".gdb"):
-        try:
-            return gpd.read_file(ruta, driver="OpenFileGDB", **kwargs)
-        except Exception:
-            pass
-    return gpd.read_file(ruta, **kwargs)
+# Lector compartido con el motor (fallback OpenFileGDB + reintento de
+# codificación cp1252). Antes había una copia local sin ese reintento.
+from ._utils_geo import _leer_geodatos, _asegurar_crs
 
 # Tipos de capa reconocidos para asignar simbología por defecto
 TIPOS_CAPA = list(SIMBOLOGIA_CAPAS_EXTRA.keys()) + ["Personalizada"]
@@ -29,12 +19,14 @@ class CapaExtra:
     """Una capa SHP auxiliar con su GeoDataFrame y metadatos."""
 
     def __init__(self, nombre: str, ruta: str, gdf: gpd.GeoDataFrame,
-                 tipo: str = "Personalizada", visible: bool = True):
+                 tipo: str = "Personalizada", visible: bool = True,
+                 layer: str = None):
         self.nombre = nombre
         self.ruta = ruta
         self.gdf = gdf
         self.tipo = tipo
         self.visible = visible
+        self.layer = layer  # nombre de capa dentro de una GDB (si aplica)
 
 
 class GestorCapasExtra:
@@ -60,13 +52,13 @@ class GestorCapasExtra:
                 else:
                     nombre = os.path.splitext(os.path.basename(ruta))[0]
 
-            from ._utils_geo import _asegurar_crs
             gdf, aviso_crs = _asegurar_crs(gdf, nombre)
             # Resetear índice y construir índice espacial para .cx[]
             gdf = gdf.reset_index(drop=True)
             gdf.sindex
 
-            capa = CapaExtra(nombre=nombre, ruta=ruta, gdf=gdf, tipo=tipo)
+            capa = CapaExtra(nombre=nombre, ruta=ruta, gdf=gdf, tipo=tipo,
+                             layer=layer)
             self.capas.append(capa)
 
             msg = f"\u2713 Capa '{nombre}': {len(gdf)} elementos ({tipo})"
@@ -78,6 +70,16 @@ class GestorCapasExtra:
 
     def eliminar_capa(self, nombre: str):
         self.capas = [c for c in self.capas if c.nombre != nombre]
+
+    def eliminar_capa_indice(self, indice: int) -> str:
+        """Elimina la capa en la posición dada y devuelve su nombre.
+
+        Más robusto que eliminar por nombre: dos capas con el mismo nombre
+        o un nombre con paréntesis no confunden el borrado.
+        """
+        if 0 <= indice < len(self.capas):
+            return self.capas.pop(indice).nombre
+        return ""
 
     def obtener_capas_visibles(self) -> list:
         return [c for c in self.capas if c.visible]
@@ -141,7 +143,8 @@ class GestorCapasExtra:
 
     def to_dict(self) -> list:
         return [
-            {"nombre": c.nombre, "ruta": c.ruta, "tipo": c.tipo, "visible": c.visible}
+            {"nombre": c.nombre, "ruta": c.ruta, "tipo": c.tipo,
+             "visible": c.visible, "layer": c.layer}
             for c in self.capas
         ]
 
@@ -149,7 +152,12 @@ class GestorCapasExtra:
         """Recarga capas desde una lista de dicts. Devuelve errores."""
         errores = []
         for d in data:
-            ok, msg, _ = self.cargar_capa(d["ruta"], d["nombre"], d.get("tipo", "Personalizada"))
+            # 'layer' es imprescindible para capas de GDB: sin él se
+            # recargaba la primera capa de la geodatabase con el nombre
+            # guardado (datos equivocados sin ningún error).
+            ok, msg, _ = self.cargar_capa(
+                d["ruta"], d["nombre"], d.get("tipo", "Personalizada"),
+                layer=d.get("layer") or None)
             if ok:
                 self.capas[-1].visible = d.get("visible", True)
             else:

@@ -142,6 +142,7 @@ class PanelFiltros:
                 mask &= (gdf[campo].astype(str) == valor).values
 
         import pandas as pd
+        from ..motor._utils_geo import _a_numero
 
         def _parse_num(txt):
             # Aceptar coma decimal (locale español) además de punto
@@ -154,9 +155,10 @@ class PanelFiltros:
         sup_max = _parse_num(self._sup_max.get().strip())
         if (sup_min is not None or sup_max is not None) \
                 and "Superficie" in gdf.columns:
-            # to_numeric con coerce: una celda no numérica se convierte en
-            # NaN (queda excluida) en vez de invalidar todo el filtro
-            sup_vals = pd.to_numeric(gdf["Superficie"], errors="coerce")
+            # _a_numero entiende "1.234,5" y "1,5" (texto en español) y
+            # convierte lo no numérico en NaN (queda excluido) en vez de
+            # invalidar todo el filtro
+            sup_vals = _a_numero(gdf["Superficie"])
             if sup_min is not None:
                 mask &= (sup_vals >= sup_min).values
             if sup_max is not None:
@@ -166,7 +168,7 @@ class PanelFiltros:
         lon_max = _parse_num(self._lon_max.get().strip())
         if (lon_min is not None or lon_max is not None) \
                 and "Longitud" in gdf.columns:
-            lon_vals = pd.to_numeric(gdf["Longitud"], errors="coerce")
+            lon_vals = _a_numero(gdf["Longitud"])
             if lon_min is not None:
                 mask &= (lon_vals >= lon_min).values
             if lon_max is not None:

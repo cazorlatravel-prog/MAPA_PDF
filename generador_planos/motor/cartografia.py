@@ -5,7 +5,8 @@ Soporta:
   - OpenStreetMap (teselas estándar)
   - PNOA Ortofoto (IGN España) — WMTS
   - IGN Topográfico (MTN) — WMTS
-  - Stamen Terrain
+  - Google Satélite / Híbrido (teselas XYZ)
+  - WMS directos: IGN MTN25/MTN50, Topográfico Andalucía (MTA10)
 
 Implementa fallback manual para teselas IGN si contextily falla.
 Incluye caché de teselas en disco para evitar descargas repetidas.
@@ -81,7 +82,8 @@ CAPAS_BASE = {
         "&FORMAT=image/jpeg&TILEMATRIXSET=GoogleMapsCompatible"
         "&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}"
     ),
-    "Stamen Terrain": "https://stamen-tiles.a.ssl.fastly.net/terrain/{z}/{x}/{y}.png",
+    # (Stamen Terrain eliminado: el servicio stamen-tiles.*.fastly.net
+    #  cerró en 2023 y siempre fallaba.)
     "Google Satélite": "https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}",
     "Google Satélite Híbrido": "https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}",
 }
@@ -126,7 +128,6 @@ _PROV_META = {
     "IGN Topográfico": {"max_zoom": 18, "attribution": "© IGN España"},
     "IGN Base": {"max_zoom": 18, "attribution": "© IGN España"},
     "PNOA Máxima Actualidad": {"max_zoom": 20, "attribution": "© IGN España"},
-    "Stamen Terrain": {"max_zoom": 18, "attribution": "Stamen Design"},
     "Google Satélite": {"max_zoom": 20, "attribution": "© Google"},
     "Google Satélite Híbrido": {"max_zoom": 20, "attribution": "© Google"},
     "IGN MTN25 (WMS 1:25.000)": {"max_zoom": 18, "attribution": "© IGN España – MTN25"},
@@ -170,6 +171,25 @@ for _wms_name, _wms_info in CAPAS_WMS.items():
 # Descarga manual de teselas (fallback si contextily falla con IGN)
 # ---------------------------------------------------------------------------
 
+def _dimensiones_wms(extent_x: float, extent_y: float,
+                     m_por_px: float = 2.0, minimo: int = 512,
+                     maximo: int = 4096) -> tuple:
+    """Calcula WIDTH/HEIGHT para un GetMap conservando el aspect del BBOX.
+
+    Parte de ~``m_por_px`` metros por píxel y escala AMBOS lados con el
+    mismo factor para respetar el mínimo (lado corto >= ``minimo``) y el
+    máximo (lado largo <= ``maximo``). Aplicar los límites por separado a
+    cada lado, como se hacía antes, deformaba la imagen en formatos
+    apaisados a escalas pequeñas (p. ej. A4 a 1:5.000 salía 692x512 para
+    un BBOX de proporción 1,95).
+    """
+    w0 = max(float(extent_x) / m_por_px, 1.0)
+    h0 = max(float(extent_y) / m_por_px, 1.0)
+    factor = max(1.0, minimo / min(w0, h0))
+    factor = min(factor, maximo / max(w0, h0))
+    return max(1, int(round(w0 * factor))), max(1, int(round(h0 * factor)))
+
+
 def _verificar_respuesta_imagen(resp):
     """Lanza un error claro si el servidor devolvió algo que no es imagen.
 
@@ -178,8 +198,10 @@ def _verificar_respuesta_imagen(resp):
     se perdía y el usuario solo veía un fondo gris.
     """
     ctype = resp.headers.get("Content-Type", "").lower()
-    if not ctype or ctype.startswith("image/"):
-        # Sin cabecera no se puede juzgar: PIL validará el contenido
+    if (not ctype or ctype.startswith("image/")
+            or "octet-stream" in ctype):
+        # Sin cabecera o binario genérico (algunos CDN/WMS propios):
+        # no se puede juzgar aquí, PIL validará el contenido
         return
     # Extraer un fragmento legible del cuerpo para el diagnóstico
     try:
@@ -307,17 +329,11 @@ def _descargar_wms(ax, wms_url, xmin, xmax, ymin, ymax, crs_epsg=25830):
     A diferencia de tiles, solicita una sola imagen que cubre todo el extent,
     lo que da mejor calidad a escalas cartográficas específicas (1:25.000, etc.).
     """
-    # Tamaño de imagen proporcional al extent del eje (~2 m/píxel). Si hay
-    # que recortar al máximo de 4096 px, se reduce AMBOS lados por el mismo
-    # factor para conservar el aspect ratio del BBOX (si no, el servidor
-    # renderiza la imagen deformada).
-    extent_x = xmax - xmin
-    extent_y = ymax - ymin
-    width = max(512, int(extent_x / 2))
-    height = max(512, int(extent_y / 2))
-    factor = min(1.0, 4096.0 / max(width, height))
-    width = max(1, int(width * factor))
-    height = max(1, int(height * factor))
+    # Tamaño de imagen proporcional al extent del eje (~2 m/píxel), con un
+    # mínimo de 512 px y un máximo de 4096 px. Ambos límites se aplican con
+    # UN MISMO factor a los dos lados para conservar el aspect ratio del
+    # BBOX: si no, el servidor renderiza la imagen deformada.
+    width, height = _dimensiones_wms(xmax - xmin, ymax - ymin)
 
     # BBOX: en WMS 1.3.0 con EPSG:25830 el orden es (minx,miny,maxx,maxy)
     bbox_str = f"{xmin},{ymin},{xmax},{ymax}"
@@ -652,10 +668,14 @@ def _homogeneizar_crs_rasters(archivos, carpeta_p):
     except ImportError:
         return list(archivos)
 
-    # Leer CRS de cada archivo. Normalizamos CRS "vacíos" (rasterio devuelve
-    # un objeto CRS sin WKT para rásters sin proyección) a None, para que
-    # el resto del código trate ambas situaciones de forma uniforme.
+    # Leer CRS de cada archivo. Distinguimos tres casos:
+    #   - CRS válido
+    #   - abre pero sin proyección (CRS "vacío")  -> None  (hay que avisar)
+    #   - rasterio no puede abrirlo (p. ej. ECW sin driver en la rueda pip)
+    #     -> se deja pasar tal cual: gdalbuildvrt/osgeo pueden tener el
+    #     driver aunque rasterio no, y antes esto funcionaba así.
     crs_por_archivo = []
+    ilegibles = set()
     for fp in archivos:
         try:
             with rasterio.open(fp) as src:
@@ -665,18 +685,23 @@ def _homogeneizar_crs_rasters(archivos, carpeta_p):
                 crs_por_archivo.append(crs)
         except Exception:
             crs_por_archivo.append(None)
+            ilegibles.add(fp)
 
-    # ¿Son todos iguales? Un CRS None (ráster sin proyección o ilegible)
-    # también cuenta como heterogéneo: si lo dejásemos pasar, el builder
-    # manual del VRT lo rechazaría más adelante con un mensaje engañoso de
-    # "CRS distinto". Al tratarlo aquí, _warpear_fuente produce un error
-    # claro y accionable ("el ráster no tiene un CRS definido...").
+    # ¿Son todos iguales? Un CRS None de un ráster legible cuenta como
+    # heterogéneo: si lo dejásemos pasar, el builder manual del VRT lo
+    # rechazaría más adelante con un mensaje engañoso de "CRS distinto".
+    # Al tratarlo aquí, _warpear_fuente produce un error claro y accionable
+    # ("el ráster no tiene un CRS definido...").
     primero_valido = next((c for c in crs_por_archivo if c is not None), None)
     if primero_valido is None:
         return list(archivos)
-    hay_sin_crs = any(c is None for c in crs_por_archivo)
+    hay_sin_crs = any(
+        c is None and fp not in ilegibles
+        for fp, c in zip(archivos, crs_por_archivo))
     if not hay_sin_crs and all(
-            _crs_iguales(c, primero_valido) for c in crs_por_archivo):
+            _crs_iguales(c, primero_valido)
+            for fp, c in zip(archivos, crs_por_archivo)
+            if fp not in ilegibles):
         return list(archivos)
 
     # CRS heterogéneos: elegir destino y warpear los que no coincidan
@@ -694,6 +719,10 @@ def _homogeneizar_crs_rasters(archivos, carpeta_p):
 
     resultado = []
     for fp, crs in zip(archivos, crs_por_archivo):
+        if fp in ilegibles:
+            # rasterio no lo abre: dejarlo pasar sin tocar (ver arriba)
+            resultado.append(fp)
+            continue
         if crs is not None and _crs_iguales(crs, crs_destino):
             resultado.append(fp)
             continue
@@ -729,11 +758,8 @@ def _crs_tiene_definicion(crs) -> bool:
     """
     if crs is None:
         return False
-    try:
-        if hasattr(crs, "is_valid") and not crs.is_valid:
-            return False
-    except Exception:
-        pass
+    # (No se usa crs.is_valid: está obsoleto en rasterio y desaparece en
+    #  2.0; un CRS vacío se reconoce porque su WKT es una cadena vacía.)
     try:
         wkt = crs.to_wkt() if hasattr(crs, "to_wkt") else ""
         if not wkt:
@@ -1237,15 +1263,7 @@ def descargar_wfs(url: str, capa: str, xmin, ymin, xmax, ymax,
 def descargar_wms_custom(ax, url: str, capa: str, xmin, xmax, ymin, ymax,
                          crs_epsg: int = 25830, formato: str = "image/png"):
     """Descarga una imagen WMS GetMap de un servicio personalizado del usuario."""
-    # Mismo criterio que _descargar_wms: reducir ambos lados por el mismo
-    # factor al aplicar el máximo de 4096 px para no deformar la imagen.
-    extent_x = xmax - xmin
-    extent_y = ymax - ymin
-    width = max(512, int(extent_x / 2))
-    height = max(512, int(extent_y / 2))
-    factor = min(1.0, 4096.0 / max(width, height))
-    width = max(1, int(width * factor))
-    height = max(1, int(height * factor))
+    width, height = _dimensiones_wms(xmax - xmin, ymax - ymin)
 
     bbox_str = f"{xmin},{ymin},{xmax},{ymax}"
     base_url = url.split("?")[0]

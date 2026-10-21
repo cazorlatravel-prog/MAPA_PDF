@@ -43,9 +43,66 @@ class App(tk.Tk):
         self.motor = GeneradorPlanos()
         self._ultimo_dir_proyecto = os.path.expanduser("~")
 
+        self._establecer_icono()
         aplicar_estilos(self)
         self._construir_ui()
         self._configurar_atajos()
+
+    # ── Icono de ventana ─────────────────────────────────────────────────
+
+    def _establecer_icono(self):
+        """Pone el icono de la app en la barra de título/tareas.
+
+        Busca assets/icon.ico tanto en el repositorio como dentro del
+        .exe (sys._MEIPASS). Si no existe o la plataforma no admite .ico,
+        se deja el icono por defecto sin fallar.
+        """
+        import sys
+        candidatos = []
+        base_frozen = getattr(sys, "_MEIPASS", None)
+        if base_frozen:
+            candidatos.append(os.path.join(base_frozen, "assets", "icon.ico"))
+        raiz = os.path.dirname(os.path.dirname(os.path.dirname(
+            os.path.abspath(__file__))))
+        candidatos.append(os.path.join(raiz, "assets", "icon.ico"))
+        for ruta in candidatos:
+            if os.path.isfile(ruta):
+                try:
+                    self.iconbitmap(ruta)
+                    return
+                except Exception:
+                    continue
+
+    # ── Errores no capturados en callbacks de Tk ─────────────────────────
+
+    def report_callback_exception(self, exc, val, tb):
+        """Registra y muestra errores de callbacks de Tkinter.
+
+        En el .exe (modo ventana) no hay consola: sin esto, un error en un
+        botón no se veía en ningún sitio y la app "no hacía nada".
+        """
+        import traceback as _tb
+        texto = "".join(_tb.format_exception(exc, val, tb))
+        try:
+            from pathlib import Path
+            carpeta = Path.home() / ".mapa_pdf_cache"
+            carpeta.mkdir(parents=True, exist_ok=True)
+            with open(carpeta / "error.log", "a", encoding="utf-8") as fh:
+                from datetime import datetime
+                fh.write(f"\n[{datetime.now():%Y-%m-%d %H:%M:%S}]\n{texto}")
+        except Exception:
+            pass
+        try:
+            self._escribir_log(f"✗ Error inesperado: {val}", "error")
+        except Exception:
+            pass
+        try:
+            messagebox.showerror(
+                "Error inesperado",
+                f"{val}\n\nSe ha guardado el detalle en:\n"
+                f"{os.path.join(os.path.expanduser('~'), '.mapa_pdf_cache', 'error.log')}")
+        except Exception:
+            pass
 
     def _construir_ui(self):
         # ── Barra superior ──
@@ -834,8 +891,14 @@ class App(tk.Tk):
             w = self.focus_get()
         except Exception:
             return False
-        return isinstance(w, (tk.Entry, tk.Text, ttk.Entry, ttk.Combobox,
-                              tk.Spinbox))
+        if isinstance(w, ttk.Combobox):
+            # Un desplegable de solo lectura no admite escritura: no debe
+            # bloquear los atajos tras elegir, p. ej., el proveedor
+            try:
+                return str(w.cget("state")) != "readonly"
+            except Exception:
+                return True
+        return isinstance(w, (tk.Entry, tk.Text, ttk.Entry, tk.Spinbox))
 
     def _atajo_generar(self, event=None):
         if self._foco_en_texto():

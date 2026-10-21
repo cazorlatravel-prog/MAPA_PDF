@@ -260,26 +260,62 @@ class Proyecto:
 def cargar_lotes_csv(ruta_csv: str) -> list[dict[str, str]]:
     """Carga un CSV con rutas a múltiples shapefiles para generación por lotes.
 
-    Formato CSV esperado:
+    Formato CSV esperado (cabecera obligatoria):
         ruta_shp,nombre,formato,carpeta_salida
-        /ruta/a/infra1.shp,Proyecto Norte,A3 Horizontal,/salida/norte
-        /ruta/a/infra2.shp,Proyecto Sur,A4 Vertical,/salida/sur
+        C:/datos/infra1.shp,Proyecto Norte,A3 Horizontal,C:/salida/norte
+        C:/datos/infra2.shp,Proyecto Sur,A4 Horizontal,C:/salida/sur
+
+    Tolera lo que produce Excel en español: separador ``;``, BOM UTF-8,
+    codificación cp1252, filas cortas y espacios en las cabeceras. Las
+    rutas relativas se resuelven respecto a la carpeta del CSV.
 
     Devuelve lista de dicts con la configuración de cada lote.
     """
     import csv
+    import os
+
+    # 1) Leer el texto tolerando BOM y cp1252 (Excel "CSV UTF-8" añade BOM;
+    #    "CSV (delimitado por comas)" en Windows español guarda cp1252).
+    try:
+        with open(ruta_csv, "r", encoding="utf-8-sig", newline="") as f:
+            texto = f.read()
+    except UnicodeDecodeError:
+        with open(ruta_csv, "r", encoding="cp1252", newline="") as f:
+            texto = f.read()
+
+    if not texto.strip():
+        return []
+
+    # 2) Detectar separador (; o ,) a partir de la cabecera
+    primera_linea = texto.splitlines()[0]
+    delimitador = ";" if primera_linea.count(";") > primera_linea.count(",") else ","
+
+    base_dir = os.path.dirname(os.path.abspath(ruta_csv))
+
+    def _abs(p: str) -> str:
+        if not p:
+            return ""
+        return p if os.path.isabs(p) else os.path.normpath(os.path.join(base_dir, p))
 
     lotes = []
-    with open(ruta_csv, "r", encoding="utf-8") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            lote = {
-                "ruta_shp": row.get("ruta_shp", "").strip(),
-                "nombre": row.get("nombre", "").strip(),
-                "formato": row.get("formato", "A3 Horizontal").strip(),
-                "carpeta_salida": row.get("carpeta_salida", "").strip(),
-            }
-            if lote["ruta_shp"]:
-                lotes.append(lote)
+    reader = csv.DictReader(texto.splitlines(), delimiter=delimitador)
+    # Normalizar cabeceras: " Ruta_SHP " -> "ruta_shp"
+    if reader.fieldnames:
+        reader.fieldnames = [
+            (c or "").strip().lower().lstrip("\ufeff") for c in reader.fieldnames]
+    for row in reader:
+        # DictReader rellena con None las columnas ausentes en filas cortas
+        def _get(k, default=""):
+            v = row.get(k)
+            return (v if isinstance(v, str) else default).strip()
+
+        lote = {
+            "ruta_shp": _abs(_get("ruta_shp")),
+            "nombre": _get("nombre"),
+            "formato": _get("formato") or "A3 Horizontal",
+            "carpeta_salida": _abs(_get("carpeta_salida")),
+        }
+        if lote["ruta_shp"]:
+            lotes.append(lote)
 
     return lotes

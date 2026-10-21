@@ -572,7 +572,25 @@ class PanelGeneracion:
 
     # ── Generación ───────────────────────────────────────────────────────
 
+    def _generacion_en_curso(self) -> bool:
+        """True si ya hay una generación en marcha (botón GENERAR deshabilitado).
+
+        El botón se deshabilita al arrancar y se restaura en _fin_*; pero el
+        atajo Ctrl+G llama a _iniciar_generacion directamente, así que hay
+        que comprobarlo aquí para no lanzar un segundo hilo en paralelo.
+        """
+        try:
+            return str(self._btn_generar["state"]) == "disabled"
+        except Exception:
+            return False
+
     def _iniciar_generacion(self):
+        if self._generacion_en_curso():
+            self.callback_log(
+                "Ya hay una generación en curso; espera a que termine o "
+                "pulsa PARAR.", "warn")
+            return
+
         modo = self._modo_gen.get()
 
         if modo == "lotes":
@@ -699,6 +717,12 @@ class PanelGeneracion:
                         # Multipágina: 1 PDF esperado (cuenta 1 si devuelve ruta)
                         n_ok = 1 if ruta else 0
                         total = 1
+                        # El motor cuenta las páginas de plano realmente
+                        # añadidas; con ruta válida pero 0 páginas el aviso
+                        # debe reflejarlo.
+                        resumen = getattr(self.motor, "ultimo_resumen", None)
+                        if ruta and resumen:
+                            n_ok, total = resumen
                     else:
                         rutas = self.motor.generar_serie(
                             indices=indices,

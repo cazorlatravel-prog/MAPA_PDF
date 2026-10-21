@@ -134,10 +134,27 @@ class GeneradorPlanos:
             cols_validas = [c for c in cols if c in df.columns]
             df = df[cols_validas]
 
+        def _fusionar(row_shp, fila_excel):
+            """Fila del shapefile completada/sobrescrita con la del Excel.
+
+            Así el panel puede mostrar a la vez campos del shapefile
+            (Provincia, Monte...) y columnas del Excel; antes, un campo
+            ausente en el Excel salía como "—" aunque existiera en el SHP.
+            """
+            try:
+                fila = row_shp.drop(labels=["geometry"], errors="ignore").copy()
+            except Exception:
+                fila = row_shp.copy()
+            for k, v in fila_excel.items():
+                fila[k] = v
+            return fila
+
         # Sin campo enlace: fallback por índice
         if not self._campo_enlace_shp or not self._campo_enlace_excel:
             if idx_fila is not None and idx_fila < len(df):
-                return [df.iloc[idx_fila]]
+                base = rows_shp[0] if rows_shp else None
+                fila_x = df.iloc[idx_fila]
+                return [_fusionar(base, fila_x) if base is not None else fila_x]
             return [df.iloc[i] for i in range(len(df))]
 
         # Buscar por campo enlace
@@ -150,7 +167,7 @@ class GeneradorPlanos:
             mask = df[self._campo_enlace_excel].astype(str) == str(valor_shp)
             coincidencias = df[mask]
             for _, fila_excel in coincidencias.iterrows():
-                resultado.append(fila_excel)
+                resultado.append(_fusionar(row_shp, fila_excel))
 
         return resultado if resultado else rows_shp
 
@@ -630,6 +647,9 @@ class GeneradorPlanos:
         else:
             nombre_base = f"plano_{num_visible:04d}_{nombre_infra_safe}"
         nombre_arch = f"{nombre_base}.pdf"
+        # Crear la carpeta si no existe (la GUI lo hace, pero el motor debe
+        # ser robusto cuando se usa directamente o desde lotes/proyectos)
+        os.makedirs(salida_dir, exist_ok=True)
         ruta_out = os.path.join(salida_dir, nombre_arch)
 
         maq.guardar(ruta_out, dpi_save=self.dpi_guardado)
@@ -761,6 +781,9 @@ class GeneradorPlanos:
         else:
             nombre_base = f"plano_grupo_{num_plano:04d}_{nombre_safe}"
         nombre_arch = f"{nombre_base}.pdf"
+        # Crear la carpeta si no existe (la GUI lo hace, pero el motor debe
+        # ser robusto cuando se usa directamente o desde lotes/proyectos)
+        os.makedirs(salida_dir, exist_ok=True)
         ruta_out = os.path.join(salida_dir, nombre_arch)
 
         maq.guardar(ruta_out, dpi_save=self.dpi_guardado)
@@ -898,6 +921,7 @@ class GeneradorPlanos:
         )
 
         if salida_dir is not None:
+            os.makedirs(salida_dir, exist_ok=True)
             ruta_out = os.path.join(salida_dir, "mapa_guia.pdf")
             fig.savefig(ruta_out, format="pdf",
                         dpi=self.dpi_guardado or 300, facecolor="white")
@@ -1080,6 +1104,7 @@ class GeneradorPlanos:
                         callback_log(f"  \u26a0 No se pudo generar mapa gu\u00eda: {e}")
 
             # Planos
+            paginas_ok = 0
             for i, idx in enumerate(indices):
                 self._check_cancelado()
                 nombre = self.gdf_infra.iloc[idx].get("Nombre_Infra", f"#{idx + 1}")
@@ -1183,6 +1208,7 @@ class GeneradorPlanos:
                     maq.dibujar_marcos(plantilla=self._plantilla, cajetin=self._cajetin)
 
                     pdf.savefig(fig, dpi=self.dpi_guardado or 300, facecolor="white")
+                    paginas_ok += 1
 
                     if callback_log:
                         callback_log(f"  \u2713 P\u00e1gina {i + 1} a\u00f1adida")
@@ -1204,6 +1230,8 @@ class GeneradorPlanos:
 
         if callback_log:
             callback_log(f"\n\u2713 PDF multipágina guardado: {ruta_pdf}")
+        # Resumen para la GUI: páginas de plano realmente añadidas / previstas
+        self.ultimo_resumen = (paginas_ok, total)
         return ruta_pdf
 
     # ── Generación por lotes desde CSV ───────────────────────────────────
@@ -1245,8 +1273,32 @@ class GeneradorPlanos:
                     continue
 
                 formato = lote.get("formato", "A3 Horizontal")
-                carpeta = lote.get("carpeta_salida", ".")
-                os.makedirs(carpeta, exist_ok=True)
+                if formato not in FORMATOS:
+                    if callback_log:
+                        callback_log(
+                            f"  ⚠ Formato '{formato}' no reconocido; se usa "
+                            "A3 Horizontal", "warn")
+                    formato = "A3 Horizontal"
+                # Carpeta de salida vacía -> subcarpeta junto al CSV. Antes
+                # os.makedirs("") abortaba el lote entero.
+                carpeta = lote.get("carpeta_salida") or ""
+                if not carpeta:
+                    nombre_safe = "".join(
+                        c for c in (lote.get("nombre") or "lote")
+                        if c.isalnum() or c in "_ -").strip() or "lote"
+                    carpeta = os.path.join(
+                        os.path.dirname(os.path.abspath(ruta_csv)),
+                        "salida", nombre_safe)
+                try:
+                    os.makedirs(carpeta, exist_ok=True)
+                except OSError as e:
+                    if callback_log:
+                        callback_log(
+                            f"  ✗ No se pudo crear la carpeta '{carpeta}': {e}",
+                            "error")
+                    if callback_progreso:
+                        callback_progreso(i + 1, total)
+                    continue
 
                 indices = list(range(len(self.gdf_infra)))
                 try:

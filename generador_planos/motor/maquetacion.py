@@ -964,15 +964,17 @@ class MaquetadorPlano(ElementosMapaMixin):
 
         # Elegir la mayor longitud "redonda" (divisible entre 4 para las
         # subdivisiones) cuya barra + subdivisión izquierda (1/4 extra)
-        # quepa en el panel con margen.
+        # quepa en el panel con margen. Los candidatos pequeños cubren
+        # escalas manuales grandes (1:500, 1:1.000) en formatos pequeños.
         _candidatos = [20000, 10000, 5000, 4000, 2000, 1000,
-                       500, 400, 200, 100]
+                       500, 400, 200, 100, 40, 20, 10, 4]
         barra_m = _candidatos[-1]
         for _m in _candidatos:
             if _frac_barra(_m) * 1.25 <= 0.80:
                 barra_m = _m
                 break
-        barra_frac = _frac_barra(barra_m)
+        # Último recurso: nunca salir del panel aunque ningún candidato quepa
+        barra_frac = min(_frac_barra(barra_m), 0.64)
         esc_y = 0.10
         bar_h = 0.022
 
