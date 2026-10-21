@@ -13,7 +13,7 @@ from tkinter import ttk, messagebox, filedialog
 from .estilos import (
     COLOR_PANEL, COLOR_TEXTO, COLOR_TEXTO_GRIS, COLOR_BORDE, COLOR_ENTRY,
     COLOR_ACENTO, COLOR_ACENTO2, COLOR_ACENTO3, COLOR_ERROR, COLOR_HOVER,
-    COLOR_FONDO_APP, COLOR_HEADER,
+    COLOR_FONDO_APP, COLOR_HEADER, COLOR_BOTON,
     FONT_BOLD, FONT_SMALL, FONT_LABEL, FONT_SECCION, FONT_BOTON,
     crear_frame_seccion, crear_boton, crear_entry, crear_label,
     crear_tooltip,
@@ -32,6 +32,13 @@ class PanelGeneracion:
         self.callback_log = callback_log
         self._auto_aplicar = auto_aplicar
         self._parent_window = parent.winfo_toplevel()
+        # Ganchos opcionales que asigna la ventana principal:
+        # - obtener_indices_filtrados(): índices del filtro activo o None
+        # - validar_config(): texto de error / None antes de generar
+        #   (o callable que devuelve (ok: bool))
+        self.obtener_indices_filtrados = None
+        self.validar_config = None
+        self._preview_en_curso = False
 
         f = crear_frame_seccion(parent, "\U0001f5a8  GENERACI\u00d3N")
 
@@ -233,7 +240,7 @@ class PanelGeneracion:
         self._btn_generar = crear_boton(
             f, "  GENERAR PLANOS  ", self._iniciar_generacion,
             icono="\U0001f5a8", ancho=30,
-            estilo="primario",
+            estilo="exito",
         )
         self._btn_generar.grid(row=15, column=0, columnspan=2, sticky="ew", pady=(6, 4))
         crear_tooltip(
@@ -346,6 +353,45 @@ class PanelGeneracion:
             text=f"Valores a generar ({sel}/{total}):  {preview}\n"
                  f"Pulsa aquí para ver/seleccionar todos")
 
+    # ── Popups de selección (Treeview con casilla: rápido con miles) ──
+
+    _MARCA_SI = "\u2611"
+    _MARCA_NO = "\u2610"
+
+    def _serie_grupo(self, campo):
+        """Serie de texto (sin nulos) del campo de agrupación, o None."""
+        gdf = self.motor.gdf_infra
+        if gdf is None:
+            return None
+        campo_real = campo
+        mapeo = getattr(self.motor, "_campo_mapeo", None) or {}
+        if campo in mapeo:
+            campo_real = mapeo[campo]
+        if campo_real not in gdf.columns:
+            return None
+        serie = gdf[campo_real]
+        return serie[serie.notna()].map(str)
+
+    def _crear_lista_checks(self, parent, columnas, anchos, arbol=False):
+        """Treeview con columna de casilla y scroll vertical."""
+        cont = tk.Frame(parent, bg=COLOR_ENTRY, highlightthickness=1,
+                        highlightbackground=COLOR_BORDE)
+        cont.pack(fill="both", expand=True, padx=8, pady=4)
+        tv = ttk.Treeview(cont, columns=columnas,
+                          show=("tree headings" if arbol else "headings"),
+                          selectmode="browse")
+        for col, (titulo, ancho) in zip(columnas, anchos):
+            tv.heading(col, text=titulo, anchor="w")
+            tv.column(col, width=ancho, minwidth=30,
+                      stretch=(ancho > 100), anchor="w")
+        if arbol:
+            tv.column("#0", width=28, stretch=False)
+        sb = ttk.Scrollbar(cont, orient="vertical", command=tv.yview)
+        tv.configure(yscrollcommand=sb.set)
+        sb.pack(side="right", fill="y")
+        tv.pack(side="left", fill="both", expand=True)
+        return tv
+
     def _abrir_popup_valores(self):
         """Abre ventana emergente para seleccionar valores de agrupación."""
         if not self._check_valores:
@@ -354,85 +400,81 @@ class PanelGeneracion:
             return
 
         campo = self._campo_agrupacion.get()
+        serie = self._serie_grupo(campo)
+        conteo = serie.value_counts().to_dict() if serie is not None else {}
 
         popup = tk.Toplevel(self._parent_window)
         popup.title(f"Seleccionar valores de: {campo}")
-        popup.geometry("500x450")
+        popup.geometry("520x480")
         popup.configure(bg=COLOR_PANEL)
         popup.transient(self._parent_window)
-        popup.grab_set()
 
-        crear_label(popup, f"Valores a generar (campo: {campo})",
-                    tipo="titulo").pack(anchor="w", padx=10, pady=(10, 6))
+        crear_label(popup, f"Valores a generar (campo: {campo})  \u2014  "
+                    "clic en una fila para marcar/desmarcar",
+                    tipo="titulo").pack(anchor="w", padx=10, pady=(10, 4))
 
-        # Frame con scroll
-        container = tk.Frame(popup, bg=COLOR_PANEL)
-        container.pack(fill="both", expand=True, padx=8, pady=4)
+        # Buscador
+        busq_f = tk.Frame(popup, bg=COLOR_PANEL)
+        busq_f.pack(fill="x", padx=8)
+        crear_label(busq_f, "Buscar:").pack(side="left")
+        v_busq = tk.StringVar()
+        crear_entry(busq_f, textvariable=v_busq).pack(
+            side="left", fill="x", expand=True, padx=(6, 0))
 
-        canvas = tk.Canvas(container, bg=COLOR_PANEL, highlightthickness=0)
-        sb = ttk.Scrollbar(container, orient="vertical", command=canvas.yview)
-        inner = tk.Frame(canvas, bg=COLOR_PANEL)
-        inner.bind("<Configure>",
-                   lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
-        canvas.create_window((0, 0), window=inner, anchor="nw")
-        canvas.configure(yscrollcommand=sb.set)
-        canvas.pack(side="left", fill="both", expand=True)
-        sb.pack(side="right", fill="y")
+        estado = {v: bool(var.get()) for v, var in self._check_valores.items()}
+        tv = self._crear_lista_checks(
+            popup, ("chk", "valor", "n"),
+            (("", 34), ("Valor", 340), ("Infra.", 70)))
 
-        # Scroll con rueda del ratón
-        def _on_mousewheel(event):
-            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+        def _rellenar(*_):
+            tv.delete(*tv.get_children())
+            filtro = v_busq.get().strip().lower()
+            for i, valor in enumerate(estado):
+                if filtro and filtro not in str(valor).lower():
+                    continue
+                tv.insert("", "end", iid=str(i), values=(
+                    self._MARCA_SI if estado[valor] else self._MARCA_NO,
+                    valor, conteo.get(str(valor), 0)))
 
-        def _on_mousewheel_linux(event):
-            if event.num == 4:
-                canvas.yview_scroll(-1, "units")
-            elif event.num == 5:
-                canvas.yview_scroll(1, "units")
+        claves = list(estado)
+        v_busq.trace_add("write", _rellenar)
+        _rellenar()
 
-        canvas.bind("<MouseWheel>", _on_mousewheel)
-        canvas.bind("<Button-4>", _on_mousewheel_linux)
-        canvas.bind("<Button-5>", _on_mousewheel_linux)
+        def _click(event):
+            iid = tv.identify_row(event.y)
+            if not iid:
+                return
+            valor = claves[int(iid)]
+            estado[valor] = not estado[valor]
+            tv.set(iid, "chk", self._MARCA_SI if estado[valor]
+                   else self._MARCA_NO)
 
-        # Checkboxes para cada valor
-        popup_vars = {}
-        for valor, main_var in self._check_valores.items():
-            n = len(self.motor.obtener_indices_por_valor(campo, valor))
-            texto = f"{valor}  ({n} infra.)"
-            var = tk.BooleanVar(value=main_var.get())
-            cb = tk.Checkbutton(
-                inner, text=texto, variable=var,
-                font=FONT_SMALL, bg=COLOR_PANEL, fg=COLOR_TEXTO,
-                selectcolor=COLOR_ENTRY, activebackground=COLOR_PANEL,
-                activeforeground=COLOR_ACENTO, cursor="hand2",
-                bd=0, highlightthickness=0,
-            )
-            cb.pack(anchor="w", padx=8, pady=2)
-            popup_vars[valor] = var
+        tv.bind("<ButtonRelease-1>", _click)
 
-        # Botones inferiores
         btn_f = tk.Frame(popup, bg=COLOR_PANEL)
         btn_f.pack(fill="x", padx=8, pady=(4, 8))
 
-        def _sel_todos():
-            for v in popup_vars.values():
-                v.set(True)
-
-        def _sel_ninguno():
-            for v in popup_vars.values():
-                v.set(False)
+        def _marcar(valor_bool):
+            visibles = {claves[int(i)] for i in tv.get_children()}
+            for v in visibles:
+                estado[v] = valor_bool
+            _rellenar()
 
         def _aplicar():
-            for valor, var in popup_vars.items():
-                self._check_valores[valor].set(var.get())
+            for valor, marcado in estado.items():
+                self._check_valores[valor].set(marcado)
             self._actualizar_resumen_valores()
             popup.destroy()
 
         popup.protocol("WM_DELETE_WINDOW", _aplicar)
 
-        crear_boton(btn_f, "Todos", _sel_todos).pack(side="left", padx=(0, 4))
-        crear_boton(btn_f, "Ninguno", _sel_ninguno).pack(side="left", padx=(0, 4))
+        crear_boton(btn_f, "Todos", lambda: _marcar(True)).pack(
+            side="left", padx=(0, 4))
+        crear_boton(btn_f, "Ninguno", lambda: _marcar(False)).pack(
+            side="left", padx=(0, 4))
         crear_boton(btn_f, "Aceptar", _aplicar,
                     estilo="primario").pack(side="right")
+        popup.grab_set()
 
     def _seleccionar_todos_valores(self):
         for var in self._check_valores.values():
@@ -452,94 +494,120 @@ class PanelGeneracion:
             messagebox.showinfo("Info",
                                 "Selecciona al menos un valor de agrupación.")
             return
+        serie = self._serie_grupo(campo)
+        gdf = self.motor.gdf_infra
+        if serie is None or gdf is None:
+            messagebox.showinfo("Info", "Carga primero el shapefile.")
+            return
+        # Índices por grupo con UN solo groupby (antes: una pasada por valor)
+        grupos = {str(k): list(serie.index[v])
+                  for k, v in serie.groupby(serie).indices.items()}
 
         popup = tk.Toplevel(self._parent_window)
         popup.title("Seleccionar infraestructuras por grupo")
-        popup.geometry("800x550")
+        popup.geometry("820x560")
         popup.configure(bg=COLOR_PANEL)
         popup.transient(self._parent_window)
-        popup.grab_set()
 
-        crear_label(popup, f"Infraestructuras agrupadas por: {campo}",
+        crear_label(popup, f"Infraestructuras agrupadas por: {campo}  \u2014  "
+                    "clic para marcar/desmarcar (en un grupo: todo el grupo)",
                     tipo="titulo").pack(anchor="w", padx=10, pady=(10, 6))
 
-        # Frame con scroll
-        container = tk.Frame(popup, bg=COLOR_PANEL)
-        container.pack(fill="both", expand=True, padx=8, pady=4)
-
-        canvas = tk.Canvas(container, bg=COLOR_PANEL, highlightthickness=0)
-        sb = ttk.Scrollbar(container, orient="vertical", command=canvas.yview)
-        inner = tk.Frame(canvas, bg=COLOR_PANEL)
-        inner.bind("<Configure>",
-                   lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
-        canvas.create_window((0, 0), window=inner, anchor="nw")
-        canvas.configure(yscrollcommand=sb.set)
-        canvas.pack(side="left", fill="both", expand=True)
-        sb.pack(side="right", fill="y")
-
-        # Construir checkboxes por grupo → infraestructuras
-        check_vars = {}  # {valor_grupo: [(idx, BooleanVar), ...]}
-
-        # Determinar columnas útiles para la etiqueta de cada infra
-        gdf = self.motor.gdf_infra
         cols_etiqueta = [c for c in gdf.columns
                          if c.lower() != "geometry"][:5]  # máx 5 campos
+        tv = self._crear_lista_checks(
+            popup, ("chk", "desc"), (("", 34), ("Infraestructura", 700)),
+            arbol=True)
 
-        for valor in valores_sel:
-            indices = self.motor.obtener_indices_por_valor(campo, valor)
-            # Cabecera del grupo
-            crear_label(inner, f"\u25bc {valor}  ({len(indices)} infra.)",
-                        tipo="acento", font=FONT_BOLD).pack(
-                anchor="w", padx=4, pady=(8, 2))
-
-            grupo_vars = []
+        estado = {}       # idx -> bool
+        hijos = {}        # iid grupo -> (valor, [idx])
+        cargados = set()  # grupos cuyas filas hijas ya se insertaron
+        sub = gdf[cols_etiqueta]
+        for gi, valor in enumerate(valores_sel):
+            indices = grupos.get(str(valor), [])
             prev_sel = self._indices_filtrados.get(valor)
             for idx in indices:
-                row = gdf.iloc[idx]
-                # Construir etiqueta con los campos reales disponibles
+                estado[idx] = prev_sel is None or idx in prev_sel
+            gid = f"g{gi}"
+            tv.insert("", "end", iid=gid,
+                      values=("", f"{valor}  ({len(indices)} infra.)"))
+            hijos[gid] = (valor, indices)
+            if indices:
+                tv.insert(gid, "end", iid=f"{gid}_tmp", values=("", "…"))
+            self._pintar_grupo(tv, gid, hijos, estado)
+
+        def _cargar_hijos(gid):
+            # Inserción diferida: con miles de grupos, crear todas las filas
+            # al abrir la ventana tardaba segundos
+            if gid in cargados or gid not in hijos:
+                return
+            cargados.add(gid)
+            if tv.exists(f"{gid}_tmp"):
+                tv.delete(f"{gid}_tmp")
+            _, indices = hijos[gid]
+            filas = sub.loc[indices].itertuples(index=False, name=None)
+            for idx, fila in zip(indices, filas):
                 partes = []
-                for col in cols_etiqueta:
-                    val = str(row.get(col, ""))
-                    if val and val != "nan":
-                        # Truncar valores largos
-                        if len(val) > 25:
-                            val = val[:24] + "\u2026"
-                        partes.append(val)
+                for val in fila:
+                    t = str(val)
+                    if t and t not in ("nan", "None"):
+                        partes.append(t if len(t) <= 25 else t[:24] + "\u2026")
                 nombre = " | ".join(partes) if partes else f"#{idx}"
+                tv.insert(gid, "end", iid=f"i{idx}", values=(
+                    self._MARCA_SI if estado[idx] else self._MARCA_NO, nombre))
 
-                default_on = prev_sel is None or idx in prev_sel
-                var = tk.BooleanVar(value=default_on)
-                cb = tk.Checkbutton(
-                    inner, text=f"  {nombre}", variable=var,
-                    font=FONT_SMALL, bg=COLOR_PANEL, fg=COLOR_TEXTO,
-                    selectcolor=COLOR_ENTRY, activebackground=COLOR_PANEL,
-                    activeforeground=COLOR_ACENTO, cursor="hand2",
-                    bd=0, highlightthickness=0,
-                )
-                cb.pack(anchor="w", padx=20, pady=1)
-                grupo_vars.append((idx, var))
-            check_vars[valor] = grupo_vars
+        def _al_abrir(_e=None):
+            _cargar_hijos(tv.focus())
+            # Por si el foco no es el grupo abierto (clic en el indicador)
+            tv.after_idle(lambda: [_cargar_hijos(g) for g in hijos
+                                   if g not in cargados
+                                   and tv.item(g, "open")])
 
-        # Botones inferiores
+        tv.bind("<<TreeviewOpen>>", _al_abrir)
+        if len(valores_sel) <= 3:
+            for gid in hijos:
+                _cargar_hijos(gid)
+                tv.item(gid, open=True)
+
+        def _click(event):
+            iid = tv.identify_row(event.y)
+            if not iid or tv.identify_region(event.x, event.y) == "tree":
+                return
+            if iid in hijos:
+                _, idxs = hijos[iid]
+                nuevo = not all(estado[i] for i in idxs)
+                for i in idxs:
+                    estado[i] = nuevo
+                    if tv.exists(f"i{i}"):
+                        tv.set(f"i{i}", "chk",
+                               self._MARCA_SI if nuevo else self._MARCA_NO)
+                self._pintar_grupo(tv, iid, hijos, estado)
+            elif iid.startswith("i"):
+                i = int(iid[1:])
+                estado[i] = not estado[i]
+                tv.set(iid, "chk", self._MARCA_SI if estado[i]
+                       else self._MARCA_NO)
+                self._pintar_grupo(tv, tv.parent(iid), hijos, estado)
+
+        tv.bind("<ButtonRelease-1>", _click)
+
         btn_f = tk.Frame(popup, bg=COLOR_PANEL)
         btn_f.pack(fill="x", padx=8, pady=(4, 8))
 
-        def _sel_todos():
-            for gvars in check_vars.values():
-                for _, v in gvars:
-                    v.set(True)
-
-        def _sel_ninguno():
-            for gvars in check_vars.values():
-                for _, v in gvars:
-                    v.set(False)
+        def _marcar_todo(v):
+            for i in estado:
+                estado[i] = v
+                if tv.exists(f"i{i}"):
+                    tv.set(f"i{i}", "chk",
+                           self._MARCA_SI if v else self._MARCA_NO)
+            for gid in hijos:
+                self._pintar_grupo(tv, gid, hijos, estado)
 
         def _guardar_seleccion():
             self._indices_filtrados.clear()
-            for valor, gvars in check_vars.items():
-                sel = [idx for idx, v in gvars if v.get()]
-                todos = [idx for idx, _ in gvars]
-                if len(sel) < len(todos):
+            for gid, (valor, idxs) in hijos.items():
+                sel = [i for i in idxs if estado[i]]
+                if len(sel) < len(idxs):
                     self._indices_filtrados[valor] = sel
 
         def _aceptar():
@@ -550,15 +618,22 @@ class PanelGeneracion:
         # Guardar también al cerrar con la X
         popup.protocol("WM_DELETE_WINDOW", lambda: (_guardar_seleccion(), popup.destroy()))
 
-        tk.Button(btn_f, text="Todos", command=_sel_todos,
-                  font=FONT_SMALL, bg=COLOR_BORDE, fg=COLOR_TEXTO,
-                  relief="flat", cursor="hand2", padx=6).pack(side="left", padx=(0, 4))
-        tk.Button(btn_f, text="Ninguno", command=_sel_ninguno,
-                  font=FONT_SMALL, bg=COLOR_BORDE, fg=COLOR_TEXTO,
-                  relief="flat", cursor="hand2", padx=6).pack(side="left", padx=(0, 4))
-        tk.Button(btn_f, text="Aceptar", command=_aceptar,
-                  font=FONT_SMALL, bg=COLOR_ACENTO, fg="#1A1A2E",
-                  relief="flat", cursor="hand2", padx=12).pack(side="right")
+        crear_boton(btn_f, "Todos", lambda: _marcar_todo(True)).pack(
+            side="left", padx=(0, 4))
+        crear_boton(btn_f, "Ninguno", lambda: _marcar_todo(False)).pack(
+            side="left", padx=(0, 4))
+        crear_boton(btn_f, "Aceptar", _aceptar, estilo="primario").pack(
+            side="right")
+        popup.grab_set()
+
+    def _pintar_grupo(self, tv, gid, hijos, estado):
+        if gid not in hijos:
+            return
+        idxs = hijos[gid][1]
+        n = sum(1 for i in idxs if estado[i])
+        marca = (self._MARCA_SI if n == len(idxs) and idxs else
+                 self._MARCA_NO if n == 0 else "\u25a3")
+        tv.set(gid, "chk", marca)
 
     def _seleccionar_csv(self):
         ruta = filedialog.askopenfilename(
@@ -585,6 +660,17 @@ class PanelGeneracion:
         tabla = cfg.get("tabla")
 
         if modo == "todos":
+            filtrados = None
+            if callable(self.obtener_indices_filtrados):
+                try:
+                    filtrados = self.obtener_indices_filtrados()
+                except Exception:
+                    filtrados = None
+            if filtrados is not None and len(filtrados) < len(gdf):
+                self.callback_log(
+                    f"Filtro activo: se generan las {len(filtrados)} "
+                    f"infraestructuras filtradas (de {len(gdf)}).", "info")
+                return list(filtrados)
             return list(range(len(gdf)))
         elif modo == "seleccion":
             if tabla is None:
@@ -668,6 +754,8 @@ class PanelGeneracion:
         campos = cfg.get("campos", [])
         if not campos:
             messagebox.showwarning("Aviso", "Selecciona al menos un campo.")
+            return
+        if not self._config_valida():
             return
         campo_encabezado = cfg.get("campo_encabezado")
 
@@ -811,13 +899,31 @@ class PanelGeneracion:
 
             threading.Thread(target=_worker, daemon=True).start()
 
+    def _config_valida(self) -> bool:
+        """Comprobaciones previas (escala, patrón...) de la ventana principal."""
+        if callable(self.validar_config):
+            try:
+                return bool(self.validar_config())
+            except Exception as e:
+                self.callback_log(f"Validación previa: {e}", "warn")
+        return True
+
     def _iniciar_generacion_lotes(self):
         if not hasattr(self, "_ruta_csv_completa"):
             messagebox.showwarning("Aviso", "Selecciona primero un archivo CSV.")
             return
 
+        # Igual que la generación normal: aplicar cajetín, plantilla y
+        # simbología al motor y exigir al menos un campo
+        if self._auto_aplicar:
+            self._auto_aplicar()
         cfg = self.get_config()
         campos = cfg.get("campos", [])
+        if not campos:
+            messagebox.showwarning("Aviso", "Selecciona al menos un campo.")
+            return
+        if not self._config_valida():
+            return
         escala_manual = cfg.get("escala_manual")
         campo_encabezado = cfg.get("campo_encabezado")
 
@@ -1086,9 +1192,27 @@ class PanelGeneracion:
 
     # ── Vista previa en miniatura ────────────────────────────────────────
 
+    def _ocupado_para_ventanas(self) -> bool:
+        if self._generacion_en_curso():
+            messagebox.showinfo(
+                "Generación en curso",
+                "Espera a que termine la generación (o pulsa PARAR).")
+            return True
+        if self._preview_en_curso:
+            self.callback_log("Ya se está preparando una vista previa…", "warn")
+            return True
+        return False
+
+    def _error_ventana(self, msg):
+        self._preview_en_curso = False
+        self.callback_log(msg, "error")
+        messagebox.showerror("Error", msg)
+
     def _vista_previa(self):
         """Genera una vista previa del primer plano seleccionado y la
         muestra en una ventana emergente."""
+        if self._ocupado_para_ventanas():
+            return
         if self.motor.gdf_infra is None:
             messagebox.showwarning("Aviso",
                                     "Carga primero el shapefile.")
@@ -1118,10 +1242,27 @@ class PanelGeneracion:
                 idx = max(0, int(self._rango_desde.get()) - 1)
             except ValueError:
                 idx = 0
+        elif modo == "agrupado":
+            # Primer índice del primer grupo seleccionado
+            idx = 0
+            valores_sel = [v for v, var in self._check_valores.items()
+                           if var.get()]
+            if valores_sel:
+                v0 = valores_sel[0]
+                ind = (self._indices_filtrados.get(v0)
+                       or self.motor.obtener_indices_por_valor(
+                           self._campo_agrupacion.get(), v0))
+                if ind:
+                    idx = int(ind[0])
         else:
             idx = 0
+            filtrados = (self.obtener_indices_filtrados()
+                         if callable(self.obtener_indices_filtrados) else None)
+            if filtrados:
+                idx = int(filtrados[0])
 
         self.callback_log("Generando vista previa...", "info")
+        self._preview_en_curso = True
 
         def _worker():
             import matplotlib.pyplot as plt
@@ -1146,8 +1287,7 @@ class PanelGeneracion:
                     except Exception:
                         pass
                 msg = f"Error en vista previa: {e}"
-                self._after_seguro(
-                    0, lambda: self.callback_log(msg, "error"))
+                self._after_seguro(0, lambda: self._error_ventana(msg))
 
         threading.Thread(target=_worker, daemon=True).start()
 
@@ -1157,6 +1297,7 @@ class PanelGeneracion:
         matplotlib.use("Agg")
         from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
+        self._preview_en_curso = False
         self.callback_log("Vista previa generada.", "ok")
 
         popup = tk.Toplevel(self._parent_window)
@@ -1192,6 +1333,8 @@ class PanelGeneracion:
     def _mapa_guia(self):
         """Genera un mapa guía con todas las infraestructuras numeradas
         y lo muestra en una ventana emergente."""
+        if self._ocupado_para_ventanas():
+            return
         if self.motor.gdf_infra is None:
             messagebox.showwarning("Aviso",
                                     "Carga primero el shapefile.")
@@ -1207,10 +1350,11 @@ class PanelGeneracion:
         if modo == "agrupado":
             indices = []
             campo = self._campo_agrupacion.get()
-            for valor, var in self._check_valores.items():
-                if var.get():
-                    indices.extend(
-                        self.motor.obtener_indices_por_valor(campo, valor))
+            serie = self._serie_grupo(campo)
+            if serie is not None:
+                sel = {str(v) for v, var in self._check_valores.items()
+                       if var.get()}
+                indices = [int(i) for i in serie.index[serie.isin(sel)]]
         else:
             indices = self._obtener_indices()
 
@@ -1222,6 +1366,7 @@ class PanelGeneracion:
         self.callback_log(
             f"Generando mapa gu\u00eda ({len(indices)} infraestructuras)...",
             "info")
+        self._preview_en_curso = True
 
         def _worker():
             import matplotlib.pyplot as plt
@@ -1241,8 +1386,7 @@ class PanelGeneracion:
                     except Exception:
                         pass
                 msg = f"Error en mapa gu\u00eda: {e}"
-                self._after_seguro(
-                    0, lambda: self.callback_log(msg, "error"))
+                self._after_seguro(0, lambda: self._error_ventana(msg))
 
         threading.Thread(target=_worker, daemon=True).start()
 

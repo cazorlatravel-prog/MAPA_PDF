@@ -211,8 +211,9 @@ class PanelCajetin:
         self._logo_path.set("")
         self._lbl_logo.configure(text="Sin logo", fg=COLOR_TEXTO_GRIS)
 
-    def actualizar_campos_subtitulo(self, columnas: list):
+    def actualizar_campos_subtitulo(self, columnas: list, mapeo: dict = None):
         cols = [c for c in columnas if c.lower() != "geometry"]
+        mapeo = mapeo or {}
         valores_sub = ["(ninguno)"] + cols
         self._cb_campo_sub.configure(values=valores_sub)
         if self._campo_subtitulo.get() not in valores_sub:
@@ -220,8 +221,13 @@ class PanelCajetin:
 
         valores_etiq = ["(sin etiqueta)"] + cols
         self._cb_campo_etiq.configure(values=valores_etiq)
-        if self._campo_etiqueta.get() not in valores_etiq:
-            if "Nombre_Infra" in cols:
+        actual = self._campo_etiqueta.get()
+        if actual not in valores_etiq:
+            # Campo esperado renombrado/truncado (Nombre_Infra → Nombre_Inf)
+            candidato = mapeo.get(actual) or mapeo.get("Nombre_Infra")
+            if candidato in cols:
+                self._campo_etiqueta.set(candidato)
+            elif "Nombre_Infra" in cols:
                 self._campo_etiqueta.set("Nombre_Infra")
             else:
                 self._cb_campo_etiq.current(0)
@@ -286,23 +292,24 @@ class PanelCajetin:
             self._org.set(org.replace("\n", " - "))
             self._titulo_mapa.set(cajetin.get("titulo_mapa", ""))
             self._subtitulo.set(cajetin.get("subtitulo", ""))
-            self._logo_path.set(cajetin.get("logo_path", ""))
+            self._logo_path.set(cajetin.get("logo_path", "") or "")
             if self._logo_path.get():
                 import os
                 self._lbl_logo.configure(
                     text=os.path.basename(self._logo_path.get()),
                     fg=COLOR_ACENTO)
-            campo_sub = cajetin.get("campo_subtitulo", "")
-            if campo_sub:
-                self._campo_subtitulo.set(campo_sub)
+            else:
+                self._lbl_logo.configure(text="Sin logo", fg=COLOR_TEXTO_GRIS)
+            # Valores vacíos también se restauran (antes quedaba el valor
+            # anterior o el primero de la lista)
+            self._campo_subtitulo.set(
+                cajetin.get("campo_subtitulo", "") or "(ninguno)")
             self._num_plano_inicio.set(
                 str(cajetin.get("num_plano_inicio", 1)))
-            campo_etiq = cajetin.get("campo_etiqueta", "")
-            if campo_etiq:
-                self._campo_etiqueta.set(campo_etiq)
-            campo_etiq_m = cajetin.get("campo_etiqueta_montes", "")
-            if campo_etiq_m:
-                self._campo_etiqueta_montes.set(campo_etiq_m)
+            self._campo_etiqueta.set(
+                cajetin.get("campo_etiqueta", "") or "(sin etiqueta)")
+            self._campo_etiqueta_montes.set(
+                cajetin.get("campo_etiqueta_montes", "") or "(sin etiqueta)")
 
         if plantilla:
             for key, color in plantilla.items():

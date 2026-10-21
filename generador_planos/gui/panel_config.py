@@ -21,10 +21,33 @@ from ..motor.cartografia import PROVIDERS_CTX
 from ..motor.maquetacion import CALIDADES_PDF
 
 
+def parsear_escala(texto) -> tuple:
+    """Interpreta una escala escrita por el usuario.
+
+    Acepta "25000", "25.000", "25,000", "25 000", "1:25000", "1:25.000"
+    y "0"/"0 (auto)"/"" (automática). Devuelve ``(valor, valida)``:
+    ``valor`` es un int > 0 o None (automática); ``valida`` es False si
+    el texto no se pudo interpretar.
+    """
+    t = str(texto or "").strip().lower()
+    if not t or "auto" in t:
+        return None, True
+    t = t.replace("\u00a0", "").replace(" ", "")
+    if t.startswith("1:"):
+        t = t[2:]
+    t = t.replace(".", "").replace(",", "").replace("'", "")
+    if not t.isdigit():
+        return None, False
+    v = int(t)
+    return (v if v > 0 else None), True
+
+
 class PanelConfig:
     """Panel de configuracion general del plano."""
 
     def __init__(self, parent):
+        # Gancho opcional (ventana principal): color de infra cambiado
+        self.callback_color = None
         f = crear_frame_seccion(parent, "\u2699  CONFIGURACI\u00d3N")
 
         # ── Formato ──
@@ -43,7 +66,7 @@ class PanelConfig:
                          + ["\u2500\u2500 WMS propio \u2500\u2500",
                             "\u2500\u2500 WFS propio \u2500\u2500",
                             "\u2500\u2500 R\u00e1ster local \u2500\u2500"])
-        self.proveedor = tk.StringVar(value="OpenStreetMap")
+        self.proveedor = tk.StringVar(value="IGN Base")
         self._cb_prov = ttk.Combobox(f, textvariable=self.proveedor,
                                values=opciones_prov,
                                state="readonly", font=FONT_LABEL)
@@ -257,7 +280,7 @@ class PanelConfig:
         # ── Calidad PDF ──
         crear_label(f, "Calidad PDF:", tipo="titulo").grid(
             row=13, column=0, sticky="w")
-        self._calidad_pdf = tk.StringVar(value="Alta (400 DPI)")
+        self._calidad_pdf = tk.StringVar(value="Media (200 DPI)")
         cb_calidad = ttk.Combobox(f, textvariable=self._calidad_pdf,
                      values=list(CALIDADES_PDF.keys()),
                      state="readonly", font=FONT_LABEL)
@@ -266,7 +289,9 @@ class PanelConfig:
             cb_calidad,
             "Resolución de salida del PDF (DPI).\n"
             "Mayor calidad = más nitidez pero archivos más grandes "
-            "y generación más lenta.")
+            "y generación más lenta.\n"
+            "Media (200 DPI) es buena calidad de impresión; Alta (400 DPI)\n"
+            "genera archivos mucho más pesados (10-20 MB con ortofoto).")
 
         # ── Origen datos tabla ──
         crear_label(f, "Datos de tabla:", tipo="titulo").grid(
@@ -404,15 +429,22 @@ class PanelConfig:
 
     @property
     def escala_manual(self) -> int:
-        # No descartar por empezar en "0": un "0500" tecleado debe ser 500,
-        # no escala automática. "0" y "0 (Automática)" siguen dando None
-        # (val<=0 y ValueError respectivamente).
-        txt = self._escala_manual.get().replace(",", "").replace(".", "").strip()
-        try:
-            val = int(txt)
-            return val if val > 0 else None
-        except ValueError:
-            return None
+        # "25 000", "1:25000", "1.000.000"... (ver parsear_escala); un
+        # texto ilegible da automática (validar_escalas avisa antes)
+        return parsear_escala(self._escala_manual.get())[0]
+
+    def validar_escalas(self) -> list:
+        """Avisos de escalas ilegibles (lista vacía si todo es correcto)."""
+        avisos = []
+        if not parsear_escala(self._escala_manual.get())[1]:
+            avisos.append(
+                f"Escala del mapa '{self._escala_manual.get()}' no válida "
+                "(usa p. ej. 25000, 25.000 o 1:25000; 0 = automática).")
+        if not parsear_escala(self._escala_localizacion.get())[1]:
+            avisos.append(
+                f"Escala de localización '{self._escala_localizacion.get()}'"
+                " no válida (se usaría 1:250.000).")
+        return avisos
 
     def _elegir_color(self):
         color = colorchooser.askcolor(
@@ -422,6 +454,8 @@ class PanelConfig:
         if color:
             self._color_infra = color
             self._lbl_color.configure(bg=color)
+            if callable(self.callback_color):
+                self.callback_color(color)
 
     def _on_preset_nombre(self, event=None):
         label = self._preset_nombre.get()
@@ -432,14 +466,22 @@ class PanelConfig:
 
     def _actualizar_preview_nombre(self, *args):
         patron = self.patron_nombre.get()
+        ej = getattr(self, "_ejemplo_nombre", None) or "CortafuegosNorte"
         try:
             ejemplo = patron.format(
-                num="0001", nombre="CortafuegosNorte", campo="Municipio")
+                num="0001", nombre=ej, campo="Municipio")
             self._lbl_preview_nombre.configure(
                 text=f"Ej: {ejemplo}.pdf")
         except (KeyError, IndexError, ValueError):
             self._lbl_preview_nombre.configure(
                 text="Ej: (patron invalido)")
+
+    def actualizar_ejemplo_nombre(self, nombre: str):
+        """Usa un nombre real de la capa cargada en el ejemplo de archivo."""
+        limpio = "".join(c for c in str(nombre or "")
+                         if c.isalnum() or c in "_-")[:40]
+        self._ejemplo_nombre = limpio or None
+        self._actualizar_preview_nombre()
 
     def _elegir_carpeta(self):
         carpeta = filedialog.askdirectory(title="Carpeta de salida")
@@ -748,12 +790,8 @@ class PanelConfig:
 
     @property
     def escala_localizacion(self) -> int:
-        txt = self._escala_localizacion.get().replace(",", "").strip()
-        try:
-            val = int(txt)
-            return val if val > 0 else 250_000
-        except ValueError:
-            return 250_000
+        val = parsear_escala(self._escala_localizacion.get())[0]
+        return val if val else 250_000
 
     # ── Capas WMS superpuestas ──
 

@@ -11,6 +11,7 @@ from tkinter import ttk
 from .estilos import (
     COLOR_FONDO_APP, COLOR_PANEL, COLOR_TEXTO, COLOR_TEXTO_GRIS,
     COLOR_BORDE, COLOR_ACENTO, COLOR_ACENTO2, COLOR_ENTRY, COLOR_HEADER,
+    COLOR_LOG_FONDO, COLOR_LOG_TEXTO, COLOR_TITULO_SECCION,
     FONT_BOLD, FONT_SMALL, FONT_SECCION, FONT_MONO, FONT_SUBTITULO,
 )
 
@@ -53,8 +54,10 @@ CAPA DE INTERFAZ (GUI)
 ----------------------
   tkinter             Framework nativo Python para GUI de escritorio
   ttk                 Widgets tematizados (Combobox, Treeview, Notebook...)
-  Tema visual         Oscuro (Blue-Night #0F1923 + Esmeralda #10B981)
-  Layout              Sidebar scroll + Panel derecho (tabla + log)
+  Tema visual         Claro tipo QGIS (#f0f0f0 + azul #2f7fd6) u oscuro
+                      (ajuste "tema"; se aplica al reiniciar)
+  Layout              Barra de herramientas + panel lateral con pestañas
+                      + lienzo de mapa + tabla de atributos / registro
   Scroll              Canvas con mousewheel (Linux/Windows)
 
 CAPA GEOESPACIAL (GIS)
@@ -408,7 +411,7 @@ class PanelInfo:
 
         tk.Label(
             header, text="v2.0.0",
-            font=("Segoe UI", 10, "bold"), bg=COLOR_HEADER, fg=COLOR_ACENTO,
+            font=("Segoe UI", 10, "bold"), bg=COLOR_HEADER, fg=COLOR_TITULO_SECCION,
         ).pack(side="right", padx=16)
 
         # ── Notebook (pestanas) ──
@@ -460,8 +463,8 @@ class PanelInfo:
         text_widget = tk.Text(
             frame,
             font=FONT_MONO,
-            bg=COLOR_ENTRY,
-            fg="#6EE7B7",
+            bg=COLOR_LOG_FONDO,
+            fg=COLOR_LOG_TEXTO,
             relief="flat",
             state="normal",
             padx=16,
@@ -488,7 +491,7 @@ class PanelInfo:
 
         # Tags de formato
         text_widget.tag_config("titulo",
-                                foreground=COLOR_ACENTO,
+                                foreground=COLOR_TITULO_SECCION,
                                 font=("Consolas", 11, "bold"))
         text_widget.tag_config("subtitulo",
                                 foreground=COLOR_ACENTO2,

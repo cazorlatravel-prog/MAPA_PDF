@@ -21,6 +21,8 @@ class PanelFiltros:
         self.callback_filtro = callback_filtro
         self._parent = parent
         self._debounce_id = None
+        # Gancho opcional (ventana principal): True mientras se generan planos
+        self.generacion_en_curso = lambda: False
 
         f = crear_frame_seccion(parent, "\U0001f50d  FILTROS")
 
@@ -116,8 +118,20 @@ class PanelFiltros:
             self._parent.after_cancel(self._debounce_id)
         self._debounce_id = self._parent.after(300, self._aplicar_filtros)
 
+    def _en_generacion(self) -> bool:
+        try:
+            if self.generacion_en_curso():
+                self._lbl_resultado.configure(
+                    text="Filtros en pausa: hay una generación en curso")
+                return True
+        except Exception:
+            pass
+        return False
+
     def _aplicar_filtros(self):
         self._debounce_id = None
+        if self._en_generacion():
+            return
         gdf = self.motor.gdf_infra
         if gdf is None:
             self._lbl_resultado.configure(text="")
@@ -180,7 +194,17 @@ class PanelFiltros:
         self.callback_filtro(indices)
 
     def _limpiar_filtros(self):
-        self._busqueda.set("")
+        if self._en_generacion():
+            return
+        # set("") dispararía otro filtrado diferido (300 ms) si ya está vacío
+        if self._busqueda.get():
+            self._busqueda.set("")
+        if self._debounce_id is not None:
+            try:
+                self._parent.after_cancel(self._debounce_id)
+            except Exception:
+                pass
+            self._debounce_id = None
         self._campo_filtro.set("(todos)")
         self._valor_filtro.set("(todos)")
         self._sup_min.delete(0, "end")

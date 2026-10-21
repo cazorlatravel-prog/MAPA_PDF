@@ -23,6 +23,8 @@ class PanelSimbologia:
         self.callback_log = callback_log
         self._widgets_capas = []
         self._widgets_categorias = []
+        # Gancho opcional (ventana principal): simbología aplicada al motor
+        self.callback_aplicado = None
 
         f = crear_frame_seccion(parent, "\U0001f3a8  SIMBOLOG\u00cdA")
 
@@ -63,19 +65,14 @@ class PanelSimbologia:
         ttk.Scale(f, from_=0.5, to=15.0, variable=self._grosor_infra,
                   orient="horizontal").grid(row=5, column=0, sticky="ew", pady=(2, 6))
 
-        alpha_header = tk.Frame(f, bg=COLOR_PANEL)
-        alpha_header.grid(row=6, column=0, sticky="ew")
-        crear_label(alpha_header, "Transparencia infra:", tipo="normal").pack(
-            side="left")
-        self._lbl_alpha = tk.Label(alpha_header, text="0.35", font=FONT_SMALL,
-                                    bg=COLOR_PANEL, fg=COLOR_ACENTO)
-        self._lbl_alpha.pack(side="right")
-
+        # La opacidad del relleno de infraestructuras tiene UN solo control
+        # (pestaña Capas). La ventana principal enlaza esta variable con
+        # aquel control; se mantiene el atributo por compatibilidad con
+        # proyectos guardados (simbologia_ui["alpha_infra"]).
         self._alpha_infra = tk.DoubleVar(value=0.35)
-        self._alpha_infra.trace_add("write", lambda *_: self._lbl_alpha.configure(
-            text=f"{self._alpha_infra.get():.2f}"))
-        ttk.Scale(f, from_=0.1, to=1.0, variable=self._alpha_infra,
-                  orient="horizontal").grid(row=7, column=0, sticky="ew", pady=(2, 6))
+        crear_label(f, "Opacidad del relleno: pestaña Capas.",
+                    tipo="secundario").grid(row=6, column=0, sticky="w",
+                                            pady=(0, 6))
 
         crear_label(f, "Trazo l\u00ednea infra:", tipo="normal").grid(
             row=8, column=0, sticky="w")
@@ -361,6 +358,8 @@ class PanelSimbologia:
         self.motor.config_infra = self.obtener_config_infra()
 
         self.callback_log("Simbolog\u00eda actualizada.", "info")
+        if callable(self.callback_aplicado):
+            self.callback_aplicado()
 
     def obtener_config_infra(self) -> dict:
         campo_cat = self._campo_categoria.get()

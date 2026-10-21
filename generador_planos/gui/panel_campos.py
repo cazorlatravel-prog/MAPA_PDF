@@ -9,7 +9,7 @@ import tkinter as tk
 
 from .estilos import (
     COLOR_PANEL, COLOR_TEXTO, COLOR_TEXTO_GRIS, COLOR_BORDE, COLOR_ACENTO,
-    COLOR_ENTRY, COLOR_HOVER,
+    COLOR_ENTRY, COLOR_HOVER, COLOR_BOTON,
     FONT_SMALL, FONT_BOLD,
     crear_frame_seccion, crear_label,
 )
@@ -37,7 +37,7 @@ class PanelCampos:
         crear_label(enc_f, "Encabezado:", tipo="normal").pack(side="left")
         self._combo_encabezado = tk.StringVar(value="(automatico)")
         self._combo_enc = tk.OptionMenu(enc_f, self._combo_encabezado, "(automatico)")
-        self._combo_enc.configure(font=FONT_SMALL, bg=COLOR_BORDE, fg=COLOR_TEXTO,
+        self._combo_enc.configure(font=FONT_SMALL, bg=COLOR_BOTON, fg=COLOR_TEXTO,
                                    relief="flat", cursor="hand2", highlightthickness=0,
                                    activebackground=COLOR_ACENTO,
                                    activeforeground="#FFFFFF", bd=0)
@@ -47,12 +47,12 @@ class PanelCampos:
         btn_f = tk.Frame(self._parent_frame, bg=COLOR_PANEL)
         btn_f.grid(row=1, column=0, sticky="ew", pady=(0, 6))
         tk.Button(btn_f, text="Todos", command=self._sel_todos,
-                  font=FONT_SMALL, bg=COLOR_BORDE, fg=COLOR_TEXTO,
+                  font=FONT_SMALL, bg=COLOR_BOTON, fg=COLOR_TEXTO,
                   relief="flat", cursor="hand2", padx=8, bd=0,
                   activebackground=COLOR_ACENTO, activeforeground="#FFFFFF",
                   ).pack(side="left", padx=(0, 4))
         tk.Button(btn_f, text="Ninguno", command=self._sel_ninguno,
-                  font=FONT_SMALL, bg=COLOR_BORDE, fg=COLOR_TEXTO,
+                  font=FONT_SMALL, bg=COLOR_BOTON, fg=COLOR_TEXTO,
                   relief="flat", cursor="hand2", padx=8, bd=0,
                   activebackground=COLOR_ACENTO, activeforeground="#FFFFFF",
                   ).pack(side="left")
@@ -100,7 +100,7 @@ class PanelCampos:
                 selectcolor=COLOR_ENTRY, activebackground=COLOR_PANEL,
                 activeforeground=COLOR_ACENTO, cursor="hand2",
                 command=self._actualizar_count, bd=0,
-                highlightthickness=0,
+                highlightthickness=0, anchor="w",
             )
             cb.pack(side="left", fill="x", expand=True)
 

@@ -21,7 +21,7 @@ from .estilos import (
     COLOR_PANEL, COLOR_PANEL_ALT, COLOR_TEXTO, COLOR_TEXTO_GRIS,
     COLOR_BORDE, COLOR_ENTRY,
     COLOR_ACENTO, COLOR_ACENTO2, COLOR_ACENTO3, COLOR_ERROR, COLOR_HEADER,
-    COLOR_HOVER, COLOR_FONDO_APP,
+    COLOR_HOVER, COLOR_FONDO_APP, COLOR_BOTON,
     FONT_BOLD, FONT_SMALL, FONT_SECCION, FONT_BOTON,
     crear_frame_seccion, crear_boton, crear_entry, crear_label,
     crear_tooltip,
@@ -42,6 +42,18 @@ class PanelCapas:
         self.callback_log = callback_log
         self.callback_tabla = callback_tabla
         self.callback_montes_cargados = callback_montes_cargados
+        # Ganchos opcionales que asigna la ventana principal:
+        # - callback_ocupado(bool): carga en segundo plano empieza/termina
+        # - callback_capas_extra(): la lista de capas extra ha cambiado
+        self.callback_ocupado = None
+        self.callback_capas_extra = None
+        # - generacion_en_curso(): True mientras se generan planos (bloquea
+        #   cargas: el hilo de generación lee motor.gdf_infra en vivo)
+        # - callback_infra_omitida(): la carga de infra de un proyecto no
+        #   se hizo (ruta rechazada o error)
+        self.generacion_en_curso = lambda: False
+        self.callback_infra_omitida = None
+        self.botones_carga = []
 
         f = crear_frame_seccion(parent, "\U0001f4c2  CAPAS")
 
@@ -68,6 +80,7 @@ class PanelCapas:
         _btn_infra_gdb = crear_boton(btn_infra_f, "Cargar GDB", self._cargar_infra_gdb,
                     icono="\U0001f4c1")
         _btn_infra_gdb.grid(row=0, column=1, sticky="ew", padx=(3, 0))
+        self.botones_carga += [_btn_infra_shp, _btn_infra_gdb]
         crear_tooltip(
             _btn_infra_shp,
             "Carga el shapefile (.shp) de infraestructuras.\n"
@@ -80,7 +93,7 @@ class PanelCapas:
         # Menú de shapefiles recientes (fila propia dentro del frame de botones)
         self._mb_recientes = tk.Menubutton(
             btn_infra_f, text="Recientes ▾", font=FONT_SMALL,
-            bg=COLOR_BORDE, fg=COLOR_TEXTO, activebackground=COLOR_ACENTO,
+            bg=COLOR_BOTON, fg=COLOR_TEXTO, activebackground=COLOR_ACENTO,
             activeforeground="#FFFFFF", relief="flat", cursor="hand2",
             bd=0, highlightthickness=0, padx=8, pady=3,
         )
@@ -117,6 +130,7 @@ class PanelCapas:
         _btn_montes_gdb = crear_boton(btn_montes_f, "Cargar GDB", self._cargar_montes_gdb,
                     icono="\U0001f4c1")
         _btn_montes_gdb.grid(row=0, column=1, sticky="ew", padx=(3, 0))
+        self.botones_carga += [_btn_montes_shp, _btn_montes_gdb]
         crear_tooltip(
             _btn_montes_shp,
             "Carga el shapefile (.shp) de montes (capa opcional de fondo).")
@@ -127,7 +141,7 @@ class PanelCapas:
         # ── Transparencia infraestructuras ──
         transp_infra_header = tk.Frame(f, bg=COLOR_PANEL)
         transp_infra_header.grid(row=6, column=0, sticky="ew", pady=(8, 0))
-        crear_label(transp_infra_header, "Transparencia infraestructuras:",
+        crear_label(transp_infra_header, "Opacidad relleno infraestructuras:",
                     tipo="secundario").pack(side="left")
         self._lbl_transp_infra = tk.Label(transp_infra_header, text="0.35",
                                            font=FONT_SMALL, bg=COLOR_PANEL,
@@ -142,13 +156,14 @@ class PanelCapas:
         _sc_transp_infra.grid(row=7, column=0, sticky="ew", pady=(2, 4))
         crear_tooltip(
             _sc_transp_infra,
-            "Transparencia del relleno de las infraestructuras.\n"
-            "0 = opaco · 1 = totalmente transparente.")
+            "Opacidad del relleno de las infraestructuras\n"
+            "(polígonos) en el plano y en el mapa.\n"
+            "0 = transparente · 1 = opaco.")
 
         # ── Transparencia montes ──
         transp_header = tk.Frame(f, bg=COLOR_PANEL)
         transp_header.grid(row=8, column=0, sticky="ew", pady=(4, 0))
-        crear_label(transp_header, "Transparencia capa montes:",
+        crear_label(transp_header, "Opacidad capa montes:",
                     tipo="secundario").pack(side="left")
         self._lbl_transp = tk.Label(transp_header, text="0.30", font=FONT_SMALL,
                                      bg=COLOR_PANEL, fg=COLOR_ACENTO)
@@ -162,8 +177,8 @@ class PanelCapas:
         _sc_transp_montes.grid(row=9, column=0, sticky="ew", pady=(2, 4))
         crear_tooltip(
             _sc_transp_montes,
-            "Transparencia de la capa de montes.\n"
-            "0 = opaco · 1 = totalmente transparente.")
+            "Opacidad de la capa de montes en el plano.\n"
+            "0 = transparente · 1 = opaco.")
 
         # ── Capas extra ──
         crear_label(f, "Capas adicionales:", tipo="titulo").grid(
@@ -177,15 +192,14 @@ class PanelCapas:
         btn_capas_f.columnconfigure(0, weight=1)
         btn_capas_f.columnconfigure(1, weight=1)
         btn_capas_f.columnconfigure(2, weight=1)
-        crear_boton(btn_capas_f, "+ SHP",
-                    self._añadir_capa_extra).grid(
-            row=0, column=0, sticky="ew", padx=(0, 2))
-        crear_boton(btn_capas_f, "+ GDB",
-                    self._añadir_capa_extra_gdb).grid(
-            row=0, column=1, sticky="ew", padx=2)
-        crear_boton(btn_capas_f, "Eliminar",
-                    self._eliminar_capa_extra).grid(
-            row=0, column=2, sticky="ew", padx=(2, 0))
+        for col, (txt, cmd) in enumerate((
+                ("+ SHP", self._añadir_capa_extra),
+                ("+ GDB", self._añadir_capa_extra_gdb),
+                ("Eliminar", self._eliminar_capa_extra))):
+            b = crear_boton(btn_capas_f, txt, cmd)
+            b.grid(row=0, column=col, sticky="ew",
+                   padx=(0 if col == 0 else 2, 0 if col == 2 else 2))
+            self.botones_carga.append(b)
 
         self._lista_capas = tk.Listbox(
             self._frame_capas_extra, height=3, font=FONT_SMALL,
@@ -234,6 +248,7 @@ class PanelCapas:
             if not nueva:
                 self.callback_log(
                     f"Capa de infraestructuras omitida (no encontrada).", "warn")
+                self._infra_omitida()
                 return
             ruta = nueva
 
@@ -257,12 +272,19 @@ class PanelCapas:
                     self.motor.establecer_mapeo_campos(mapeo)
                     self.callback_log(
                         f"Mapeo de campos restaurado: {mapeo}", "info")
+                else:
+                    self._automapear_truncados(faltantes)
                 self.callback_tabla()
                 self._previsualizar(self.motor.gdf_infra)
             else:
                 self.callback_log(msg, "error")
+                self._infra_omitida()
 
-        self._ejecutar_en_hilo(tarea, on_ok,
+        def on_error(msg):
+            self.callback_log(f"Error: {msg}", "error")
+            self._infra_omitida()
+
+        self._ejecutar_en_hilo(tarea, on_ok, callback_error=on_error,
                                 msg_carga="Cargando infraestructuras del proyecto...")
 
     def cargar_montes_desde_proyecto(self, ruta: str, layer: str = None):
@@ -317,18 +339,35 @@ class PanelCapas:
                         f"Capa extra '{nombre}' omitida (no encontrada).", "warn")
 
         capas_validas = [d for d in capas_data if not d.get("_omitir")]
-        errores = self.motor.gestor_capas.cargar_desde_dict(capas_validas)
-        self._actualizar_lista_capas()
-        n = len(self.motor.gestor_capas.capas)
-        self.callback_log(
-            f"Capas extra restauradas: {n} cargadas.", "ok")
-        for err in errores:
-            self.callback_log(err, "warn")
+        if not capas_validas:
+            self._actualizar_lista_capas()
+            return
+
+        def tarea():
+            # Leer en un gestor temporal y añadir después en el hilo
+            # principal: el mapa/lista nunca ven la lista a medio llenar
+            from ..motor.capas_extra import GestorCapasExtra
+            tmp = GestorCapasExtra()
+            errores = tmp.cargar_desde_dict(capas_validas)
+            return ("ok", tmp.capas, errores)
+
+        def on_ok(resultado):
+            _, capas, errores = resultado
+            self.motor.gestor_capas.capas.extend(capas)
+            self._actualizar_lista_capas()
+            self.callback_log(
+                f"Capas extra restauradas: {len(capas)} cargadas.", "ok")
+            for err in errores:
+                self.callback_log(err, "warn")
+
+        self._ejecutar_en_hilo(tarea, on_ok,
+                                msg_carga="Cargando capas extra del proyecto...")
 
     def _ejecutar_en_hilo(self, tarea, callback_ok, callback_error=None,
                            msg_carga="Cargando..."):
         """Ejecuta una tarea pesada en un hilo secundario con feedback visual."""
         self.callback_log(f"\u23f3 {msg_carga}", "info")
+        self._notificar_ocupado(True)
 
         def _worker():
             try:
@@ -342,6 +381,7 @@ class PanelCapas:
                 pass
 
         def _on_done(resultado):
+            self._notificar_ocupado(False)
             if isinstance(resultado, tuple) and len(resultado) > 0 and resultado[0] == "error":
                 if callback_error:
                     callback_error(resultado[1])
@@ -351,6 +391,84 @@ class PanelCapas:
                 callback_ok(resultado)
 
         threading.Thread(target=_worker, daemon=True).start()
+
+    def _bloqueado(self) -> bool:
+        """True (y aviso) si hay una generación en curso."""
+        try:
+            en_curso = bool(self.generacion_en_curso())
+        except Exception:
+            en_curso = False
+        if en_curso:
+            messagebox.showinfo(
+                "Generación en curso",
+                "No se pueden cargar ni quitar capas mientras se generan "
+                "planos.\nEspera a que termine o pulsa PARAR.")
+        return en_curso
+
+    def _raiz(self):
+        return self._preview_frame.winfo_toplevel()
+
+    def _dialogo(self, titulo, geometria):
+        """Toplevel modal hijo de la ventana principal (no se esconde
+        detrás de ella en Windows)."""
+        raiz = self._raiz()
+        dialog = tk.Toplevel(raiz)
+        dialog.title(titulo)
+        dialog.configure(bg=COLOR_PANEL)
+        dialog.geometry(geometria)
+        dialog.transient(raiz)
+        try:
+            dialog.grab_set()
+        except tk.TclError:
+            pass
+        return dialog
+
+    def _automapear_truncados(self, faltantes):
+        """Mapea en silencio los campos esperados truncados a 10 caracteres
+        (límite de nombre de campo del .dbf: Nombre_Infra → Nombre_Inf).
+
+        Devuelve la lista de campos que siguen sin mapear.
+        """
+        if not faltantes or self.motor.gdf_infra is None:
+            return faltantes
+        cols = [c for c in self.motor.gdf_infra.columns if c != "geometry"]
+        cols_low = {c.lower(): c for c in cols}
+        mapeo = dict(getattr(self.motor, "_campo_mapeo", None) or {})
+        restantes = []
+        for campo in faltantes:
+            corto = campo[:10].lower()
+            real = cols_low.get(corto)
+            if real is None:
+                cands = [c for c in cols if len(c) >= 8
+                         and campo.lower().startswith(c.lower())]
+                real = cands[0] if len(cands) == 1 else None
+            if real is not None and real not in mapeo.values():
+                mapeo[campo] = real
+            else:
+                restantes.append(campo)
+        if len(restantes) < len(faltantes):
+            self.motor.establecer_mapeo_campos(mapeo)
+            auto = {k: v for k, v in mapeo.items() if k in faltantes}
+            self.callback_log(
+                "Campos truncados mapeados automáticamente: "
+                + ", ".join(f"{k}→{v}" for k, v in auto.items()), "info")
+        return restantes
+
+    def _infra_omitida(self):
+        cb = self.callback_infra_omitida
+        if callable(cb):
+            try:
+                cb()
+            except Exception:
+                pass
+
+    def _notificar_ocupado(self, ocupado: bool):
+        cb = self.callback_ocupado
+        if callable(cb):
+            try:
+                cb(ocupado)
+            except Exception:
+                pass
 
     # ── Shapefiles recientes ────────────────────────────────────────────
 
@@ -375,6 +493,8 @@ class PanelCapas:
 
     def _cargar_infra_reciente(self, ruta: str):
         """Carga un shapefile reciente por la misma ruta que 'Cargar SHP'."""
+        if self._bloqueado():
+            return
         if not os.path.exists(ruta):
             messagebox.showwarning(
                 "Archivo no encontrado",
@@ -393,6 +513,8 @@ class PanelCapas:
             self._menu_recientes_actualizar()
 
     def _cargar_infra(self):
+        if self._bloqueado():
+            return
         ruta = filedialog.askopenfilename(
             title="Seleccionar Shapefile de Infraestructuras",
             filetypes=[("Shapefile", "*.shp"), ("Todos", "*.*")],
@@ -403,6 +525,8 @@ class PanelCapas:
 
     def _cargar_infra_ruta(self, ruta: str):
         """Carga el shapefile de infraestructuras `ruta` en segundo plano."""
+        if self._bloqueado():
+            return
 
         def tarea():
             return self.motor.cargar_infraestructuras(ruta)
@@ -415,6 +539,7 @@ class PanelCapas:
                 self._layer_infra = None
                 self._registrar_reciente_infra(ruta)
                 self.callback_log(msg, "ok")
+                faltantes = self._automapear_truncados(faltantes)
                 self.callback_tabla()
                 self._previsualizar(self.motor.gdf_infra)
                 if faltantes:
@@ -428,6 +553,8 @@ class PanelCapas:
                                 msg_carga="Cargando infraestructuras...")
 
     def _cargar_montes(self):
+        if self._bloqueado():
+            return
         ruta = filedialog.askopenfilename(
             title="Seleccionar Shapefile de Montes",
             filetypes=[("Shapefile", "*.shp"), ("Todos", "*.*")],
@@ -522,12 +649,7 @@ class PanelCapas:
 
         # Dialogo de seleccion de capa
         seleccion = [None]
-        dialog = tk.Toplevel()
-        dialog.title("Seleccionar capa de la GDB")
-        dialog.configure(bg=COLOR_PANEL)
-        dialog.geometry("420x380")
-        dialog.transient()
-        dialog.grab_set()
+        dialog = self._dialogo("Seleccionar capa de la GDB", "420x380")
 
         tk.Label(dialog, text=f"GDB: {os.path.basename(ruta_gdb)}",
                  font=FONT_BOLD, bg=COLOR_PANEL, fg=COLOR_ACENTO).pack(
@@ -569,6 +691,8 @@ class PanelCapas:
         return ruta_gdb, seleccion[0]
 
     def _cargar_infra_gdb(self):
+        if self._bloqueado():
+            return
         ruta, capa = self._seleccionar_gdb(
             "Seleccionar GDB de Infraestructuras")
         if not ruta:
@@ -584,6 +708,7 @@ class PanelCapas:
                 self._ruta_infra_completa = ruta
                 self._layer_infra = capa
                 self.callback_log(msg, "ok")
+                faltantes = self._automapear_truncados(faltantes)
                 self.callback_tabla()
                 self._previsualizar(self.motor.gdf_infra)
                 if faltantes:
@@ -597,6 +722,8 @@ class PanelCapas:
                                 msg_carga=f"Cargando GDB ({capa})...")
 
     def _cargar_montes_gdb(self):
+        if self._bloqueado():
+            return
         ruta, capa = self._seleccionar_gdb(
             "Seleccionar GDB de Montes")
         if not ruta:
@@ -622,17 +749,14 @@ class PanelCapas:
                                 msg_carga=f"Cargando GDB montes ({capa})...")
 
     def _añadir_capa_extra_gdb(self):
+        if self._bloqueado():
+            return
         ruta, capa = self._seleccionar_gdb(
             "Seleccionar GDB para capa adicional")
         if not ruta:
             return
 
-        dialog = tk.Toplevel()
-        dialog.title("Configurar capa GDB")
-        dialog.configure(bg=COLOR_PANEL)
-        dialog.geometry("380x220")
-        dialog.transient()
-        dialog.grab_set()
+        dialog = self._dialogo("Configurar capa GDB", "380x220")
 
         crear_label(dialog, "Nombre de la capa:", tipo="titulo").pack(
             padx=12, pady=(12, 4), anchor="w")
@@ -649,20 +773,15 @@ class PanelCapas:
         def _aceptar():
             nombre = nombre_var.get().strip() or capa
             tipo = tipo_var.get()
-            ok, msg, capa_obj = self.motor.gestor_capas.cargar_capa(
-                ruta, nombre, tipo, layer=capa)
-            if ok:
-                self.callback_log(msg, "ok")
-                self._actualizar_lista_capas()
-            else:
-                self.callback_log(msg, "error")
-                messagebox.showerror("Error", msg)
             dialog.destroy()
+            self._cargar_capa_extra_en_hilo(ruta, nombre, tipo, layer=capa)
 
         crear_boton(dialog, "Añadir capa", _aceptar,
                     estilo="primario").pack(padx=12, pady=12, fill="x")
 
     def _añadir_capa_extra(self):
+        if self._bloqueado():
+            return
         ruta = filedialog.askopenfilename(
             title="Seleccionar Shapefile de capa adicional",
             filetypes=[("Shapefile", "*.shp"), ("Todos", "*.*")],
@@ -670,12 +789,7 @@ class PanelCapas:
         if not ruta:
             return
 
-        dialog = tk.Toplevel()
-        dialog.title("Configurar capa")
-        dialog.configure(bg=COLOR_PANEL)
-        dialog.geometry("380x220")
-        dialog.transient()
-        dialog.grab_set()
+        dialog = self._dialogo("Configurar capa", "380x220")
 
         crear_label(dialog, "Nombre de la capa:", tipo="titulo").pack(
             padx=12, pady=(12, 4), anchor="w")
@@ -693,20 +807,36 @@ class PanelCapas:
         def _aceptar():
             nombre = nombre_var.get().strip() or "Capa"
             tipo = tipo_var.get()
-            ok, msg, capa = self.motor.gestor_capas.cargar_capa(
-                ruta, nombre, tipo)
+            dialog.destroy()
+            self._cargar_capa_extra_en_hilo(ruta, nombre, tipo)
+
+        crear_boton(dialog, "Añadir capa", _aceptar,
+                    estilo="primario").pack(padx=12, pady=12, fill="x")
+
+    def _cargar_capa_extra_en_hilo(self, ruta, nombre, tipo, layer=None):
+        """Lee una capa extra en segundo plano y la añade al terminar."""
+        def tarea():
+            from ..motor.capas_extra import GestorCapasExtra
+            tmp = GestorCapasExtra()
+            ok, msg, capa = tmp.cargar_capa(ruta, nombre, tipo, layer=layer)
+            return ("ok", ok, msg, capa)
+
+        def on_ok(resultado):
+            _, ok, msg, capa = resultado
             if ok:
+                self.motor.gestor_capas.capas.append(capa)
                 self.callback_log(msg, "ok")
                 self._actualizar_lista_capas()
             else:
                 self.callback_log(msg, "error")
                 messagebox.showerror("Error", msg)
-            dialog.destroy()
 
-        crear_boton(dialog, "Añadir capa", _aceptar,
-                    estilo="primario").pack(padx=12, pady=12, fill="x")
+        self._ejecutar_en_hilo(tarea, on_ok,
+                                msg_carga=f"Cargando capa '{nombre}'...")
 
     def _eliminar_capa_extra(self):
+        if self._bloqueado():
+            return
         sel = self._lista_capas.curselection()
         if not sel:
             return
@@ -724,6 +854,12 @@ class PanelCapas:
             vis = "\u2713" if capa.visible else "\u2717"
             self._lista_capas.insert("end",
                                       f"{capa.nombre} ({capa.tipo}) [{vis}]")
+        cb = self.callback_capas_extra
+        if callable(cb):
+            try:
+                cb()
+            except Exception as e:
+                self.callback_log(f"Mapa: {e}", "warn")
 
     def _previsualizar(self, gdf):
         if self._canvas_widget is not None:
@@ -761,12 +897,7 @@ class PanelCapas:
         if not cols_disponibles:
             return
 
-        dialog = tk.Toplevel()
-        dialog.title("Mapeo de campos")
-        dialog.configure(bg=COLOR_PANEL)
-        dialog.geometry("480x520")
-        dialog.transient()
-        dialog.grab_set()
+        dialog = self._dialogo("Mapeo de campos", "480x520")
 
         tk.Label(
             dialog,
@@ -795,7 +926,8 @@ class PanelCapas:
         frame.columnconfigure(1, weight=1)
 
         def aplicar():
-            mapeo = {}
+            # Conservar lo ya mapeado (p. ej. campos truncados automáticos)
+            mapeo = dict(getattr(self.motor, "_campo_mapeo", None) or {})
             for campo, var in combos.items():
                 val = var.get()
                 if val != "(ninguno)":

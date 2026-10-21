@@ -270,6 +270,8 @@ HIDDEN_IMPORTS = [
     "generador_planos.gui.panel_cajetin",
     "generador_planos.gui.panel_generacion",
     "generador_planos.gui.panel_info",
+    "generador_planos.gui.panel_mapa",
+    "generador_planos.gui.ajustes",
     "adjustText",
 ]
 
