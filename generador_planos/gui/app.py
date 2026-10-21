@@ -27,6 +27,9 @@ from .panel_info import PanelInfo
 from . import recientes
 from ..motor.generador import GeneradorPlanos
 from ..motor.proyecto import Proyecto
+from ..motor.escala import FORMATOS
+from ..motor.maquetacion import CALIDADES_PDF
+from ..motor.plantillas_layout import PLANTILLAS_DISPONIBLES
 
 
 class App(tk.Tk):
@@ -47,6 +50,87 @@ class App(tk.Tk):
         aplicar_estilos(self)
         self._construir_ui()
         self._configurar_atajos()
+        self._cargar_ajustes()
+        self.protocol("WM_DELETE_WINDOW", self._al_cerrar)
+
+    # ── Ajustes persistentes entre sesiones ──────────────────────────────
+
+    def _recoger_ajustes(self) -> dict:
+        """Opciones de la interfaz que merece la pena recordar."""
+        try:
+            return {
+                "proveedor": self.panel_config.proveedor.get(),
+                "formato": self.panel_config.formato.get(),
+                "calidad_pdf": self.panel_config._calidad_pdf.get(),
+                "prov_localizacion": self.panel_config._prov_localizacion.get(),
+                "layout_key": self.panel_cajetin.obtener_layout_key(),
+                "salida": self.panel_config.salida.get(),
+                "patron_nombre": self.panel_config.patron_nombre.get(),
+                "opciones_salida": self.panel_generacion.obtener_opciones_salida(),
+                "geometria": self.geometry(),
+            }
+        except Exception:
+            return {}
+
+    def _cargar_ajustes(self):
+        """Restaura las últimas opciones usadas (si existen y son válidas)."""
+        from . import ajustes
+        datos = ajustes.cargar_ajustes()
+        if not datos:
+            return
+
+        def _set_combo(combo, var, valor):
+            # Solo aceptar valores que sigan existiendo en el desplegable
+            try:
+                if valor and valor in list(combo["values"]):
+                    var.set(valor)
+                    return True
+            except Exception:
+                pass
+            return False
+
+        pc = self.panel_config
+        try:
+            if _set_combo(pc._cb_prov, pc.proveedor, datos.get("proveedor")):
+                pc._on_proveedor_changed()
+            if _set_combo(pc._cb_prov_loc, pc._prov_localizacion,
+                          datos.get("prov_localizacion")):
+                pc._on_prov_loc_changed()
+            if datos.get("formato") in FORMATOS:
+                pc.formato.set(datos["formato"])
+            if datos.get("calidad_pdf") in CALIDADES_PDF:
+                pc._calidad_pdf.set(datos["calidad_pdf"])
+            if datos.get("salida") and os.path.isdir(datos["salida"]):
+                pc.salida.set(datos["salida"])
+            if datos.get("patron_nombre"):
+                pc.patron_nombre.set(datos["patron_nombre"])
+            lk = datos.get("layout_key")
+            if lk in PLANTILLAS_DISPONIBLES:
+                self.panel_cajetin._layout_key.set(lk)
+                self.motor.layout_key = lk
+            self.panel_generacion.cargar_opciones_salida(
+                datos.get("opciones_salida") or {})
+            geo = datos.get("geometria")
+            if isinstance(geo, str) and "x" in geo:
+                try:
+                    self.geometry(geo)
+                except Exception:
+                    pass
+        except Exception as e:
+            self._escribir_log(f"No se pudieron restaurar los ajustes: {e}", "warn")
+
+    def _guardar_ajustes(self):
+        from . import ajustes
+        datos = self._recoger_ajustes()
+        if datos:
+            ajustes.guardar_ajustes(datos)
+
+    def _al_cerrar(self):
+        """Guarda los ajustes y cierra la ventana."""
+        try:
+            self._guardar_ajustes()
+        finally:
+            self.destroy()
 
     # ── Icono de ventana ─────────────────────────────────────────────────
 
@@ -528,6 +612,9 @@ class App(tk.Tk):
         self.motor.wfs_custom_localizacion = self.panel_config.wfs_custom_localizacion
         self.motor.escala_localizacion = self.panel_config.escala_localizacion
         self.motor.prov_localizacion = self.panel_config._prov_localizacion.get()
+        # Capas WMS superpuestas y opciones de salida (formato / marca de agua)
+        self.motor.overlays_wms = self.panel_config.obtener_overlays()
+        self.panel_generacion._aplicar_opciones_salida()
         if self.panel_config.usa_excel and self.panel_config.ruta_excel:
             try:
                 self.motor.cargar_excel_tabla(
@@ -599,6 +686,8 @@ class App(tk.Tk):
             p.plantilla = self.panel_cajetin.obtener_plantilla()
             p.simbologia = self.motor.gestor_simbologia.to_dict()
             p.capas_extra = self.motor.gestor_capas.to_dict()
+            p.overlays_wms = self.panel_config.obtener_overlays()
+            p.opciones_salida = self.panel_generacion.obtener_opciones_salida()
             p.origen_datos_tabla = self.panel_config._origen_datos.get()
             p.ruta_excel_tabla = self.panel_config.ruta_excel
             p.hoja_excel_tabla = self.panel_config.hoja_excel
@@ -827,6 +916,12 @@ class App(tk.Tk):
 
             if p.capas_extra:
                 self.panel_capas.cargar_capas_extra_desde_proyecto(p.capas_extra)
+
+            # ── Capas WMS superpuestas (también las empuja al motor) ──
+            self.panel_config.cargar_overlays(getattr(p, "overlays_wms", []) or [])
+            self.motor.overlays_wms = self.panel_config.obtener_overlays()
+            self.panel_generacion.cargar_opciones_salida(
+                getattr(p, "opciones_salida", {}) or {})
 
             recientes.agregar_reciente(recientes.TIPO_PROYECTO, ruta)
             self._actualizar_menu_recientes_proyecto()

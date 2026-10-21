@@ -345,6 +345,38 @@ MANUAL DE USUARIO
 
   * El CRS se muestra en la barra superior como badge:
     "ETRS89 - UTM H30N" (EPSG:25830)
+
+11. FUNCIONES AVANZADAS
+------------------------
+  * Capas WMS superpuestas (panel CONFIGURACION):
+    dibuja capas semitransparentes sobre el fondo del mapa principal.
+    Predefinidas: Catastro (parcelas), Limites municipales (IGN) y
+    Montes Publicos de Andalucia (REDIAM). Tambien cualquier WMS propio
+    (URL, capa, version y transparencia).
+
+  * Proveedores de fondo: PNOA Ortofoto / Maxima Actualidad, IGN
+    Topografico / Base / MTN25 / MTN50, IGN Relieve (MDT sombreado),
+    Topografico Andalucia (MTA10), Catastro, Google Satelite / Hibrido,
+    OpenStreetMap, raster local (archivo o carpeta de hojas -> mosaico
+    automatico, con reproyeccion de hojas en otro huso) y WMS/WFS propio.
+
+  * Formato de salida (panel GENERACION): PDF, PDF + PNG o PDF + JPG.
+    Marca de agua opcional (p. ej. BORRADOR) en diagonal sobre el mapa.
+
+  * El cajetin muestra las coordenadas del centro del plano en UTM y en
+    latitud/longitud, y la atribucion de la cartografia base.
+
+  * Atajos: Ctrl+G generar, F5 vista previa, Ctrl+S guardar proyecto,
+    Ctrl+O abrir proyecto, Ctrl+L limpiar el registro.
+
+  * Menus "Recientes" para shapefiles y proyectos; boton "Abrir ultimo
+    PDF"; tiempo restante estimado durante la generacion.
+
+  * La aplicacion recuerda entre sesiones el proveedor, formato,
+    calidad, plantilla, carpeta de salida y opciones de salida
+    (archivo ~/.mapa_pdf_cache/ajustes.json).
+
+  * Si algo falla sin mensaje, consulte ~/.mapa_pdf_cache/error.log.
 """
 
 

@@ -52,6 +52,8 @@ class GeneradorPlanos:
         self.layout_key = "Plantilla 1 (Clásica)"
         self.dpi_figura = None   # None = default (400)
         self.dpi_guardado = None  # None = same as dpi_figura
+        self.marca_agua = ""               # p. ej. "BORRADOR" ("" = sin marca)
+        self.formatos_salida = ["pdf"]     # además: "png", "jpg"
         self.ruta_raster_general = ""       # Ráster local para fondo de mapa
         self.ruta_raster_localizacion = ""  # Ráster local para mapa de localización
         self.ruta_capa_localizacion = ""   # SHP/GDB propio para mapa de localización
@@ -59,6 +61,10 @@ class GeneradorPlanos:
         self.wfs_custom_general = {}       # {"url":..., "capa":...}
         self.wms_custom_localizacion = {}  # {"url":..., "capa":..., "formato":...}
         self.wfs_custom_localizacion = {}  # {"url":..., "capa":...}
+        # Capas WMS superpuestas al fondo del mapa principal. Lista de
+        # {"nombre", "url", "capa", "alpha" (0-1), "formato", "activo",
+        #  "version" (opcional, "1.3.0" por defecto)}
+        self.overlays_wms = []
         self.escala_localizacion = 250_000  # Escala configurable del mapa localización
         self.prov_localizacion = "WMS IGN (online)"
         self._df_excel = None               # DataFrame con datos de Excel para tabla
@@ -260,6 +266,53 @@ class GeneradorPlanos:
     # ── Helpers internos ─────────────────────────────────────────────────
 
     def _añadir_fondo(self, ax_map, gdf_view, proveedor, xmin, xmax, ymin, ymax):
+        """Añade el fondo del mapa principal y, encima, las capas WMS
+        superpuestas activas (``self.overlays_wms``)."""
+        self._añadir_fondo_base(ax_map, gdf_view, proveedor,
+                                xmin, xmax, ymin, ymax)
+        self._añadir_overlays_wms(ax_map, xmin, xmax, ymin, ymax)
+
+    def _añadir_overlays_wms(self, ax_map, xmin, xmax, ymin, ymax):
+        """Dibuja cada overlay WMS activo; un fallo nunca rompe el plano."""
+        overlays = getattr(self, "overlays_wms", None) or []
+        if not overlays:
+            return
+        import warnings
+        from .cartografia import añadir_overlay_wms, OVERLAYS_PREDEFINIDOS
+        for ov in overlays:
+            if not isinstance(ov, dict) or not ov.get("activo", True):
+                continue
+            url = (ov.get("url") or "").strip()
+            capa = (ov.get("capa") or "").strip()
+            if not url or not capa:
+                continue
+            version = ov.get("version")
+            if not version:
+                # Overlays guardados sin versión: heredar la del preset
+                # con la misma URL (Catastro solo admite WMS 1.1.1)
+                version = next(
+                    (p.get("version") for p in OVERLAYS_PREDEFINIDOS.values()
+                     if p.get("url", "").rstrip("?") == url.split("?")[0]),
+                    "1.3.0")
+            try:
+                añadir_overlay_wms(
+                    ax_map, url, capa, xmin, xmax, ymin, ymax,
+                    alpha=ov.get("alpha", 0.6),
+                    formato=ov.get("formato") or "image/png",
+                    version=version)
+            except Exception as e:
+                msg = (f"Capa superpuesta '{ov.get('nombre') or capa}' "
+                       f"no disponible: {e}")
+                cb = getattr(self, "callback_log", None)
+                if callable(cb):
+                    try:
+                        cb(f"  ⚠ {msg}")
+                    except Exception:
+                        pass
+                warnings.warn(msg[:300])
+
+    def _añadir_fondo_base(self, ax_map, gdf_view, proveedor,
+                           xmin, xmax, ymin, ymax):
         """Añade fondo cartográfico usando ráster local, WMS/WFS propio o tiles."""
         # WMS propio
         if self.wms_custom_general:
@@ -634,6 +687,8 @@ class GeneradorPlanos:
         maq.dibujar_norte_en_mapa()
         maq.dibujar_cabecera(row, cajetin=self._cajetin, plantilla=self._plantilla)
         maq.dibujar_marcos(plantilla=self._plantilla, cajetin=self._cajetin)
+        if self.marca_agua:
+            maq.dibujar_marca_agua(self.marca_agua)
 
         num_visible = idx_fila + 1
         nombre_infra = str(row.get("Nombre_Infra", f"infra_{num_visible:04d}"))
@@ -652,7 +707,8 @@ class GeneradorPlanos:
         os.makedirs(salida_dir, exist_ok=True)
         ruta_out = os.path.join(salida_dir, nombre_arch)
 
-        maq.guardar(ruta_out, dpi_save=self.dpi_guardado)
+        maq.guardar(ruta_out, dpi_save=self.dpi_guardado,
+                    formatos=self.formatos_salida)
         log(f"  \u2713 Guardado: {nombre_arch}")
         return ruta_out
 
@@ -771,6 +827,8 @@ class GeneradorPlanos:
                               num_plano_override=num_plano,
                               cajetin=self._cajetin, plantilla=self._plantilla)
         maq.dibujar_marcos(plantilla=self._plantilla, cajetin=self._cajetin)
+        if self.marca_agua:
+            maq.dibujar_marca_agua(self.marca_agua)
 
         nombre_safe = "".join(c for c in valor_grupo if c.isalnum() or c in "_ -")[:40]
         if patron_nombre:
@@ -786,7 +844,8 @@ class GeneradorPlanos:
         os.makedirs(salida_dir, exist_ok=True)
         ruta_out = os.path.join(salida_dir, nombre_arch)
 
-        maq.guardar(ruta_out, dpi_save=self.dpi_guardado)
+        maq.guardar(ruta_out, dpi_save=self.dpi_guardado,
+                    formatos=self.formatos_salida)
         log(f"  \u2713 Guardado: {nombre_arch}")
         return ruta_out
 
@@ -889,6 +948,8 @@ class GeneradorPlanos:
         maq.dibujar_cabecera(row, cajetin=self._cajetin,
                               plantilla=self._plantilla)
         maq.dibujar_marcos(plantilla=self._plantilla, cajetin=self._cajetin)
+        if self.marca_agua:
+            maq.dibujar_marca_agua(self.marca_agua)
 
         return fig
 
@@ -1206,6 +1267,8 @@ class GeneradorPlanos:
                     maq.dibujar_cabecera(row, cajetin=self._cajetin,
                                           plantilla=self._plantilla)
                     maq.dibujar_marcos(plantilla=self._plantilla, cajetin=self._cajetin)
+                    if self.marca_agua:
+                        maq.dibujar_marca_agua(self.marca_agua)
 
                     pdf.savefig(fig, dpi=self.dpi_guardado or 300, facecolor="white")
                     paginas_ok += 1

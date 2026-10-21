@@ -2,14 +2,21 @@
 Descarga de teselas WMS/WMTS de fondo cartográfico.
 
 Soporta:
-  - OpenStreetMap (teselas estándar)
-  - PNOA Ortofoto (IGN España) — WMTS
-  - IGN Topográfico (MTN) — WMTS
+  - IGN (WMTS): PNOA Ortofoto, PNOA Máxima Actualidad, IGN Topográfico
+    (MTN), IGN Base y IGN Relieve (MDT sombreado, servicios.idee.es/wmts/mdt
+    capa ``Relieve``)
+  - WMS directos: IGN MTN25/MTN50, Topográfico Andalucía (MTA10) y
+    Catastro (parcelas, DG del Catastro, WMS 1.1.1)
   - Google Satélite / Híbrido (teselas XYZ)
-  - WMS directos: IGN MTN25/MTN50, Topográfico Andalucía (MTA10)
+  - OpenStreetMap (teselas estándar)
+
+Capas WMS superpuestas (overlays semitransparentes sobre el fondo), con
+presets en ``OVERLAYS_PREDEFINIDOS``: Catastro (parcelas), Límites
+municipales (IGN) y Montes Públicos de Andalucía (REDIAM).
 
 Implementa fallback manual para teselas IGN si contextily falla.
 Incluye caché de teselas en disco para evitar descargas repetidas.
+``obtener_atribucion()`` devuelve el texto de atribución de cada proveedor.
 """
 
 import io
@@ -82,6 +89,17 @@ CAPAS_BASE = {
         "&FORMAT=image/jpeg&TILEMATRIXSET=GoogleMapsCompatible"
         "&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}"
     ),
+    # Sombreado del relieve del MDT (IDEE/IGN). El WMS
+    # servicios.idee.es/wms-inspire/mdt (EL.ElevationGridCoverage) solo da
+    # tintas hipsométricas en gris; el sombreado real es la capa WMTS
+    # 'Relieve'. Resolución nativa ~15-20 m: desde z15 ya solo se
+    # amplían píxeles, de ahí el max_zoom 14 en _PROV_META.
+    "IGN Relieve (MDT sombreado)": (
+        "https://servicios.idee.es/wmts/mdt?SERVICE=WMTS&REQUEST=GetTile"
+        "&VERSION=1.0.0&LAYER=Relieve&STYLE=default"
+        "&FORMAT=image/jpeg&TILEMATRIXSET=GoogleMapsCompatible"
+        "&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}"
+    ),
     # (Stamen Terrain eliminado: el servicio stamen-tiles.*.fastly.net
     #  cerró en 2023 y siempre fallaba.)
     "Google Satélite": "https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}",
@@ -118,11 +136,59 @@ CAPAS_WMS = {
         ),
         "attribution": "© Junta de Andalucía – IECA, MTA10",
     },
+    # El WMS de Catastro solo habla 1.1.1 (con 1.3.0 responde HTTP 400) y
+    # rechaza el User-Agent por defecto de curl; con el nuestro responde.
+    "Catastro (parcelas)": {
+        "url": (
+            "https://ovc.catastro.meh.es/Cartografia/WMS/ServidorWMS.aspx?"
+            "SERVICE=WMS&REQUEST=GetMap&VERSION=1.1.1"
+            "&LAYERS=Catastro&STYLES="
+            "&SRS=EPSG:25830&FORMAT=image/png"
+        ),
+        "attribution": "© Dirección General del Catastro",
+    },
+}
+
+# Capas WMS superpuestas predefinidas (se dibujan semitransparentes SOBRE
+# el fondo). Todas verificadas con GetCapabilities + GetMap EPSG:25830.
+# Claves: url (endpoint base, los parámetros GetMap se construyen en
+# añadir_overlay_wms), capa (LAYERS), formato, alpha por defecto, version
+# WMS y atribución.
+OVERLAYS_PREDEFINIDOS = {
+    "Catastro (parcelas)": {
+        "url": "https://ovc.catastro.meh.es/Cartografia/WMS/ServidorWMS.aspx",
+        "capa": "Catastro",
+        "formato": "image/png",
+        "alpha": 0.8,
+        "version": "1.1.1",
+        "attribution": "© Dirección General del Catastro",
+    },
+    "Límites municipales (IGN)": {
+        "url": "https://www.ign.es/wms-inspire/unidades-administrativas",
+        "capa": "AU.AdministrativeBoundary",
+        "formato": "image/png",
+        "alpha": 0.9,
+        "version": "1.3.0",
+        "attribution": "© IGN España – Unidades administrativas",
+    },
+    "Montes Públicos de Andalucía (REDIAM)": {
+        "url": ("https://www.juntadeandalucia.es/medioambiente/mapwms/"
+                "REDIAM_Montes_Publicos_Andalucia"),
+        "capa": "montes",
+        "formato": "image/png",
+        "alpha": 0.7,
+        "version": "1.3.0",
+        "attribution": "© Junta de Andalucía – REDIAM, Montes Públicos",
+    },
 }
 
 # PROVIDERS_CTX se construye siempre para que el desplegable de la GUI
 # muestre todos los proveedores disponibles, con o sin contextily.
 _PROV_META = {
+    "IGN Relieve (MDT sombreado)": {
+        "max_zoom": 14, "attribution": "© IGN España – MDT (IDEE)"},
+    "Catastro (parcelas)": {
+        "max_zoom": 18, "attribution": "© Dirección General del Catastro"},
     "OpenStreetMap": {"max_zoom": 19, "attribution": "© OpenStreetMap"},
     "PNOA Ortofoto (IGN)": {"max_zoom": 20, "attribution": "© IGN España"},
     "IGN Topográfico": {"max_zoom": 18, "attribution": "© IGN España"},
@@ -161,10 +227,46 @@ else:
 for _wms_name, _wms_info in CAPAS_WMS.items():
     PROVIDERS_CTX[_wms_name] = {
         "url": _wms_info["url"],
-        "max_zoom": 18,
+        "max_zoom": _PROV_META.get(_wms_name, {}).get("max_zoom", 18),
         "attribution": _wms_info.get("attribution", ""),
         "wms": True,
     }
+
+# Orden del desplegable de la GUI: IGN, Andalucía, Catastro, Google, OSM.
+# Los proveedores que no figuren aquí se añaden al final en su orden.
+_ORDEN_PROVEEDORES = [
+    "PNOA Ortofoto (IGN)",
+    "PNOA Máxima Actualidad",
+    "IGN Topográfico",
+    "IGN Base",
+    "IGN MTN25 (WMS 1:25.000)",
+    "IGN MTN50 (WMS 1:50.000)",
+    "IGN Relieve (MDT sombreado)",
+    "Topográfico Andalucía (MTA10)",
+    "Catastro (parcelas)",
+    "Google Satélite",
+    "Google Satélite Híbrido",
+    "OpenStreetMap",
+]
+PROVIDERS_CTX = {
+    **{k: PROVIDERS_CTX[k] for k in _ORDEN_PROVEEDORES if k in PROVIDERS_CTX},
+    **{k: v for k, v in PROVIDERS_CTX.items() if k not in _ORDEN_PROVEEDORES},
+}
+
+
+def obtener_atribucion(proveedor_key: str) -> str:
+    """Texto de atribución (copyright) de un proveedor de fondo u overlay.
+
+    Busca en _PROV_META, CAPAS_WMS y OVERLAYS_PREDEFINIDOS. Devuelve ""
+    si la clave es desconocida (WMS propio, ráster local...).
+    """
+    if not proveedor_key:
+        return ""
+    for fuente in (_PROV_META, CAPAS_WMS, OVERLAYS_PREDEFINIDOS):
+        info = fuente.get(proveedor_key)
+        if isinstance(info, dict) and info.get("attribution"):
+            return info["attribution"]
+    return ""
 
 
 # ---------------------------------------------------------------------------
@@ -213,6 +315,103 @@ def _verificar_respuesta_imagen(resp):
         f"imagen. Respuesta: {detalle}")
 
 
+_HEADERS_HTTP = {
+    "User-Agent": "GeneradorPlanosForestales/1.0",
+    "Referer": "https://www.ign.es/",
+}
+
+
+def _get_con_reintentos(url, params=None, headers=None, timeout=60,
+                        intentos=3, espera=1.0):
+    """requests.get con reintentos ante cortes de red y errores 5xx.
+
+    Algunos servidores públicos (Catastro, IDEE) cortan conexiones de forma
+    intermitente ("connection reset", respuesta vacía). Un reintento breve
+    evita que un plano se quede sin fondo por un fallo transitorio.
+    """
+    import time
+    ultimo = None
+    for i in range(max(1, intentos)):
+        try:
+            resp = requests.get(url, params=params,
+                                headers=headers or _HEADERS_HTTP,
+                                timeout=timeout)
+            if resp.status_code >= 500 and i < intentos - 1:
+                ultimo = requests.HTTPError(
+                    f"HTTP {resp.status_code}", response=resp)
+            else:
+                return resp
+        except (requests.ConnectionError, requests.Timeout) as e:
+            ultimo = e
+        if i < intentos - 1:
+            time.sleep(espera * (i + 1))
+    raise ultimo
+
+
+def _imagen_a_array(img):
+    """Convierte una imagen PIL en array RGB/RGBA apto para imshow.
+
+    Las imágenes en paleta ('P', p. ej. Catastro o REDIAM) o escala de
+    grises ('L') se convertirían en un array 2D de índices y matplotlib
+    las pintaría con un colormap (viridis). La transparencia de la paleta
+    se conserva como canal alfa.
+    """
+    if img.mode in ("RGB", "RGBA"):
+        return np.array(img)
+    if img.mode in ("P", "LA", "PA") or "transparency" in img.info:
+        return np.array(img.convert("RGBA"))
+    return np.array(img.convert("RGB"))
+
+
+def _resolucion_tesela(lat, zoom):
+    """Metros por píxel de una tesela WebMercator de 256 px en ``lat``."""
+    return 156543.03392 * math.cos(math.radians(lat)) / (2 ** zoom)
+
+
+def _calcular_zoom_teselas(lon_min, lat_min, lon_max, lat_max,
+                           max_zoom=18, m_por_px=2.0,
+                           max_teselas_lado=24, teselas_comodas=8):
+    """Elige el nivel de zoom de teselas para un extent geográfico.
+
+    Criterios:
+      - La resolución de la tesela debe ser al menos la de impresión
+        (``m_por_px`` metros/píxel, ~2 m/px como los GetMap WMS).
+      - Sin superar ``max_teselas_lado`` teselas en X NI en Y (antes solo
+        se acotaba X y en formatos verticales se descargaban de más).
+      - Si con pocas teselas (``teselas_comodas`` por lado) se consigue
+        todavía más detalle, se usa ese zoom (extents pequeños).
+      - Nunca por encima del ``max_zoom`` del proveedor.
+    """
+    max_zoom = int(max_zoom or 18)
+    lat_c = (lat_min + lat_max) / 2.0
+
+    def _n_teselas(z):
+        tx0, ty0 = _lat_lon_to_tile(lat_max, lon_min, z)
+        tx1, ty1 = _lat_lon_to_tile(lat_min, lon_max, z)
+        return abs(tx1 - tx0) + 1, abs(ty1 - ty0) + 1
+
+    def _max_zoom_con(limite):
+        mejor = 1
+        for z in range(1, max_zoom + 1):
+            nx, ny = _n_teselas(z)
+            if nx <= limite and ny <= limite:
+                mejor = z
+            else:
+                break
+        return mejor
+
+    # Zoom mínimo que alcanza la resolución de impresión
+    z_necesario = max_zoom
+    for z in range(1, max_zoom + 1):
+        if _resolucion_tesela(lat_c, z) <= m_por_px:
+            z_necesario = z
+            break
+
+    z_tope = _max_zoom_con(max_teselas_lado)
+    z_comodo = _max_zoom_con(teselas_comodas)
+    return max(1, min(max_zoom, z_tope, max(z_necesario, z_comodo)))
+
+
 def _lat_lon_to_tile(lat, lon, zoom):
     """Convierte lat/lon a coordenadas de tile XYZ."""
     n = 2 ** zoom
@@ -236,12 +435,8 @@ def _descargar_tesela(url_template, z, x, y, timeout=10):
         except Exception:
             cache_path.unlink(missing_ok=True)
 
-    # Descargar
-    headers = {
-        "User-Agent": "GeneradorPlanosForestales/1.0",
-        "Referer": "https://www.ign.es/",
-    }
-    resp = requests.get(url, headers=headers, timeout=timeout)
+    # Descargar (con reintento ante cortes de conexión transitorios)
+    resp = _get_con_reintentos(url, timeout=timeout, intentos=4, espera=0.5)
     resp.raise_for_status()
     _verificar_respuesta_imagen(resp)
     img = Image.open(io.BytesIO(resp.content))
@@ -256,24 +451,26 @@ def _descargar_tesela(url_template, z, x, y, timeout=10):
     return img
 
 
-def _descargar_teselas_manual(ax, url_template, xmin, xmax, ymin, ymax, crs_epsg=25830):
+def _descargar_teselas_manual(ax, url_template, xmin, xmax, ymin, ymax,
+                              crs_epsg=25830, max_zoom=18, m_por_px=2.0):
     """Descarga teselas manualmente y las dibuja en el eje matplotlib.
 
     Convierte las coordenadas del eje (EPSG:25830) a EPSG:4326 para
-    calcular tiles, descarga y compone la imagen de fondo.
+    calcular tiles, descarga y compone la imagen de fondo. El zoom se
+    elige con _calcular_zoom_teselas (resolución >= ~2 m/px, como mucho
+    24 teselas por lado en X e Y, sin pasar del ``max_zoom`` del proveedor).
     """
     transformer = _get_transformer(f"EPSG:{crs_epsg}", "EPSG:4326")
-    lon_min, lat_min = transformer.transform(xmin, ymin)
-    lon_max, lat_max = transformer.transform(xmax, ymax)
+    # Las 4 esquinas: en UTM el rectángulo no es un rectángulo lon/lat
+    esquinas = [transformer.transform(x, y)
+                for x in (xmin, xmax) for y in (ymin, ymax)]
+    lon_min = min(c[0] for c in esquinas)
+    lon_max = max(c[0] for c in esquinas)
+    lat_min = min(c[1] for c in esquinas)
+    lat_max = max(c[1] for c in esquinas)
 
-    # Calcular zoom adecuado
-    lon_span = lon_max - lon_min
-    for zoom in range(18, 0, -1):
-        n_tiles_x = (2 ** zoom) * lon_span / 360.0
-        if n_tiles_x <= 20:
-            break
-    else:
-        zoom = 5
+    zoom = _calcular_zoom_teselas(lon_min, lat_min, lon_max, lat_max,
+                                  max_zoom=max_zoom, m_por_px=m_por_px)
 
     tx_min, ty_min = _lat_lon_to_tile(lat_max, lon_min, zoom)
     tx_max, ty_max = _lat_lon_to_tile(lat_min, lon_max, zoom)
@@ -297,13 +494,21 @@ def _descargar_teselas_manual(ax, url_template, xmin, xmax, ymin, ymax, crs_epsg
         tile_lat_min = math.degrees(math.atan(math.sinh(math.pi * (1 - 2 * (ty + 1) / n))))
         return (img, tile_lon_min, tile_lon_max, tile_lat_min, tile_lat_max)
 
-    with ThreadPoolExecutor(max_workers=min(8, len(tile_coords) or 1)) as pool:
-        futures = {pool.submit(_fetch_tile, tc): tc for tc in tile_coords}
-        for fut in as_completed(futures):
-            try:
-                tiles.append(fut.result())
-            except Exception:
-                continue
+    # Hasta 2 rondas: las teselas que fallan (cortes de conexión de
+    # servidores públicos) se reintentan una vez más para no dejar huecos.
+    pendientes = tile_coords
+    for _ronda in range(2):
+        fallidas = []
+        with ThreadPoolExecutor(max_workers=min(8, len(pendientes) or 1)) as pool:
+            futures = {pool.submit(_fetch_tile, tc): tc for tc in pendientes}
+            for fut in as_completed(futures):
+                try:
+                    tiles.append(fut.result())
+                except Exception:
+                    fallidas.append(futures[fut])
+        if not fallidas:
+            break
+        pendientes = fallidas
 
     if not tiles:
         return False
@@ -314,7 +519,7 @@ def _descargar_teselas_manual(ax, url_template, xmin, xmax, ymin, ymax, crs_epsg
         txmin_m, tymin_m = transformer_inv.transform(tlon_min, tlat_min)
         txmax_m, tymax_m = transformer_inv.transform(tlon_max, tlat_max)
         ax.imshow(
-            np.array(img),
+            _imagen_a_array(img),
             extent=[txmin_m, txmax_m, tymin_m, tymax_m],
             aspect="auto",
             zorder=0,
@@ -353,11 +558,7 @@ def _descargar_wms(ax, wms_url, xmin, xmax, ymin, ymax, crs_epsg=25830):
         img = None
 
     if img is None:
-        headers = {
-            "User-Agent": "GeneradorPlanosForestales/1.0",
-            "Referer": "https://www.ign.es/",
-        }
-        resp = requests.get(url, headers=headers, timeout=60)
+        resp = _get_con_reintentos(url, timeout=60)
         resp.raise_for_status()
         _verificar_respuesta_imagen(resp)
         img = Image.open(io.BytesIO(resp.content))
@@ -369,7 +570,7 @@ def _descargar_wms(ax, wms_url, xmin, xmax, ymin, ymax, crs_epsg=25830):
             pass
 
     ax.imshow(
-        np.array(img),
+        _imagen_a_array(img),
         extent=[xmin, xmax, ymin, ymax],
         aspect="auto",
         zorder=0,
@@ -1296,8 +1497,9 @@ def descargar_wms_custom(ax, url: str, capa: str, xmin, xmax, ymin, ymax,
         img = None
 
     if img is None:
-        resp = requests.get(base_url, params=params, timeout=60,
-                            headers={"User-Agent": "GeneradorPlanosForestales/1.0"})
+        resp = _get_con_reintentos(
+            base_url, params=params, timeout=60,
+            headers={"User-Agent": "GeneradorPlanosForestales/1.0"})
         resp.raise_for_status()
         _verificar_respuesta_imagen(resp)
         img = Image.open(io.BytesIO(resp.content))
@@ -1309,10 +1511,107 @@ def descargar_wms_custom(ax, url: str, capa: str, xmin, xmax, ymin, ymax,
             pass
 
     ax.imshow(
-        np.array(img),
+        _imagen_a_array(img),
         extent=[xmin, xmax, ymin, ymax],
         aspect="auto",
         zorder=0,
+        interpolation="bilinear",
+    )
+    return True
+
+
+def _params_getmap_overlay(url: str, capa: str, xmin, xmax, ymin, ymax,
+                           formato: str = "image/png", crs_epsg: int = 25830,
+                           version: str = "1.3.0", estilos: str = ""):
+    """Construye (base_url, params) de un GetMap transparente para overlay.
+
+    Conserva los parámetros no-WMS que traiga la URL del usuario (p. ej.
+    ``?language=spa`` o ``map=...`` de MapServer) y sustituye los WMS
+    estándar. WMS 1.1.1 usa ``SRS``; 1.3.0 usa ``CRS`` (con EPSG:25830 el
+    orden del BBOX es x,y en ambas versiones).
+    """
+    import urllib.parse
+    partes = urllib.parse.urlsplit(url.strip())
+    base_url = urllib.parse.urlunsplit(
+        (partes.scheme, partes.netloc, partes.path, "", ""))
+    claves_wms = {"service", "request", "version", "layers", "styles", "crs",
+                  "srs", "format", "transparent", "width", "height", "bbox"}
+    params = {k: v for k, v in urllib.parse.parse_qsl(partes.query)
+              if k.lower() not in claves_wms}
+
+    width, height = _dimensiones_wms(xmax - xmin, ymax - ymin)
+    version = version or "1.3.0"
+    params.update({
+        "SERVICE": "WMS",
+        "REQUEST": "GetMap",
+        "VERSION": version,
+        "LAYERS": capa,
+        "STYLES": estilos or "",
+        ("SRS" if version.startswith("1.1") else "CRS"): f"EPSG:{crs_epsg}",
+        "FORMAT": formato or "image/png",
+        "TRANSPARENT": "TRUE",
+        "WIDTH": str(width),
+        "HEIGHT": str(height),
+        "BBOX": f"{xmin},{ymin},{xmax},{ymax}",
+    })
+    return base_url, params
+
+
+def añadir_overlay_wms(ax, url: str, capa: str, xmin, xmax, ymin, ymax,
+                       alpha: float = 0.6, formato: str = "image/png",
+                       crs_epsg: int = 25830, version: str = "1.3.0",
+                       estilos: str = ""):
+    """Dibuja una capa WMS semitransparente ENCIMA del fondo del mapa.
+
+    Pide un GetMap con TRANSPARENT=TRUE, conserva el canal alfa (RGBA) y lo
+    pinta con ``imshow(zorder=1.5, alpha=alpha)``: por encima del fondo
+    (zorder 0) y por debajo de montes/infraestructuras. Usa la misma caché
+    en disco que ``descargar_wms_custom``.
+    """
+    import urllib.parse
+    base_url, params = _params_getmap_overlay(
+        url, capa, xmin, xmax, ymin, ymax, formato=formato,
+        crs_epsg=crs_epsg, version=version, estilos=estilos)
+
+    full_url = f"{base_url}?{urllib.parse.urlencode(params)}"
+    cache_key = hashlib.md5(full_url.encode()).hexdigest()
+    cache_path = _TILE_CACHE_DIR / f"wms_overlay_{cache_key}.png"
+
+    img = None
+    if cache_path.exists():
+        try:
+            img = Image.open(cache_path).copy()
+        except Exception:
+            cache_path.unlink(missing_ok=True)
+            img = None
+
+    if img is None:
+        resp = _get_con_reintentos(
+            base_url, params=params, timeout=60,
+            headers={"User-Agent": "GeneradorPlanosForestales/1.0"})
+        resp.raise_for_status()
+        _verificar_respuesta_imagen(resp)
+        img = Image.open(io.BytesIO(resp.content))
+        img.load()
+        try:
+            _TILE_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+            img.save(cache_path, "PNG")
+        except Exception:
+            pass
+
+    # Siempre RGBA: las zonas sin datos deben quedar transparentes
+    arr = np.array(img.convert("RGBA"))
+    try:
+        alpha = float(alpha)
+    except (TypeError, ValueError):
+        alpha = 0.6
+    alpha = min(1.0, max(0.0, alpha))
+    ax.imshow(
+        arr,
+        extent=[xmin, xmax, ymin, ymax],
+        aspect="auto",
+        zorder=1.5,
+        alpha=alpha,
         interpolation="bilinear",
     )
     return True
@@ -1381,8 +1680,10 @@ def añadir_fondo_cartografico(ax, gdf_view, proveedor_key: str, xmin=None, xmax
         url_template = CAPAS_BASE.get(proveedor_key)
         if url_template and xmin is not None:
             try:
+                max_zoom = _PROV_META.get(proveedor_key, {}).get("max_zoom", 18)
                 exito_manual = _descargar_teselas_manual(
-                    ax, url_template, xmin, xmax, ymin, ymax
+                    ax, url_template, xmin, xmax, ymin, ymax,
+                    max_zoom=max_zoom,
                 )
                 if not exito_manual:
                     ax.set_facecolor("#E8E8E0")

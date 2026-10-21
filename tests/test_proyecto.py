@@ -59,3 +59,26 @@ class TestProyecto:
             assert isinstance(data, dict)
         finally:
             os.unlink(ruta)
+
+
+def test_opciones_salida_y_overlays_roundtrip(tmp_path):
+    """Las opciones de salida (formato/marca de agua) y las capas WMS
+    superpuestas sobreviven a guardar y cargar; los proyectos antiguos
+    sin esas claves cargan con valores por defecto."""
+    from generador_planos.motor.proyecto import Proyecto
+    p = Proyecto()
+    p.opciones_salida = {"formato_salida": "PDF + PNG", "marca_agua_on": True,
+                         "marca_agua_txt": "BORRADOR"}
+    p.overlays_wms = [{"nombre": "Catastro", "url": "https://x/wms",
+                       "capa": "Catastro", "alpha": 0.6,
+                       "formato": "image/png", "activo": True}]
+    ruta = tmp_path / "p.json"
+    p.guardar(str(ruta))
+    p2 = Proyecto.cargar(str(ruta))
+    assert p2.opciones_salida["formato_salida"] == "PDF + PNG"
+    assert p2.opciones_salida["marca_agua_on"] is True
+    assert p2.overlays_wms and p2.overlays_wms[0]["capa"] == "Catastro"
+
+    antiguo = Proyecto.from_dict({"nombre": "viejo"})
+    assert antiguo.opciones_salida == {}
+    assert antiguo.overlays_wms == []

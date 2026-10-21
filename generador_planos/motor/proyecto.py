@@ -40,6 +40,7 @@ class Proyecto:
     wfs_custom_general: dict[str, str]
     wms_custom_localizacion: dict[str, str]
     wfs_custom_localizacion: dict[str, str]
+    overlays_wms: list[dict[str, Any]]
     escala_manual: int | None
     transparencia_montes: float
     color_infra: str
@@ -97,6 +98,12 @@ class Proyecto:
         self.wfs_custom_general = {}       # {"url":..., "capa":...}
         self.wms_custom_localizacion = {}
         self.wfs_custom_localizacion = {}
+        # Capas WMS superpuestas al fondo (lista de dicts: nombre, url,
+        # capa, alpha, formato, activo, version)
+        self.overlays_wms = []
+        # Opciones de salida de la GUI: formato (PDF / PDF + PNG / PDF + JPG)
+        # y marca de agua
+        self.opciones_salida = {}
         self.escala_manual = None  # None = automática
         self.transparencia_montes = 0.3
         self.color_infra = "#E74C3C"
@@ -186,6 +193,8 @@ class Proyecto:
             "wfs_custom_general": self.wfs_custom_general,
             "wms_custom_localizacion": self.wms_custom_localizacion,
             "wfs_custom_localizacion": self.wfs_custom_localizacion,
+            "overlays_wms": self.overlays_wms,
+            "opciones_salida": self.opciones_salida,
             "escala_manual": self.escala_manual,
             "transparencia_montes": self.transparencia_montes,
             "color_infra": self.color_infra,
@@ -242,6 +251,11 @@ class Proyecto:
         ]:
             if key in d:
                 setattr(p, key, d[key])
+        # Overlays WMS (proyectos antiguos no los tienen): solo dicts
+        # con url y capa; el resto de claves con valores por defecto.
+        p.overlays_wms = _normalizar_overlays(d.get("overlays_wms"))
+        op = d.get("opciones_salida")
+        p.opciones_salida = op if isinstance(op, dict) else {}
         return p
 
     def guardar(self, ruta: str) -> None:
@@ -255,6 +269,36 @@ class Proyecto:
         with open(ruta, "r", encoding="utf-8") as f:
             data = json.load(f)
         return cls.from_dict(data)
+
+
+def _normalizar_overlays(valor: Any) -> list[dict[str, Any]]:
+    """Valida la lista de overlays WMS leída de un proyecto JSON."""
+    if not isinstance(valor, list):
+        return []
+    resultado = []
+    for ov in valor:
+        if not isinstance(ov, dict):
+            continue
+        url = str(ov.get("url") or "").strip()
+        capa = str(ov.get("capa") or "").strip()
+        if not url or not capa:
+            continue
+        try:
+            alpha = min(1.0, max(0.0, float(ov.get("alpha", 0.6))))
+        except (TypeError, ValueError):
+            alpha = 0.6
+        norm = {
+            "nombre": str(ov.get("nombre") or capa),
+            "url": url,
+            "capa": capa,
+            "alpha": alpha,
+            "formato": str(ov.get("formato") or "image/png"),
+            "activo": bool(ov.get("activo", True)),
+        }
+        if ov.get("version"):
+            norm["version"] = str(ov["version"])
+        resultado.append(norm)
+    return resultado
 
 
 def cargar_lotes_csv(ruta_csv: str) -> list[dict[str, str]]:

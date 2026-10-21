@@ -32,11 +32,15 @@ El código base inicial está en `generador_planos.py` y necesita ser completado
 
 ### 2. Cartografía de fondo (teselas)
 Opciones disponibles mediante `contextily`:
-- `OpenStreetMap` — teselas estándar
-- `PNOA Ortofoto (IGN)` — WMTS IGN España
-- `IGN Topográfico (MTN)` — WMTS IGN España
-- `Google Satélite` / `Google Satélite Híbrido` — imagen de satélite (con o sin etiquetas)
+- `PNOA Ortofoto (IGN)` / `PNOA Máxima Actualidad` — WMTS IGN España
+- `IGN Topográfico (MTN)` / `IGN Base` — WMTS IGN España
+- `IGN MTN25` / `IGN MTN50` — WMS IGN España
+- `IGN Relieve (MDT sombreado)` — sombreado del MDT, WMTS IDEE (`servicios.idee.es/wmts/mdt`, capa `Relieve`)
 - `Topográfico Andalucía (MTA10)` — mapa topográfico de la Junta de Andalucía (WMS)
+- `Catastro (parcelas)` — WMS de la Dirección General del Catastro (WMS 1.1.1, capa `Catastro`)
+- `Google Satélite` / `Google Satélite Híbrido` — imagen de satélite (con o sin etiquetas)
+- `OpenStreetMap` — teselas estándar
+- Capas WMS superpuestas (semitransparentes sobre el fondo): `Catastro (parcelas)`, `Límites municipales (IGN)` (`AU.AdministrativeBoundary`), `Montes Públicos de Andalucía (REDIAM)` (capa `montes`) o cualquier WMS propio
 
 > ⚠️ Las URLs de IGN son WMTS con parámetros `{z}/{y}/{x}`. Verificar compatibilidad con contextily o implementar descarga manual de teselas si falla.
 
