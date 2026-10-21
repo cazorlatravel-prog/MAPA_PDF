@@ -353,10 +353,28 @@ def _verificar_respuesta_imagen(resp):
         f"imagen. Respuesta: {detalle}")
 
 
+_UA_APP = "EstelaGis/2.0 (+https://github.com/cazorlatravel-prog/MAPA_PDF)"
 _HEADERS_HTTP = {
-    "User-Agent": "GeneradorPlanosForestales/1.0",
-    "Referer": "https://www.ign.es/",
+    # Identificación honesta del proyecto (la política de OSM exige un
+    # User-Agent identificable; los genéricos son bloqueados con teselas
+    # "403 Access blocked"). Sin Referer falso: el de ign.es se añade solo
+    # para los hosts del IGN que lo requieren (ver _cabeceras_para).
+    "User-Agent": _UA_APP,
 }
+
+
+def _cabeceras_para(url: str, base=None) -> dict:
+    """Cabeceras HTTP para ``url``: UA del proyecto y, solo para los
+    servicios del IGN, el Referer que algunos de sus WMTS exigen."""
+    h = dict(base or _HEADERS_HTTP)
+    try:
+        import urllib.parse
+        host = urllib.parse.urlsplit(url).netloc.lower()
+    except Exception:
+        host = ""
+    if host.endswith("ign.es") or host.endswith("idee.es"):
+        h.setdefault("Referer", "https://www.ign.es/")
+    return h
 
 
 # Evento de cancelación (lo fija GeneradorPlanos) para que PARAR
@@ -427,7 +445,7 @@ def _get_con_reintentos(url, params=None, headers=None, timeout=60,
             raise DescargaCancelada("Descarga cancelada por el usuario.")
         try:
             resp = _http_get(url, params=params,
-                             headers=headers or _HEADERS_HTTP,
+                             headers=_cabeceras_para(url, headers),
                              timeout=timeout)
             if resp.status_code >= 500 and i < intentos - 1:
                 ultimo = requests.HTTPError(
@@ -1672,7 +1690,7 @@ def descargar_wfs(url: str, capa: str, xmin, ymin, xmax, ymax,
     # Construir URL limpiamente
     base_url = url.split("?")[0]
     resp = requests.get(base_url, params=params, timeout=60,
-                        headers={"User-Agent": "GeneradorPlanosForestales/1.0"})
+                        headers={"User-Agent": _UA_APP})
     resp.raise_for_status()
 
     gdf = gpd.read_file(io.BytesIO(resp.content), driver="GeoJSON")
@@ -1724,7 +1742,7 @@ def descargar_wms_custom(ax, url: str, capa: str, xmin, xmax, ymin, ymax,
     if img is None:
         resp = _get_con_reintentos(
             base_url, params=params, timeout=60,
-            headers={"User-Agent": "GeneradorPlanosForestales/1.0"})
+            headers={"User-Agent": _UA_APP})
         resp.raise_for_status()
         _verificar_respuesta_imagen(resp)
         img = Image.open(io.BytesIO(resp.content))
@@ -1818,7 +1836,7 @@ def añadir_overlay_wms(ax, url: str, capa: str, xmin, xmax, ymin, ymax,
     if img is None:
         resp = _get_con_reintentos(
             base_url, params=params, timeout=60,
-            headers={"User-Agent": "GeneradorPlanosForestales/1.0"})
+            headers={"User-Agent": _UA_APP})
         resp.raise_for_status()
         _verificar_respuesta_imagen(resp)
         img = Image.open(io.BytesIO(resp.content))
@@ -1893,42 +1911,23 @@ def añadir_fondo_cartografico(ax, gdf_view, proveedor_key: str, xmin=None, xmax
         ax.set_facecolor("#E8E8E0")
         return
 
-    # ── Proveedor de tiles (WMTS / XYZ) ──
-    exito_ctx = False
-
-    if ctx is not None:
-        proveedor = PROVIDERS_CTX.get(proveedor_key)
-        # Usar contextily salvo con entradas WMS (esas no son tiles)
-        if (proveedor is not None
-                and (not isinstance(proveedor, dict)
-                     or not proveedor.get("wms"))):
-            try:
-                with warnings.catch_warnings():
-                    warnings.simplefilter("ignore")
-                    ctx.add_basemap(
-                        ax,
-                        crs=gdf_view.crs.to_string(),
-                        source=proveedor,
-                        zoom="auto",
-                        attribution=False,
-                    )
-                exito_ctx = True
-            except Exception:
-                pass
-
-    if not exito_ctx:
-        # Fallback: descarga manual
-        url_template = CAPAS_BASE.get(proveedor_key)
-        if url_template and xmin is not None:
-            try:
-                max_zoom = _PROV_META.get(proveedor_key, {}).get("max_zoom", 18)
-                exito_manual = _descargar_teselas_manual(
-                    ax, url_template, xmin, xmax, ymin, ymax,
-                    max_zoom=max_zoom,
-                )
-                if not exito_manual:
-                    ax.set_facecolor("#E8E8E0")
-            except Exception:
+    # ── Proveedor de tiles (WMTS / XYZ): descarga propia ──
+    # Antes se intentaba contextily primero. Solo funcionaba con OSM y lo
+    # hacía con una identificación genérica que OpenStreetMap bloquea
+    # (teselas "403 Access blocked"); además no permite elegir resolución
+    # ni cancelar. Nuestro descargador reproyecta el mosaico, cachea y se
+    # identifica correctamente.
+    url_template = CAPAS_BASE.get(proveedor_key)
+    if url_template and xmin is not None:
+        try:
+            max_zoom = _PROV_META.get(proveedor_key, {}).get("max_zoom", 18)
+            exito_manual = _descargar_teselas_manual(
+                ax, url_template, xmin, xmax, ymin, ymax,
+                max_zoom=max_zoom,
+            )
+            if not exito_manual:
                 ax.set_facecolor("#E8E8E0")
-        else:
+        except Exception:
             ax.set_facecolor("#E8E8E0")
+    else:
+        ax.set_facecolor("#E8E8E0")
