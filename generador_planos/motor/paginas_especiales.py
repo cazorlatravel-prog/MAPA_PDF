@@ -1,13 +1,43 @@
 """Páginas especiales: portada, índice y mapa guía."""
 
 import math
+import textwrap
 from datetime import date
 
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 from matplotlib.patches import Rectangle
+from matplotlib.ticker import FuncFormatter
 
 from .escala import FORMATOS, DPI_DEFAULT
+from ._elementos_mapa import halo, formato_miles
+
+_PT_MM = 25.4 / 72.0
+
+
+def ajustar_texto(texto, ancho_mm, fontsize, max_lineas=3,
+                  factor_ancho=0.62, fontsize_min=8.0):
+    """Parte ``texto`` en líneas (textwrap) para que quepa en ``ancho_mm``.
+
+    Si aun así salen más de ``max_lineas`` líneas, reduce la fuente
+    progresivamente (hasta ``fontsize_min``). ``factor_ancho`` es el ancho
+    medio de un carácter en ems (≈0.62 mayúsculas normales, ≈0.68 negrita).
+    Devuelve ``(texto_con_saltos, fontsize)``.
+    """
+    texto = " ".join(str(texto or "").split())
+    if not texto:
+        return "", fontsize
+    fsz = float(fontsize)
+    while True:
+        chars = max(8, int(ancho_mm / (fsz * _PT_MM * factor_ancho)))
+        lineas = textwrap.wrap(texto, width=chars, break_long_words=True)
+        if len(lineas) <= max_lineas or fsz <= fontsize_min:
+            break
+        fsz = max(fontsize_min, fsz * 0.9)
+    if len(lineas) > max_lineas:
+        lineas = lineas[:max_lineas]
+        lineas[-1] = lineas[-1][:max(1, chars - 1)].rstrip() + "…"
+    return "\n".join(lineas), fsz
 
 
 def crear_portada(formato_key: str, titulo_proyecto: str,
@@ -25,17 +55,30 @@ def crear_portada(formato_key: str, titulo_proyecto: str,
     ax.set_ylim(0, 1)
     ax.axis("off")
 
-    ax.add_patch(Rectangle((0, 0.55), 1, 0.45, facecolor=c_fondo))
+    # Banda superior dentro del marco (antes desbordaba hasta el borde)
+    ax.add_patch(Rectangle((0.03, 0.55), 0.94, 0.42, facecolor=c_fondo,
+                            edgecolor="none"))
+    ax.add_patch(Rectangle((0.03, 0.548), 0.94, 0.006, facecolor=c_acento,
+                            edgecolor="none"))
     ax.add_patch(Rectangle((0.02, 0.02), 0.96, 0.96,
                             fill=False, edgecolor=c_fondo, linewidth=3.0))
     ax.add_patch(Rectangle((0.03, 0.03), 0.94, 0.94,
                             fill=False, edgecolor=c_acento, linewidth=0.8))
 
-    ax.text(0.5, 0.80, titulo_proyecto.upper(), ha="center", va="center",
-            fontsize=20, fontweight="bold", color=c_acento)
+    # Título y subtítulo ajustados al ancho de la página (textwrap)
+    ancho_txt_mm = fmt[0] * 0.84
+    titulo_txt, fsz_tit = ajustar_texto(
+        str(titulo_proyecto or "").upper(), ancho_txt_mm, 20,
+        max_lineas=3, factor_ancho=0.70, fontsize_min=11)
+    ax.text(0.5, 0.745, titulo_txt, ha="center", va="bottom",
+            fontsize=fsz_tit, fontweight="bold", color=c_acento,
+            linespacing=1.15)
     if subtitulo:
-        ax.text(0.5, 0.72, subtitulo.upper(), ha="center", va="center",
-                fontsize=12, color="white")
+        sub_txt, fsz_sub = ajustar_texto(
+            str(subtitulo).upper(), ancho_txt_mm, 12,
+            max_lineas=2, factor_ancho=0.64, fontsize_min=8)
+        ax.text(0.5, 0.715, sub_txt, ha="center", va="top",
+                fontsize=fsz_sub, color="white", linespacing=1.2)
 
     org = ""
     if cajetin and cajetin.get("organizacion"):
@@ -230,16 +273,18 @@ def crear_mapa_guia(formato_key: str, gdf_infra, indices: list,
         # Número en el centroide
         cx, cy = geom.centroid.x, geom.centroid.y
         ax_map.annotate(
-            str(i + 1), xy=(cx, cy), fontsize=6, fontweight="bold",
-            ha="center", va="center", color="white",
-            bbox=dict(boxstyle="round,pad=0.2", facecolor=c_fondo,
-                      edgecolor=c_acento, linewidth=0.5, alpha=0.85),
-            zorder=10,
+            str(i + 1), xy=(cx, cy), fontsize=7, fontweight="bold",
+            ha="center", va="center", color=c_fondo,
+            path_effects=halo(2.5), zorder=10,
         )
 
-    # Ejes con coordenadas UTM simplificadas
+    # Ejes con coordenadas UTM (punto de miles: 4.196.000)
     ax_map.tick_params(labelsize=5, length=2)
-    ax_map.ticklabel_format(useOffset=False, style="plain")
+    _fmt = FuncFormatter(lambda v, _p: formato_miles(v))
+    ax_map.xaxis.set_major_formatter(_fmt)
+    ax_map.yaxis.set_major_formatter(_fmt)
+    ax_map.set_xlabel("")
+    ax_map.set_ylabel("")
 
     # ── Leyenda inferior: lista numerada ──
     ax_legend.set_xlim(0, 1)
