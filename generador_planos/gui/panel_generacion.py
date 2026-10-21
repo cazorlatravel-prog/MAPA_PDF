@@ -636,7 +636,15 @@ class PanelGeneracion:
                 "Ya hay una generación en curso; espera a que termine o "
                 "pulsa PARAR.", "warn")
             return
+        # Cualquier error en la preparación (antes de arrancar el hilo)
+        # debe restaurar los botones: si no, GENERAR quedaría deshabilitado
+        # para siempre y la app parecería bloqueada.
+        try:
+            self._iniciar_generacion_impl()
+        except Exception as e:
+            self._fin_error(e, traceback.format_exc())
 
+    def _iniciar_generacion_impl(self):
         modo = self._modo_gen.get()
 
         if modo == "lotes":
@@ -876,7 +884,7 @@ class PanelGeneracion:
     def _reiniciar_progreso(self):
         """Pone el progreso a cero y arranca el cronómetro de la estimación."""
         import time
-        self._reiniciar_progreso()
+        self._progreso["value"] = 0
         self._t_inicio = time.time()
 
     def _abrir_ultimo_pdf(self):
