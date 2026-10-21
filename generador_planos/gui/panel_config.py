@@ -524,15 +524,57 @@ class PanelConfig:
         self._generar_vrt_y_asignar(carpeta, self._ruta_raster_loc, self._lbl_raster_loc)
 
     def _generar_vrt_y_asignar(self, carpeta, var_ruta, lbl):
+        """Construye el mosaico VRT de una carpeta de hojas EN SEGUNDO PLANO.
+
+        Antes se hac\u00eda en el hilo principal: con decenas de hojas MTN (y
+        m\u00e1s si hay que reproyectar las de otro huso) la interfaz quedaba
+        congelada varios minutos sin ninguna indicaci\u00f3n.
+        """
+        import threading
         from ..motor.cartografia import construir_vrt_desde_carpeta
-        try:
-            vrt = construir_vrt_desde_carpeta(carpeta)
-            var_ruta.set(vrt)
-            lbl.configure(text=f"VRT: {Path(carpeta).name} ({Path(vrt).name})")
-        except FileNotFoundError as e:
-            messagebox.showwarning("Sin r\u00e1sters", str(e))
-        except Exception as e:
-            messagebox.showerror("Error al crear mosaico", str(e))
+
+        if getattr(self, "_vrt_en_curso", False):
+            messagebox.showinfo(
+                "Mosaico en curso",
+                "Ya se est\u00e1 creando un mosaico; espera a que termine.")
+            return
+        self._vrt_en_curso = True
+        lbl.configure(text=f"\u23f3 Creando mosaico de '{Path(carpeta).name}'... "
+                           "(puede tardar varios minutos)")
+
+        def _en_hilo():
+            try:
+                vrt = construir_vrt_desde_carpeta(carpeta)
+                resultado = ("ok", vrt)
+            except FileNotFoundError as e:
+                resultado = ("sin_rasters", str(e))
+            except Exception as e:
+                resultado = ("error", str(e))
+            try:
+                self._parent.after(0, lambda: _al_terminar(resultado))
+            except Exception:
+                pass
+
+        def _al_terminar(resultado):
+            self._vrt_en_curso = False
+            try:
+                if not self._parent.winfo_exists():
+                    return
+            except Exception:
+                return
+            tipo, valor = resultado
+            if tipo == "ok":
+                var_ruta.set(valor)
+                lbl.configure(
+                    text=f"VRT: {Path(carpeta).name} ({Path(valor).name})")
+            elif tipo == "sin_rasters":
+                lbl.configure(text="Sin r\u00e1ster seleccionado")
+                messagebox.showwarning("Sin r\u00e1sters", valor)
+            else:
+                lbl.configure(text="Error al crear el mosaico")
+                messagebox.showerror("Error al crear mosaico", valor)
+
+        threading.Thread(target=_en_hilo, daemon=True).start()
 
     _CAPA_FILETYPES = [
         ("Shapefile", "*.shp"),

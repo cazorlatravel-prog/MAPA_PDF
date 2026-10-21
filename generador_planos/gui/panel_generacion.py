@@ -1040,26 +1040,40 @@ class PanelGeneracion:
         self.callback_log("\n\u26a0 Cancelando generaci\u00f3n...", "warn")
 
     def _vaciar_cache(self):
-        """Elimina la caché de teselas descargadas (contextily)."""
-        import matplotlib.pyplot as plt
-        plt.close("all")
+        """Elimina la caché de teselas/WMS descargadas (propia y de contextily)."""
+        if self._generacion_en_curso():
+            messagebox.showwarning(
+                "Generación en curso",
+                "Espera a que termine la generación antes de vaciar la caché.")
+            return
 
         eliminados = []
 
-        # Caché de contextily
+        # Caché propia de la aplicación (teselas XYZ/WMTS, GetMap WMS y
+        # capas superpuestas): es la que realmente se usa al generar.
+        try:
+            from ..motor.cartografia import _TILE_CACHE_DIR
+            if os.path.isdir(_TILE_CACHE_DIR):
+                n = sum(len(fs) for _, _, fs in os.walk(_TILE_CACHE_DIR))
+                shutil.rmtree(_TILE_CACHE_DIR, ignore_errors=True)
+                eliminados.append(f"aplicación: {_TILE_CACHE_DIR} ({n} archivos)")
+        except Exception as e:
+            self.callback_log(f"No se pudo vaciar la caché propia: {e}", "warn")
+
+        # Caché de contextily (solo se usa con OpenStreetMap)
         try:
             import contextily as ctx
             cache_dir = ctx.tile._calculate_cache_dir() if hasattr(ctx.tile, '_calculate_cache_dir') else None
             if cache_dir is None:
                 cache_dir = os.path.join(os.path.expanduser("~"), ".cache", "contextily")
             if os.path.isdir(cache_dir):
-                shutil.rmtree(cache_dir)
+                shutil.rmtree(cache_dir, ignore_errors=True)
                 eliminados.append(f"contextily: {cache_dir}")
         except Exception:
             # Intentar ruta por defecto
             cache_dir = os.path.join(os.path.expanduser("~"), ".cache", "contextily")
             if os.path.isdir(cache_dir):
-                shutil.rmtree(cache_dir)
+                shutil.rmtree(cache_dir, ignore_errors=True)
                 eliminados.append(f"contextily: {cache_dir}")
 
         if eliminados:
@@ -1151,6 +1165,14 @@ class PanelGeneracion:
         popup.configure(bg=COLOR_FONDO_APP)
         popup.transient(self._parent_window)
 
+        # Dibujar a resolución de pantalla: la figura viene a 300-400 dpi
+        # (calidad de impresión) y rasterizarla así en el hilo principal
+        # congelaba la interfaz varios segundos (16x más píxeles que a 96).
+        try:
+            if fig.get_dpi() > 96:
+                fig.set_dpi(96)
+        except Exception:
+            pass
         canvas = FigureCanvasTkAgg(fig, master=popup)
         canvas.draw()
         canvas.get_tk_widget().pack(fill="both", expand=True, padx=6, pady=6)
