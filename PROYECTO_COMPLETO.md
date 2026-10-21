@@ -279,7 +279,9 @@ Gestiona descarga de teselas XYZ, servicios WMS/WFS, rasters locales y fondos de
 | `OpenStreetMap` | Teselas estandar OSM |
 | `PNOA Ortofoto (IGN)` | Ortofoto WMTS del IGN Espana |
 | `IGN Topografico (MTN)` | Topografico WMTS del IGN Espana |
-| `Stamen Terrain` | Terreno con relieve |
+| `Google Satélite` | Imagen de satélite |
+| `Google Satélite Híbrido` | Satélite con etiquetas |
+| `Topográfico Andalucía (MTA10)` | Topográfico de la Junta de Andalucía (WMS) |
 
 **Proveedores WMS (`CAPAS_WMS`):**
 
@@ -949,7 +951,7 @@ pytest tests/ -v
 - Vinculacion con tabla Excel externa
 
 ### 10.2. Cartografia de fondo
-- **Teselas XYZ:** OpenStreetMap, PNOA Ortofoto, IGN Topografico, Stamen Terrain
+- **Teselas XYZ:** OpenStreetMap, PNOA Ortofoto, IGN Topografico, Google Satélite
 - **WMS directo:** IGN MTN25 (1:25.000), IGN MTN50 (1:50.000)
 - **WMS/WFS personalizado:** URL, capa y formato configurables
 - **Raster local:** GeoTIFF, ECW, JP2 con lectura windowed
@@ -1126,7 +1128,7 @@ Permite producir lotes de planos con maquetacion normalizada, cajetin reglamenta
 | **geopandas >= 0.14** | Lectura de Shapefiles (.shp) y Geodatabases (.gdb). Manipulacion de GeoDataFrames, reproyeccion CRS |
 | **shapely >= 2.0** | Operaciones geometricas (buffer, interseccion, centroide, bounds, simplificacion) |
 | **pyproj >= 3.6** | Transformacion de coordenadas entre SRC. EPSG:25830 (ETRS89 / UTM zona 30N) como base |
-| **contextily >= 1.6** | Descarga de teselas WMS/WMTS para fondos de mapa (PNOA, OpenStreetMap, Stamen, etc.) |
+| **contextily >= 1.6** | Descarga de teselas WMS/WMTS para fondos de mapa (PNOA, OpenStreetMap, Google, etc.) |
 
 ### Capa de Renderizado
 
@@ -1237,7 +1239,8 @@ Seleccion automatica basada en el extent de la geometria. Opcion de escala manua
 - PNOA Ortofoto (IGN - Espana)
 - PNOA Mapa Base (IGN - Espana)
 - OpenStreetMap
-- Stamen Terrain
+- Google Satélite / Híbrido
+- Topográfico Andalucía (MTA10)
 - CartoDB Positron / DarkMatter
 - Raster local (GeoTIFF, ECW, MrSID)
 - WMS/WFS custom (URL configurable)
@@ -1339,7 +1342,7 @@ Panel **"CAJETIN"**:
 Panel **"CONFIGURACION"**:
 
 - **Formato:** A3H, A3V, A4H, A4V
-- **Proveedor de fondo:** PNOA, OSM, Stamen, raster local, WMS custom...
+- **Proveedor de fondo:** PNOA, OSM, Google, Andalucía MTA10, raster local, WMS custom...
 - **Escala:** Automatica o manual (1:5.000 a 1:20.000)
 - **Color de infraestructura:** Color por defecto para simbolos
 - **Carpeta de salida:** Donde se guardaran los PDF generados

@@ -201,7 +201,12 @@ class PanelSimbologia:
         self.motor.gestor_simbologia.generar_por_categoria(campo, valores)
 
         for i, valor in enumerate(valores[:20]):
-            color = PALETA_CATEGORIAS[i % len(PALETA_CATEGORIAS)]
+            # Leer el color del gestor: puede ser un color personalizado
+            # restaurado de un proyecto, no siempre el de la paleta
+            _simb = self.motor.gestor_simbologia.categorias.get(
+                campo, {}).get(str(valor))
+            color = (_simb.color if _simb is not None
+                     else PALETA_CATEGORIAS[i % len(PALETA_CATEGORIAS)])
 
             row_f = tk.Frame(self._frame_categorias, bg=COLOR_PANEL)
             row_f.pack(fill="x", pady=2)
@@ -263,7 +268,10 @@ class PanelSimbologia:
         ]
 
         for i, valor in enumerate(valores[:20]):
-            color = paleta_montes[i % len(paleta_montes)]
+            _simb = self.motor.gestor_simbologia.categorias_montes.get(
+                campo, {}).get(str(valor))
+            color = (_simb.color if _simb is not None
+                     else paleta_montes[i % len(paleta_montes)])
 
             row_f = tk.Frame(self._frame_cat_montes, bg=COLOR_PANEL)
             row_f.pack(fill="x", pady=2)

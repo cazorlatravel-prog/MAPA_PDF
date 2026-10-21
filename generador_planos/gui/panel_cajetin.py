@@ -300,6 +300,9 @@ class PanelCajetin:
             campo_etiq = cajetin.get("campo_etiqueta", "")
             if campo_etiq:
                 self._campo_etiqueta.set(campo_etiq)
+            campo_etiq_m = cajetin.get("campo_etiqueta_montes", "")
+            if campo_etiq_m:
+                self._campo_etiqueta_montes.set(campo_etiq_m)
 
         if plantilla:
             for key, color in plantilla.items():

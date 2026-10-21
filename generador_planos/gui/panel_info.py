@@ -66,7 +66,7 @@ CAPA GEOESPACIAL (GIS)
   pyproj >= 3.6       Transformacion de coordenadas entre SRC
                       EPSG:25830 (ETRS89 / UTM zona 30N) como base
   contextily >= 1.6   Descarga de teselas WMS/WMTS para fondos de mapa
-                      (PNOA, OpenStreetMap, Stamen, etc.)
+                      (PNOA, OpenStreetMap, Google, IGN, etc.)
 
 CAPA DE RENDERIZADO
 --------------------
@@ -80,8 +80,8 @@ CAPA DE RENDERIZADO
 
 CAPA DE SALIDA
 ---------------
-  reportlab >= 4.0    Generacion final de documentos PDF
-                      Soporte A3/A4 horizontal/vertical
+  matplotlib PdfPages Generacion final de documentos PDF vectoriales
+                      Formatos A4 / A3 / A2 horizontal
                       Multipagina (portada, indice, planos, guia)
 
 CAPA DE DATOS
@@ -142,7 +142,7 @@ FLUJO DE DATOS
   5. Descarga de fondo cartografico (WMS/WMTS/raster)
   6. Renderizado con matplotlib (GridSpec layout)
   7. Adicion de elementos: cuadricula UTM, escala, leyenda
-  8. Exportacion a PDF via reportlab
+  8. Exportacion a PDF via matplotlib (PdfPages)
   9. Opcion multipagina: portada + indice + planos + guia
 """
 
@@ -155,24 +155,24 @@ SISTEMA DE REFERENCIA
   Reproyeccion:      Automatica desde cualquier CRS de entrada
 
 ESCALAS PERMITIDAS
-  1:5.000  |  1:7.500  |  1:10.000  |  1:15.000  |  1:20.000
+  1:5.000 | 1:7.500 | 1:10.000 | 1:15.000 | 1:20.000 | 1:25.000 | 1:30.000
   Seleccion automatica basada en el extent de la geometria
   Opcion de escala manual configurable
 
 FORMATOS DE SALIDA
-  A3 Horizontal (420 x 297 mm)
-  A3 Vertical   (297 x 420 mm)
   A4 Horizontal (297 x 210 mm)
-  A4 Vertical   (210 x 297 mm)
+  A3 Horizontal (420 x 297 mm)
+  A2 Horizontal (594 x 420 mm)
 
 PROVEEDORES DE FONDO
-  PNOA Ortofoto   (IGN - Espana)
-  PNOA Mapa Base   (IGN - Espana)
+  PNOA Ortofoto / PNOA Maxima Actualidad (IGN - Espana)
+  IGN Topografico / IGN Base (IGN - Espana)
+  IGN MTN25 / MTN50 (WMS)
+  Topografico Andalucia MTA10 (WMS, Junta de Andalucia)
   OpenStreetMap
-  Stamen Terrain
-  CartoDB Positron / DarkMatter
-  Raster local     (GeoTIFF, ECW, MrSID)
-  WMS/WFS custom   (URL configurable)
+  Google Satelite / Google Satelite Hibrido
+  Raster local     (GeoTIFF, ECW, JP2, carpeta de hojas -> mosaico)
+  WMS/WFS propio   (URL configurable)
 
 ELEMENTOS DEL PLANO
   Cuadricula UTM con etiquetas de coordenadas
@@ -277,14 +277,15 @@ MANUAL DE USUARIO
 ----------------------------
   Panel "CONFIGURACION":
 
-  * Formato: A3H, A3V, A4H, A4V
-  * Proveedor de fondo: PNOA, OSM, Stamen, raster local, WMS custom...
-  * Escala: Automatica o manual (1:5.000 a 1:20.000)
+  * Formato: A4 Horizontal, A3 Horizontal, A2 Horizontal
+  * Proveedor de fondo: PNOA, IGN, OSM, Google, Andalucia MTA10,
+    raster local, WMS/WFS propio...
+  * Escala: Automatica o manual (1:5.000 a 1:30.000)
   * Color de infraestructura: Color por defecto para simbolos
   * Carpeta de salida: Donde se guardaran los PDF generados
-  * Patron de nombre: Formato del nombre de archivo
-    Ejemplo: {TIPO}_{NOMBRE}_{MUNICIPIO} --> Pista_FortalezaAlta_Cazorla.pdf
-  * Calidad PDF: Baja (150dpi), Media (200dpi), Alta (300dpi)
+  * Patron de nombre: Formato del nombre de archivo con variables
+    {num}, {nombre} y {campo}. Ejemplo: {num}_{nombre} --> 0001_Pista.pdf
+  * Calidad PDF: Baja (100 DPI), Media (200 o 300 DPI), Alta (400 DPI)
 
   Datos tabulares:
   * Origen: Desde el shapefile o desde un archivo Excel
@@ -344,6 +345,38 @@ MANUAL DE USUARIO
 
   * El CRS se muestra en la barra superior como badge:
     "ETRS89 - UTM H30N" (EPSG:25830)
+
+11. FUNCIONES AVANZADAS
+------------------------
+  * Capas WMS superpuestas (panel CONFIGURACION):
+    dibuja capas semitransparentes sobre el fondo del mapa principal.
+    Predefinidas: Catastro (parcelas), Limites municipales (IGN) y
+    Montes Publicos de Andalucia (REDIAM). Tambien cualquier WMS propio
+    (URL, capa, version y transparencia).
+
+  * Proveedores de fondo: PNOA Ortofoto / Maxima Actualidad, IGN
+    Topografico / Base / MTN25 / MTN50, IGN Relieve (MDT sombreado),
+    Topografico Andalucia (MTA10), Catastro, Google Satelite / Hibrido,
+    OpenStreetMap, raster local (archivo o carpeta de hojas -> mosaico
+    automatico, con reproyeccion de hojas en otro huso) y WMS/WFS propio.
+
+  * Formato de salida (panel GENERACION): PDF, PDF + PNG o PDF + JPG.
+    Marca de agua opcional (p. ej. BORRADOR) en diagonal sobre el mapa.
+
+  * El cajetin muestra las coordenadas del centro del plano en UTM y en
+    latitud/longitud, y la atribucion de la cartografia base.
+
+  * Atajos: Ctrl+G generar, F5 vista previa, Ctrl+S guardar proyecto,
+    Ctrl+O abrir proyecto, Ctrl+L limpiar el registro.
+
+  * Menus "Recientes" para shapefiles y proyectos; boton "Abrir ultimo
+    PDF"; tiempo restante estimado durante la generacion.
+
+  * La aplicacion recuerda entre sesiones el proveedor, formato,
+    calidad, plantilla, carpeta de salida y opciones de salida
+    (archivo ~/.mapa_pdf_cache/ajustes.json).
+
+  * Si algo falla sin mensaje, consulte ~/.mapa_pdf_cache/error.log.
 """
 
 

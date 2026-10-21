@@ -9,3 +9,7 @@ Output/
 *.spec
 *.exe
 GeneradorPlanos_Portable_v*.zip
+
+# Datos/salida de la prueba de extremo a extremo (tools/prueba_e2e.py)
+tools/datos/
+tools/salida/

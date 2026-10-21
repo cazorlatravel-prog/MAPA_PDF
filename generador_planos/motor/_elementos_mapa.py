@@ -3,13 +3,114 @@
 import math
 
 import numpy as np
+import matplotlib.patheffects as pe
 from matplotlib.patches import FancyBboxPatch, Rectangle
 from matplotlib.lines import Line2D
-from .escala import INTERVALOS_GRID, BARRA_ESCALA_M
+from .escala import INTERVALOS_GRID
+
+# ── Escala tipográfica (puntos) ──────────────────────────────────────────
+# Usar estas constantes en lugar de tamaños sueltos para que todo el plano
+# mantenga una jerarquía coherente.
+TIPO_TITULO = 7.0     # títulos principales (cabecera, nº de plano)
+TIPO_SECCION = 5.0    # títulos de panel / sección (LEYENDA, LOCALIZACIÓN…)
+TIPO_ETIQUETA = 4.2   # etiquetas y valores de tablas / cajetín
+TIPO_PEQUENO = 3.2    # notas, créditos, textos secundarios
+
+COLOR_TINTA = "#1C2333"   # tinta principal de los elementos del mapa
+
+# Longitudes "redondas" candidatas para la barra de escala sobre el mapa (m)
+_BARRA_MAPA_CANDIDATOS_M = (50, 100, 200, 250, 500, 1000, 2000, 2500,
+                            5000, 10000, 20000)
+
+
+def halo(linewidth=2.5, color="white"):
+    """Path effect de halo para que un texto se lea sobre cualquier fondo."""
+    return [pe.withStroke(linewidth=linewidth, foreground=color)]
+
+
+def formato_miles(valor):
+    """Entero con punto como separador de miles: 4196000 → '4.196.000'."""
+    return f"{int(round(valor)):,}".replace(",", ".")
+
+
+def formato_distancia(metros):
+    """Distancia legible con unidad: 500 → '500 m', 1000 → '1 km',
+    2500 → '2,5 km', 62.5 → '62,5 m'."""
+    if metros >= 1000:
+        return f"{metros / 1000:g} km".replace(".", ",")
+    return f"{metros:g} m".replace(".", ",")
+
+
+def recortar_texto(texto, max_chars):
+    """Recorta con elipsis (…) si supera ``max_chars`` caracteres."""
+    texto = str(texto)
+    if max_chars > 1 and len(texto) > max_chars:
+        return texto[:max_chars - 1].rstrip() + "…"
+    return texto
 
 
 class ElementosMapaMixin:
     """Métodos de dibujo de elementos cartográficos sobre el mapa."""
+
+    # Posición/tamaño del indicador de norte (fracción del eje del mapa)
+    _NORTE_CX, _NORTE_CY = 0.045, 0.90
+    _NORTE_H, _NORTE_W = 0.055, 0.014
+    _NORTE_BG_W, _NORTE_BG_H = 0.042, 0.095
+
+    # ── Utilidades de geometría del mapa ─────────────────────────────
+
+    def _mapa_mm(self):
+        """Tamaño físico (ancho, alto) del mapa en mm según la escala."""
+        xlim = self.ax_map.get_xlim()
+        ylim = self.ax_map.get_ylim()
+        w_mm = abs(xlim[1] - xlim[0]) * 1000.0 / self.escala
+        h_mm = abs(ylim[1] - ylim[0]) * 1000.0 / self.escala
+        return max(w_mm, 1e-6), max(h_mm, 1e-6)
+
+    def _zona_norte(self):
+        """Rectángulo (x0, y0, x1, y1) en fracción de ejes ocupado por el norte."""
+        cx, cy = self._NORTE_CX, self._NORTE_CY
+        bg_w, bg_h = self._NORTE_BG_W, self._NORTE_BG_H
+        y0 = cy - self._NORTE_H * 0.45 - 0.006
+        m = 0.008
+        return (cx - bg_w / 2 - m, y0 - m, cx + bg_w / 2 + m, y0 + bg_h + m)
+
+    def _longitud_barra_mapa(self):
+        """Longitud redonda de la barra (≈ ≤ 22 % del ancho del mapa)."""
+        xlim = self.ax_map.get_xlim()
+        objetivo = abs(xlim[1] - xlim[0]) * 0.22
+        barra = _BARRA_MAPA_CANDIDATOS_M[0]
+        for c in _BARRA_MAPA_CANDIDATOS_M:
+            if c <= objetivo:
+                barra = c
+        return barra
+
+    def _geometria_escala_mapa(self):
+        """Caja de la escala gráfica del mapa, en fracción de ejes."""
+        w_mm, h_mm = self._mapa_mm()
+        barra_m = self._longitud_barra_mapa()
+        bar_mm = barra_m * 1000.0 / self.escala
+        lado_mm = 4.0     # holgura lateral para las etiquetas centradas
+        pad_mm = 1.2
+        txt_mm = 1.4      # alto de una línea de texto pequeño
+        bar_h_mm = 1.1
+        caja_w_mm = bar_mm + 2 * lado_mm
+        caja_h_mm = pad_mm + txt_mm + 0.8 + bar_h_mm + 0.7 + txt_mm + pad_mm
+        x0_mm, y0_mm = 3.0, 3.0
+        fx = 1.0 / w_mm
+        fy = 1.0 / h_mm
+        return {
+            "barra_m": barra_m,
+            "caja": (x0_mm * fx, y0_mm * fy,
+                     (x0_mm + caja_w_mm) * fx, (y0_mm + caja_h_mm) * fy),
+            "bar_x0": (x0_mm + lado_mm) * fx,
+            "bar_w": bar_mm * fx,
+            "bar_y0": (y0_mm + pad_mm + txt_mm + 0.8) * fy,
+            "bar_h": bar_h_mm * fy,
+            "txt_escala_y": (y0_mm + pad_mm) * fy,
+            "txt_dist_y": (y0_mm + pad_mm + txt_mm + 0.8 + bar_h_mm + 0.7) * fy,
+            "fy": fy, "fx": fx,
+        }
 
     # ── Grid UTM ──────────────────────────────────────────────────────
 
@@ -18,8 +119,7 @@ class ElementosMapaMixin:
         """Formatea coordenada UTM con punto como separador de miles (convención española).
         Ej: 508000 → '508.000', 4217500 → '4.217.500'
         """
-        s = f"{int(valor):,}".replace(",", ".")
-        return s
+        return formato_miles(valor)
 
     def dibujar_grid_utm(self, xmin, xmax, ymin, ymax):
         intervalo = INTERVALOS_GRID.get(self.escala, 1000)
@@ -27,9 +127,15 @@ class ElementosMapaMixin:
 
         for sp in ax.spines.values():
             sp.set_linewidth(1.5)
-            sp.set_color("#1C2333")
+            sp.set_color(COLOR_TINTA)
 
-        # Margenes para filtrar etiquetas demasiado cerca de los bordes
+        # Sin títulos de eje (geopandas/rasterio pueden poner
+        # "Easting [metre]"/"Northing [metre]"): las coordenadas van rotuladas
+        # dentro del marco y el SRC se indica en la nota del mapa.
+        ax.set_xlabel("")
+        ax.set_ylabel("")
+
+        # Margenes para filtrar líneas/etiquetas demasiado cerca de los bordes
         margen_x = (xmax - xmin) * 0.03
         margen_y = (ymax - ymin) * 0.04
 
@@ -39,91 +145,147 @@ class ElementosMapaMixin:
         ys = np.arange(y0, ymax, intervalo)
 
         # Filtrar ticks cercanos a los bordes
-        xs_filt = [x for x in xs if x > xmin + margen_x and x < xmax - margen_x]
-        ys_filt = [y for y in ys if y > ymin + margen_y and y < ymax - margen_y]
+        xs_filt = [x for x in xs if xmin + margen_x < x < xmax - margen_x]
+        ys_filt = [y for y in ys if ymin + margen_y < y < ymax - margen_y]
 
-        # Formato español con punto de miles: 508.000, 4.217.500
+        # Marcas cortas en el marco (sin rótulos: van dentro del mapa)
         ax.set_xticks(xs_filt)
         ax.set_yticks(ys_filt)
-        ax.set_xticklabels([self._formato_coord(x) for x in xs_filt],
-                           fontsize=4.5, color="#2C3E50", rotation=0, ha="center")
-        ax.set_yticklabels([self._formato_coord(y) for y in ys_filt],
-                           fontsize=4.5, color="#2C3E50", rotation=90,
-                           va="center")
+        ax.tick_params(which="major", length=2.5, width=0.5,
+                       color=COLOR_TINTA, direction="out",
+                       bottom=True, top=True, left=True, right=True,
+                       labelbottom=False, labeltop=False,
+                       labelleft=False, labelright=False)
 
-        # Etiquetas en los cuatro lados del mapa, fuera del marco
-        ax.tick_params(which="major", length=4, width=0.6, color="#2C3E50",
-                       direction="out", labelbottom=True, labeltop=True,
-                       labelleft=True, labelright=True, pad=2)
-
-        # Líneas de cuadrícula continuas (estilo cartográfico profesional)
-        for x in xs:
-            ax.axvline(x, color="#2C3E50", linewidth=0.25, alpha=0.45,
-                       zorder=3)
-        for y in ys:
-            ax.axhline(y, color="#2C3E50", linewidth=0.25, alpha=0.45,
-                       zorder=3)
+        # Líneas de cuadrícula finas y discontinuas (solo las filtradas,
+        # para no dibujar líneas pegadas al marco)
+        _estilo = dict(color=COLOR_TINTA, linewidth=0.35, alpha=0.5,
+                       linestyle=(0, (6, 4)), zorder=3)
+        for x in xs_filt:
+            ax.axvline(x, **_estilo)
+        for y in ys_filt:
+            ax.axhline(y, **_estilo)
 
         # Indicación del sistema de referencia (esquina inferior derecha del mapa)
-        ax.text(0.995, 0.005, "ETRS89 / UTM zona 30N · EPSG:25830",
-                ha="right", va="bottom", fontsize=3.2, color="#2C3E50",
-                transform=ax.transAxes, zorder=12,
-                bbox=dict(boxstyle="round,pad=0.12", facecolor="white",
-                          edgecolor="#BDC3C7", linewidth=0.3, alpha=0.85))
+        txt_src = ax.text(
+            0.995, 0.005, "ETRS89 / UTM zona 30N · EPSG:25830",
+            ha="right", va="bottom", fontsize=TIPO_PEQUENO, color=COLOR_TINTA,
+            transform=ax.transAxes, zorder=12,
+            bbox=dict(boxstyle="round,pad=0.15", facecolor="white",
+                      edgecolor="#BDC3C7", linewidth=0.3, alpha=0.85))
+
+        self._rotular_coordenadas(xs_filt, ys_filt, extra_ocupados=[txt_src])
+
+    def _rotular_coordenadas(self, xs, ys, extra_ocupados=()):
+        """Rótulos de coordenadas dentro del marco (4 lados) con halo.
+
+        Se descartan los rótulos que pisarían el norte, la escala gráfica,
+        la leyenda u otros rótulos ya colocados.
+        """
+        ax = self.ax_map
+        try:
+            ax.apply_aspect()
+        except Exception:
+            pass
+        try:
+            renderer = self.fig.canvas.get_renderer()
+        except Exception:
+            renderer = None
+
+        to_disp = ax.transAxes.transform
+
+        def _rect_disp(r):
+            (a, b), (c, d) = to_disp((r[0], r[1])), to_disp((r[2], r[3]))
+            return (min(a, c), min(b, d), max(a, c), max(b, d))
+
+        ocupados = [_rect_disp(self._zona_norte()),
+                    _rect_disp(self._geometria_escala_mapa()["caja"])]
+        artistas = list(extra_ocupados)
+        leg = ax.get_legend()
+        if leg is not None:
+            artistas.append(leg)
+        if renderer is not None:
+            for art in artistas:
+                try:
+                    bb = art.get_window_extent(renderer)
+                    ocupados.append((bb.x0, bb.y0, bb.x1, bb.y1))
+                except Exception:
+                    pass
+
+        def _solapa(a, b, m=1.0):
+            return not (a[2] + m < b[0] or b[2] + m < a[0]
+                        or a[3] + m < b[1] or b[3] + m < a[1])
+
+        estilo = dict(fontsize=TIPO_ETIQUETA, color=COLOR_TINTA, zorder=13,
+                      path_effects=halo(2.2), clip_on=False)
+        tx = ax.get_xaxis_transform()   # x datos, y fracción de ejes
+        ty = ax.get_yaxis_transform()   # x fracción de ejes, y datos
+        d = 0.006
+        rotulos = []
+        for x in xs:
+            txt = self._formato_coord(x)
+            rotulos.append(ax.text(x, d, txt, ha="center", va="bottom",
+                                   transform=tx, **estilo))
+            rotulos.append(ax.text(x, 1 - d, txt, ha="center", va="top",
+                                   transform=tx, **estilo))
+        dx = d * 0.7
+        for y in ys:
+            txt = self._formato_coord(y)
+            rotulos.append(ax.text(dx, y, txt, ha="left", va="center",
+                                   rotation=90, transform=ty, **estilo))
+            rotulos.append(ax.text(1 - dx, y, txt, ha="right", va="center",
+                                   rotation=90, transform=ty, **estilo))
+
+        if renderer is None:
+            return
+        for t in rotulos:
+            try:
+                bb = t.get_window_extent(renderer)
+            except Exception:
+                continue
+            r = (bb.x0, bb.y0, bb.x1, bb.y1)
+            if any(_solapa(r, o) for o in ocupados):
+                t.remove()
+            else:
+                ocupados.append(r)
 
     # ── Escala gráfica sobre el mapa ─────────────────────────────────
 
     def dibujar_escala_grafica_mapa(self):
-        """Dibuja una barra de escala discreta en la esquina inferior izquierda del mapa."""
+        """Barra de escala en la esquina inferior izquierda del mapa, sobre
+        una caja blanca semitransparente para que se lea sobre cualquier fondo.
+        Rótulos con unidad: 0 | 250 m | 500 m."""
         ax = self.ax_map
-        barra_m = BARRA_ESCALA_M.get(self.escala, 1000)
+        g = self._geometria_escala_mapa()
+        barra_m = g["barra_m"]
+        cx0, cy0, cx1, cy1 = g["caja"]
 
-        xlim = ax.get_xlim()
-        ylim = ax.get_ylim()
-        rango_x = xlim[1] - xlim[0]
-        rango_y = ylim[1] - ylim[0]
-
-        # Posición: esquina inferior izquierda con margen
-        x0 = xlim[0] + rango_x * 0.02
-        y0 = ylim[0] + rango_y * 0.025
-        bar_h = rango_y * 0.006  # altura de la barra
+        ax.add_patch(Rectangle(
+            (cx0, cy0), cx1 - cx0, cy1 - cy0, transform=ax.transAxes,
+            facecolor="white", edgecolor="#9AA5B1", linewidth=0.4,
+            alpha=0.88, zorder=10))
 
         n_seg = 4
-        seg_m = barra_m / n_seg
-        colores = ["#1C2333", "white"]
-
-        # Segmentos alternados
+        seg_w = g["bar_w"] / n_seg
         for i in range(n_seg):
-            x_seg = x0 + i * seg_m
-            rect = Rectangle((x_seg, y0), seg_m, bar_h,
-                              facecolor=colores[i % 2], edgecolor="#1C2333",
-                              linewidth=0.4, zorder=11)
-            ax.add_patch(rect)
+            ax.add_patch(Rectangle(
+                (g["bar_x0"] + i * seg_w, g["bar_y0"]), seg_w, g["bar_h"],
+                transform=ax.transAxes,
+                facecolor=COLOR_TINTA if i % 2 == 0 else "white",
+                edgecolor=COLOR_TINTA, linewidth=0.4, zorder=11))
 
-        # Etiqueta: "0" al inicio y distancia total al final
-        fsz = 3.5
-        y_txt = y0 + bar_h + rango_y * 0.004
-        _txt_bbox = dict(boxstyle="round,pad=0.08", facecolor="white",
-                         edgecolor="none", alpha=0.6)
-        ax.text(x0, y_txt, "0", ha="center", va="bottom",
-                fontsize=fsz, color="#1C2333", zorder=12, bbox=_txt_bbox)
+        estilo = dict(fontsize=TIPO_PEQUENO, color=COLOR_TINTA, zorder=12,
+                      transform=ax.transAxes, va="bottom", ha="center")
+        y_txt = g["txt_dist_y"]
+        ax.text(g["bar_x0"], y_txt, "0", **estilo)
+        ax.text(g["bar_x0"] + g["bar_w"] / 2, y_txt,
+                formato_distancia(barra_m / 2), **estilo)
+        ax.text(g["bar_x0"] + g["bar_w"], y_txt,
+                formato_distancia(barra_m), **estilo)
 
-        # Etiqueta final con unidad
-        if barra_m >= 1000:
-            label_fin = f"{barra_m // 1000} km"
-        else:
-            label_fin = f"{barra_m} m"
-        ax.text(x0 + barra_m, y_txt, label_fin, ha="center", va="bottom",
-                fontsize=fsz, color="#1C2333", zorder=12, bbox=_txt_bbox)
-
-        # Marca intermedia
-        mid_m = barra_m // 2
-        if mid_m >= 1000:
-            label_mid = f"{mid_m // 1000}"
-        else:
-            label_mid = str(mid_m)
-        ax.text(x0 + mid_m, y_txt, label_mid, ha="center", va="bottom",
-                fontsize=fsz, color="#1C2333", zorder=12, bbox=_txt_bbox)
+        escala_txt = f"Escala 1:{formato_miles(self.escala)}"
+        ax.text((cx0 + cx1) / 2, g["txt_escala_y"], escala_txt,
+                fontweight="bold", **estilo)
 
     # ── Etiquetas ──────────────────────────────────────────────────────
 
@@ -166,12 +328,13 @@ class ElementosMapaMixin:
             else:
                 cx, cy = geom.centroid.x, geom.centroid.y
 
-            # Centrada horizontalmente, desplazada encima de la geometría
+            # Centrada horizontalmente, desplazada encima de la geometría.
+            # Halo blanco en lugar de caja: se lee sobre ortofoto u otros
+            # fondos oscuros sin tapar el mapa.
             txt = self.ax_map.annotate(
                 texto, xy=(cx, cy + offset_y), fontsize=5.5, fontweight="bold",
                 color="#1A1A2E", ha="center", va="bottom", zorder=8,
-                bbox=dict(boxstyle="round,pad=0.2", facecolor="white",
-                          edgecolor="#2C3E50", linewidth=0.5, alpha=0.90),
+                path_effects=halo(2.5),
             )
             textos_anotados.append(txt)
 
@@ -220,8 +383,7 @@ class ElementosMapaMixin:
                 texto, xy=(cx, cy + offset_y), fontsize=6.5,
                 fontweight="bold", fontstyle="italic",
                 color="#C2185B", ha="center", va="bottom", zorder=7,
-                bbox=dict(boxstyle="round,pad=0.2", facecolor="white",
-                          edgecolor="#C2185B", linewidth=0.5, alpha=0.9),
+                path_effects=halo(2.5),
             )
             textos_anotados.append(txt)
 
@@ -275,11 +437,16 @@ class ElementosMapaMixin:
 
     # ── Leyenda ────────────────────────────────────────────────────────
 
+    _LEYENDA_MAX_CHARS = 34
+
     def dibujar_leyenda(self, items_leyenda, stats_resumen=None):  # noqa: ARG002
         from matplotlib.patches import Patch
         handles = []
         for item in items_leyenda:
             label, color, geom_type, linestyle, marker, facecolor = item[:6]
+            # Etiquetas largas con elipsis: la leyenda no debe crecer hasta
+            # tapar medio mapa ni desbordar su marco
+            label = recortar_texto(label, self._LEYENDA_MAX_CHARS)
             if "point" in geom_type:
                 h = Line2D([0], [0], marker=marker or "o", color="w",
                            markerfacecolor=color, markersize=5, label=label)
@@ -293,10 +460,14 @@ class ElementosMapaMixin:
             handles.append(h)
 
         if handles:
+            # Anclada justo encima de la caja de la escala gráfica
+            g = self._geometria_escala_mapa()
+            x_anc = g["caja"][0]
+            y_anc = g["caja"][3] + 2.0 * g["fy"]
             leg = self.ax_map.legend(
-                handles=handles, loc="lower left", fontsize=4.5,
-                bbox_to_anchor=(0.0, 0.045),
-                title="LEYENDA", title_fontsize=5,
+                handles=handles, loc="lower left", fontsize=TIPO_ETIQUETA,
+                bbox_to_anchor=(x_anc, y_anc), borderaxespad=0.0,
+                title="LEYENDA", title_fontsize=TIPO_SECCION,
                 frameon=True, framealpha=0.92, facecolor="white",
                 edgecolor="#2C3E50", borderpad=0.6, labelspacing=0.5,
                 handlelength=1.8, handletextpad=0.6,
@@ -316,13 +487,15 @@ class ElementosMapaMixin:
         from matplotlib.path import Path
         import matplotlib.patches as mpatches
 
-        # Posición (esquina superior izquierda) y tamaño
-        cx, cy = 0.045, 0.90
-        h = 0.055       # altura total de la flecha
-        w = 0.014        # ancho de la flecha
+        # Posición (esquina superior izquierda) y tamaño: constantes de
+        # clase compartidas con _zona_norte() para que los rótulos de
+        # coordenadas nunca la pisen
+        cx, cy = self._NORTE_CX, self._NORTE_CY
+        h = self._NORTE_H        # altura total de la flecha
+        w = self._NORTE_W        # ancho de la flecha
 
         # Fondo: rectángulo redondeado sutil
-        bg_w, bg_h = 0.042, 0.095
+        bg_w, bg_h = self._NORTE_BG_W, self._NORTE_BG_H
         bg = FancyBboxPatch(
             (cx - bg_w / 2, cy - h * 0.45 - 0.006), bg_w, bg_h,
             boxstyle="round,pad=0.005", facecolor="white", edgecolor="#AAAAAA",
@@ -355,5 +528,6 @@ class ElementosMapaMixin:
 
         # Letra "N" — limpia, encima de la flecha
         ax.text(cx, cy + h * 0.5 + 0.01, "N",
-                ha="center", va="bottom", fontsize=5.5, fontweight="bold",
-                color="#1C2333", transform=ax.transAxes, zorder=16)
+                ha="center", va="bottom", fontsize=TIPO_SECCION + 0.5,
+                fontweight="bold", color=COLOR_TINTA,
+                transform=ax.transAxes, zorder=16)

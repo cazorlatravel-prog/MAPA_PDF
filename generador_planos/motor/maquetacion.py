@@ -21,49 +21,105 @@ import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 import matplotlib.font_manager as fm
+import matplotlib.patheffects as pe
 
 # ── Tipografía corporativa para PDFs ──
-_FONT_CORP = "Noto Sans HK"
-_FONT_PATHS = [
-    "/root/.fonts/NotoSansHK-Variable.ttf",
-    "/usr/share/fonts/truetype/noto/NotoSansHK-Regular.ttf",
-    "/usr/share/fonts/opentype/noto/NotoSansHK-Regular.otf",
-    "/usr/share/fonts/noto/NotoSansHK-Regular.ttf",
-    os.path.join(os.path.expanduser("~"), ".fonts", "NotoSansHK-Variable.ttf"),
-    # macOS
-    "/System/Library/Fonts/Supplemental/NotoSansHK-Regular.otf",
-    "/Library/Fonts/NotoSansHK-Regular.otf",
-    # Windows
-    os.path.join(os.environ.get("LOCALAPPDATA", ""), "Microsoft",
-                 "Windows", "Fonts", "NotoSansHK-Regular.ttf"),
-]
-_FONT_LOADED = False
-for _fpath in _FONT_PATHS:
-    if _fpath and os.path.isfile(_fpath):
-        try:
-            fm.fontManager.addfont(_fpath)
-            _FONT_LOADED = True
-            break
-        except Exception:
-            continue
-if _FONT_LOADED or any(f.name == _FONT_CORP for f in fm.fontManager.ttflist):
-    matplotlib.rcParams["font.family"] = "sans-serif"
-    matplotlib.rcParams["font.sans-serif"] = [_FONT_CORP, "DejaVu Sans"]
-else:
-    import warnings as _w
-    _w.warn(
-        f"Fuente '{_FONT_CORP}' no encontrada. "
-        f"Los PDFs usarán DejaVu Sans como alternativa."
-    )
-    matplotlib.rcParams["font.family"] = "sans-serif"
-    matplotlib.rcParams["font.sans-serif"] = ["DejaVu Sans"]
+# Orden de preferencia válido en Windows (Segoe UI) y Linux (Noto Sans /
+# Liberation Sans). DejaVu Sans viene incluida con matplotlib, así que
+# siempre hay una alternativa y no hace falta avisar.
+FUENTES_PREFERIDAS = ["Segoe UI", "Noto Sans", "Liberation Sans", "DejaVu Sans"]
+
+
+def resolver_fuente(preferidas=None):
+    """Devuelve el nombre de la primera fuente instalada de ``preferidas``.
+
+    Consulta ``matplotlib.font_manager`` (sin buscar ficheros sueltos ni
+    emitir avisos). Si ninguna está instalada, devuelve "DejaVu Sans",
+    que matplotlib incluye siempre.
+    """
+    preferidas = list(preferidas or FUENTES_PREFERIDAS)
+    try:
+        instaladas = {f.name for f in fm.fontManager.ttflist}
+    except Exception:
+        instaladas = set()
+    for nombre in preferidas:
+        if nombre in instaladas:
+            return nombre
+    return "DejaVu Sans"
+
+
+# Se resuelve UNA vez al importar el módulo
+FUENTE_CORP = resolver_fuente()
+matplotlib.rcParams["font.family"] = "sans-serif"
+matplotlib.rcParams["font.sans-serif"] = list(dict.fromkeys(
+    [FUENTE_CORP, "DejaVu Sans"]))
 from matplotlib.patches import FancyBboxPatch, Rectangle
 from matplotlib.lines import Line2D
 from .escala import (
     MARGENES_MM, FORMATOS, INTERVALOS_GRID, BARRA_ESCALA_M,
     RATIO_MAPA_ANCHO, RATIO_MAPA_ALTO,
 )
-from ._elementos_mapa import ElementosMapaMixin
+from ._elementos_mapa import (  # noqa: F401 - re-exportados
+    ElementosMapaMixin, TIPO_TITULO, TIPO_SECCION, TIPO_ETIQUETA,
+    TIPO_PEQUENO, halo, formato_miles, recortar_texto,
+)
+
+
+def texto_centro_utm(cx, cy):
+    """Centro del plano en UTM con separador de miles y sin decimales.
+
+    >>> texto_centro_utm(502000.4, 4196000.6)
+    'X 502.000 · Y 4.196.001'
+    """
+    return f"X {formato_miles(cx)} · Y {formato_miles(cy)}"
+
+
+def centro_geograficas(cx, cy):
+    """(lat, lon) en grados de un punto EPSG:25830, o None sin pyproj."""
+    try:
+        from pyproj import Transformer
+        tr = Transformer.from_crs("EPSG:25830", "EPSG:4326", always_xy=True)
+        lon, lat = tr.transform(float(cx), float(cy))
+        if not (math.isfinite(lat) and math.isfinite(lon)):
+            return None
+        return lat, lon
+    except Exception:
+        return None
+
+
+def texto_centro_geo(cx, cy):
+    """Texto 'Lat 37,90968° · Lon -2,97697°' (5 decimales) o '' sin pyproj."""
+    ll = centro_geograficas(cx, cy)
+    if ll is None:
+        return ""
+    lat, lon = ll
+    return (f"Lat {lat:.5f}° · Lon {lon:.5f}°").replace(".", ",")
+
+
+def texto_base_cartografica(proveedor):
+    """'Base cartográfica: {proveedor}' + atribución del proveedor si existe."""
+    proveedor = str(proveedor or "").strip()
+    atrib = ""
+    try:
+        from .cartografia import obtener_atribucion
+        atrib = str(obtener_atribucion(proveedor) or "").strip()
+    except Exception:
+        atrib = ""
+    if not proveedor:
+        return f"Base cartográfica: {atrib}" if atrib else ""
+    if atrib:
+        nucleo = atrib.lstrip("©(c) ").lower()
+        if proveedor.lower() in nucleo:
+            # "© OpenStreetMap" ya nombra al proveedor: no repetirlo
+            return f"Base cartográfica: {atrib}"
+        return f"Base cartográfica: {proveedor} · {atrib}"
+    return f"Base cartográfica: {proveedor}"
+
+
+def fecha_cajetin(cajetin=None):
+    """Fecha del cajetín si se indicó; si no, la de hoy (dd/mm/aaaa)."""
+    f = str((cajetin or {}).get("fecha", "") or "").strip()
+    return f if f else date.today().strftime("%d/%m/%Y")
 
 # ── Etiquetas embellecidas para campos conocidos (opcional) ─────────────
 
@@ -296,7 +352,7 @@ class MaquetadorPlano(ElementosMapaMixin):
         n_rows = len(rows)
         titulo = ("DATOS DE LAS INFRAESTRUCTURAS" if n_rows > 1
                   else "DATOS DE LA INFRAESTRUCTURA")
-        ax.text(0.5, 0.97, titulo, ha="center", va="top", fontsize=5,
+        ax.text(0.5, 0.97, titulo, ha="center", va="top", fontsize=TIPO_SECCION,
                 fontweight="bold", color="white", transform=ax.transAxes,
                 bbox=dict(boxstyle="round,pad=0.12", facecolor="#2C3E50",
                           edgecolor="none"))
@@ -709,7 +765,7 @@ class MaquetadorPlano(ElementosMapaMixin):
 
         # Título dentro del panel
         ax.text(0.5, 0.97, "LOCALIZACIÓN", ha="center", va="top",
-                fontsize=5, fontweight="bold", color="white",
+                fontsize=TIPO_SECCION, fontweight="bold", color="white",
                 transform=ax.transAxes, zorder=12,
                 bbox=dict(boxstyle="round,pad=0.15", facecolor="#2C3E50",
                           edgecolor="none"))
@@ -836,7 +892,7 @@ class MaquetadorPlano(ElementosMapaMixin):
 
             # Título
             ax.text(0.5, cat_top - 0.005, "SIMBOLOGÍA",
-                    ha="center", va="top", fontsize=4.2, fontweight="bold",
+                    ha="center", va="top", fontsize=TIPO_ETIQUETA, fontweight="bold",
                     color=COL_DARK, zorder=3)
 
             margin_x = 0.05
@@ -883,7 +939,7 @@ class MaquetadorPlano(ElementosMapaMixin):
                         transform=ax.transAxes, zorder=3))
 
                 # Etiqueta
-                txt = str(label)[:22]
+                txt = recortar_texto(label, 22)
                 ax.text(text_x, y, txt, ha=text_ha, va="center",
                         fontsize=3.8, color=COL_TXT,
                         transform=ax.transAxes, zorder=3)
@@ -900,8 +956,16 @@ class MaquetadorPlano(ElementosMapaMixin):
         data_top = header_y - 0.018 - cat_zone_h  # desplazar según categorías
         margin_x = 0.05
 
-        fecha = date.today().strftime("%d/%m/%Y")
+        fecha = fecha_cajetin(caj)
         srs = "ETRS89 UTM H30N"
+
+        # Centro del plano: el recibido o, en su defecto, el del mapa
+        if cx_utm is None or cy_utm is None:
+            try:
+                _xl, _yl = self.ax_map.get_xlim(), self.ax_map.get_ylim()
+                cx_utm, cy_utm = sum(_xl) / 2, sum(_yl) / 2
+            except Exception:
+                cx_utm = cy_utm = None
 
         campos_caj = [
             ("PROYECTO", caj.get("proyecto", "")),
@@ -911,8 +975,16 @@ class MaquetadorPlano(ElementosMapaMixin):
             ("FIRMA", caj.get("firma", "")),
             ("FECHA", fecha),
             ("SRC", srs),
-            ("ESCALA", f"1:{self.escala:,}".replace(",", ".")),
         ]
+        # La escala ya figura rotulada sobre la barra gr\u00e1fica: su fila se
+        # sustituye por el centro del plano (UTM y geogr\u00e1ficas)
+        if cx_utm is not None and cy_utm is not None:
+            campos_caj.append(("CENTRO (UTM)", texto_centro_utm(cx_utm, cy_utm)))
+            _geo = texto_centro_geo(cx_utm, cy_utm)
+            if _geo:
+                campos_caj.append(("CENTRO (GEO)", _geo))
+        else:
+            campos_caj.append(("ESCALA", f"1:{self.escala:,}".replace(",", ".")))
 
         n_campos = len(campos_caj)
         # Espacio disponible entre data_top y la zona de la barra de escala
@@ -937,11 +1009,11 @@ class MaquetadorPlano(ElementosMapaMixin):
 
             # Etiqueta
             ax.text(margin_x + 0.02, y_mid, etiq,
-                    ha="left", va="center", fontsize=4.2,
+                    ha="left", va="center", fontsize=TIPO_ETIQUETA,
                     fontweight="bold", color=COL_MID, zorder=3)
-            # Valor
-            ax.text(1 - margin_x - 0.02, y_mid, str(valor),
-                    ha="right", va="center", fontsize=4.2,
+            # Valor (recortado con elipsis para no invadir la etiqueta)
+            ax.text(1 - margin_x - 0.02, y_mid, recortar_texto(valor, 40),
+                    ha="right", va="center", fontsize=TIPO_ETIQUETA,
                     color=COL_TXT, zorder=3)
 
         # Línea superior de la tabla
@@ -951,8 +1023,30 @@ class MaquetadorPlano(ElementosMapaMixin):
         # ═══════════════════════════════════════════════════════════════
         # ZONA INFERIOR: Barra de escala gráfica profesional
         # ═══════════════════════════════════════════════════════════════
-        barra_m = BARRA_ESCALA_M.get(self.escala, 1000)
-        barra_frac = 0.55
+        # La barra debe medir físicamente lo que dicen sus etiquetas a la
+        # escala del plano: frac = (metros -> mm de papel) / mm del panel.
+        try:
+            panel_w_mm = self.ax_esc.get_position().width * self.fmt_mm[0]
+        except Exception:
+            panel_w_mm = (self.fmt_mm[0] - MARGENES_MM["izq"]
+                          - MARGENES_MM["der"]) * 0.28
+
+        def _frac_barra(metros):
+            return (metros * 1000.0 / self.escala) / max(panel_w_mm, 1e-6)
+
+        # Elegir la mayor longitud "redonda" (divisible entre 4 para las
+        # subdivisiones) cuya barra + subdivisión izquierda (1/4 extra)
+        # quepa en el panel con margen. Los candidatos pequeños cubren
+        # escalas manuales grandes (1:500, 1:1.000) en formatos pequeños.
+        _candidatos = [20000, 10000, 5000, 4000, 2000, 1000,
+                       500, 400, 200, 100, 40, 20, 10, 4]
+        barra_m = _candidatos[-1]
+        for _m in _candidatos:
+            if _frac_barra(_m) * 1.25 <= 0.80:
+                barra_m = _m
+                break
+        # Último recurso: nunca salir del panel aunque ningún candidato quepa
+        barra_frac = min(_frac_barra(barra_m), 0.64)
         esc_y = 0.10
         bar_h = 0.022
 
@@ -1021,9 +1115,10 @@ class MaquetadorPlano(ElementosMapaMixin):
                     fontsize=3, color=COL_TXT, zorder=3)
 
         # ── Créditos: cartografía base ──
-        ax.text(0.5, 0.015, f"Base cartogr\u00e1fica: {proveedor}",
-                ha="center", va="bottom", fontsize=3.0, color="#888",
-                style="italic", zorder=3)
+        ax.text(0.5, 0.015,
+                recortar_texto(texto_base_cartografica(proveedor), 110),
+                ha="center", va="bottom", fontsize=TIPO_PEQUENO - 0.2,
+                color="#888", style="italic", zorder=3)
 
     # ── Leyenda lateral (Plantilla 2: ax_info) ──────────────────────────
 
@@ -1060,8 +1155,12 @@ class MaquetadorPlano(ElementosMapaMixin):
         pad_bot = 0.02           # margen inferior
 
         n_rows_max = max(mid, n_mon, 1)
+        # Fila extra para el aviso "+N más" si hay elementos que no caben
+        hay_ocultos = len(items_inf) > n_inf or len(items_mon) > n_mon
         # Altura total del contenido (título + subtítulo + filas + márgenes)
-        content_h = title_h + pad_top + slot_h * (1 + n_rows_max) + pad_bot
+        content_h = (title_h + pad_top
+                     + slot_h * (1 + n_rows_max + (1 if hay_ocultos else 0))
+                     + pad_bot)
         content_h = min(content_h, 1.0)
 
         y_top = 1.0
@@ -1077,7 +1176,7 @@ class MaquetadorPlano(ElementosMapaMixin):
                                 facecolor=C_GREEN, edgecolor=C_BORDER,
                                 linewidth=1.0, zorder=1))
         ax.text(0.5, y_top - title_h / 2, "LEYENDA", ha="center", va="center",
-                fontsize=5, fontweight="bold", color="white",
+                fontsize=TIPO_SECCION, fontweight="bold", color="white",
                 transform=ax.transAxes, zorder=2)
 
         # Divisoria vertical entre infra y montes
@@ -1104,8 +1203,15 @@ class MaquetadorPlano(ElementosMapaMixin):
                     facecolor=facecolor or (color + "55"),
                     edgecolor=color, linewidth=0.5,
                     transform=ax.transAxes, zorder=3))
-            ax.text(x_txt, y, str(label)[:16], ha="left", va="center",
-                    fontsize=2.8, color="#3A3A4A", transform=ax.transAxes, zorder=3)
+            ax.text(x_txt, y, recortar_texto(label, 20), ha="left",
+                    va="center", fontsize=TIPO_PEQUENO, color="#3A3A4A",
+                    transform=ax.transAxes, zorder=3)
+
+        def _dibujar_mas(x, y, n_ocultos):
+            if n_ocultos > 0:
+                ax.text(x, y, f"+{n_ocultos} más", ha="left",
+                        va="center", fontsize=TIPO_PEQUENO, color="#6A6A7A",
+                        style="italic", transform=ax.transAxes, zorder=3)
 
         # ── Posiciones verticales compactas ──
         sub_y = y_top - title_h - pad_top - slot_h * 0.5
@@ -1134,11 +1240,16 @@ class MaquetadorPlano(ElementosMapaMixin):
             y = first_y - i * slot_h
             _dibujar_item(0.67, 0.73, 0.74, y, item, slot_h)
 
+        # Elementos que no caben: indicarlo en lugar de omitirlos en silencio
+        y_mas = first_y - n_rows_max * slot_h
+        _dibujar_mas(0.02, y_mas, len(items_inf) - n_inf)
+        _dibujar_mas(0.67, y_mas, len(items_mon) - n_mon)
+
     # ── Cajetín lateral (Plantilla 2: ax_esc) ────────────────────────
 
     def dibujar_cajetin_lateral(self, row, cajetin=None, plantilla=None,
                                  num_plano=None, proveedor="",
-                                 campo_mapeo=None):
+                                 campo_mapeo=None, cx_utm=None, cy_utm=None):
         """Dibuja el cajetín completo estilo Junta de Andalucía.
 
         Estructura idéntica al plano de referencia (de arriba a abajo):
@@ -1341,14 +1452,38 @@ class MaquetadorPlano(ElementosMapaMixin):
                     tm_txt = f"T.M. {val}"
                     break
 
+        # Centro del plano (UTM + geográficas): el recibido o el del mapa
+        if cx_utm is None or cy_utm is None:
+            try:
+                _xl, _yl = self.ax_map.get_xlim(), self.ax_map.get_ylim()
+                cx_utm, cy_utm = sum(_xl) / 2, sum(_yl) / 2
+            except Exception:
+                cx_utm = cy_utm = None
+        lineas_centro = []
+        if cx_utm is not None and cy_utm is not None:
+            lineas_centro.append("Centro " + texto_centro_utm(cx_utm, cy_utm))
+            _geo = texto_centro_geo(cx_utm, cy_utm)
+            if _geo:
+                lineas_centro.append(_geo)
+
+        if lineas_centro:
+            # 4 líneas: M.P. / T.M. arriba, centro del plano abajo (menor)
+            y_monte, y_tm = 0.80, 0.58
+        else:
+            y_monte, y_tm = 0.65, 0.30
         if monte_txt:
-            ax.text(0.03, monte_y + monte_h * 0.65, monte_txt,
+            ax.text(0.03, monte_y + monte_h * y_monte,
+                    recortar_texto(monte_txt, 42),
                     ha="left", va="center", fontsize=4.5, color=C_TXT,
                     fontweight="bold", zorder=3)
         if tm_txt:
-            ax.text(0.03, monte_y + monte_h * 0.30, tm_txt,
+            ax.text(0.03, monte_y + monte_h * y_tm, recortar_texto(tm_txt, 42),
                     ha="left", va="center", fontsize=4.5, color=C_TXT,
                     fontweight="bold", zorder=3)
+        for _k, _lin in enumerate(lineas_centro):
+            ax.text(0.03, monte_y + monte_h * (0.36 - _k * 0.20), _lin,
+                    ha="left", va="center", fontsize=TIPO_PEQUENO - 0.4,
+                    color=C_TXT_LIGHT, zorder=3)
 
         # Nº de plano
         try:
@@ -1472,7 +1607,9 @@ class MaquetadorPlano(ElementosMapaMixin):
                      9: "SEPTIEMBRE", 10: "OCTUBRE", 11: "NOVIEMBRE",
                      12: "DICIEMBRE"}
         hoy = date.today()
-        fecha = f"{_MESES_ES[hoy.month]} {hoy.year}"
+        # Fecha del cajetín si se indicó; si no, "MES AAAA" (estilo Junta)
+        fecha = (str(caj.get("fecha", "") or "").strip()
+                 or f"{_MESES_ES[hoy.month]} {hoy.year}")
         ax.text(mid_x, aut_y + aut_h * 0.36,
                 fecha, ha="center", va="center",
                 fontsize=3.5, fontweight="bold", color=C_GREEN_DARK, zorder=3)
@@ -1483,6 +1620,13 @@ class MaquetadorPlano(ElementosMapaMixin):
         ax.text(mid_x, aut_y + aut_h * 0.06,
                 "ETRS89 UTM 30N", ha="center", va="center",
                 fontsize=2.8, fontweight="bold", color=C_GREEN_DARK, zorder=3)
+
+        # ── Créditos: base cartográfica + atribución (sobre el cajetín) ──
+        txt_base = texto_base_cartografica(proveedor)
+        if txt_base:
+            ax.text(0.5, org_y + org_h + 0.012, recortar_texto(txt_base, 90),
+                    ha="center", va="bottom", fontsize=TIPO_PEQUENO - 0.6,
+                    color="#888888", style="italic", zorder=3, wrap=False)
 
 
     # ── Cajetín (integrado) ────────────────────────────────────────────
@@ -1581,7 +1725,7 @@ class MaquetadorPlano(ElementosMapaMixin):
             titulo_final = str(row.get("Nombre_Infra", "INFRAESTRUCTURA FORESTAL"))
 
         ax_cab.text(0.5, 0.60, titulo_final.upper(), ha="center",
-                    va="center", fontsize=7, fontweight="bold",
+                    va="center", fontsize=TIPO_TITULO, fontweight="bold",
                     color=c_texto)
 
         ax_cab.text(0.5, 0.20, subtit.upper(), ha="center", va="center",
@@ -1627,11 +1771,57 @@ class MaquetadorPlano(ElementosMapaMixin):
             fontsize=2.5, color="#999999", alpha=0.35,
         )
 
-    def guardar(self, ruta_out: str, dpi_save: int = None):
+    # ── Marca de agua ──────────────────────────────────────────────────
+
+    def dibujar_marca_agua(self, texto):
+        """Texto grande, gris claro y girado 30° centrado sobre el mapa
+        (p. ej. "BORRADOR"). Va por encima de todo y recortado al mapa.
+        Devuelve el ``Text`` creado o None si ``texto`` está vacío."""
+        texto = str(texto or "").strip()
+        if not texto or self.ax_map is None:
+            return None
+        ax = self.ax_map
+        # Tamaño proporcional al mapa: la diagonal ocupa ~60 % del ancho
         try:
-            self.fig.savefig(ruta_out, format="pdf",
-                              dpi=dpi_save or self.dpi,
+            w_mm, h_mm = self._mapa_mm()
+        except Exception:
+            w_mm, h_mm = self.fmt_mm[0] * 0.9, self.fmt_mm[1] * 0.7
+        ancho_obj_mm = min(w_mm, h_mm * 1.6) * 0.75
+        # ~0.62 em de ancho medio por carácter en mayúsculas sans-serif
+        fsz = ancho_obj_mm / 25.4 * 72 / (0.62 * max(len(texto), 1))
+        fsz = max(12.0, min(fsz, 160.0))
+        t = ax.text(0.5, 0.5, texto, transform=ax.transAxes,
+                    ha="center", va="center", rotation=30,
+                    rotation_mode="anchor", fontsize=fsz, fontweight="bold",
+                    color="#5F6670", alpha=0.13, zorder=50, clip_on=True)
+        # Contorno blanco fino: sobre fondos de tono medio (ortofoto) el
+        # relleno gris apenas se distingue; el contorno lo hace legible
+        t.set_path_effects([pe.withStroke(linewidth=max(1.0, fsz / 40),
+                                          foreground="white")])
+        t.set_clip_path(ax.patch)
+        return t
+
+    # ── Guardado ───────────────────────────────────────────────────────
+
+    def guardar(self, ruta_out: str, dpi_save: int = None,
+                formatos=("pdf",)):
+        """Guarda el PDF en ``ruta_out`` y, si ``formatos`` incluye "png"
+        o "jpg"/"jpeg", copias raster con el mismo nombre base. Cierra
+        siempre la figura."""
+        dpi = dpi_save or self.dpi
+        fmts = [str(f).lower().lstrip(".") for f in (formatos or ("pdf",))]
+        try:
+            self.fig.savefig(ruta_out, format="pdf", dpi=dpi,
                               facecolor="white")
+            base = os.path.splitext(ruta_out)[0]
+            if "png" in fmts:
+                self.fig.savefig(base + ".png", format="png", dpi=dpi,
+                                  facecolor="white")
+            if "jpg" in fmts or "jpeg" in fmts:
+                self.fig.savefig(base + ".jpg", format="jpg", dpi=dpi,
+                                  facecolor="white",
+                                  pil_kwargs={"quality": 92,
+                                              "optimize": True})
         finally:
             plt.close(self.fig)
 

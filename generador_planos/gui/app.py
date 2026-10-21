@@ -10,10 +10,11 @@ from tkinter import ttk, filedialog, messagebox
 
 from .estilos import (
     COLOR_FONDO_APP, COLOR_ACENTO, COLOR_ACENTO2, COLOR_TEXTO_GRIS,
-    COLOR_PANEL, COLOR_TEXTO, COLOR_BORDE, COLOR_HEADER, COLOR_ENTRY,
+    COLOR_PANEL, COLOR_PANEL_ALT, COLOR_TEXTO, COLOR_BORDE, COLOR_HEADER,
+    COLOR_ENTRY,
     FONT_BOLD, FONT_MONO, FONT_SMALL, FONT_SUBTITULO, FONT_SECCION,
     FONT_BOTON,
-    aplicar_estilos, crear_boton,
+    aplicar_estilos, crear_boton, crear_tooltip,
 )
 from .panel_capas import PanelCapas
 from .panel_config import PanelConfig
@@ -23,8 +24,12 @@ from .panel_simbologia import PanelSimbologia
 from .panel_cajetin import PanelCajetin
 from .panel_generacion import PanelGeneracion
 from .panel_info import PanelInfo
+from . import recientes
 from ..motor.generador import GeneradorPlanos
 from ..motor.proyecto import Proyecto
+from ..motor.escala import FORMATOS
+from ..motor.maquetacion import CALIDADES_PDF
+from ..motor.plantillas_layout import PLANTILLAS_DISPONIBLES
 
 
 class App(tk.Tk):
@@ -41,8 +46,147 @@ class App(tk.Tk):
         self.motor = GeneradorPlanos()
         self._ultimo_dir_proyecto = os.path.expanduser("~")
 
+        self._establecer_icono()
         aplicar_estilos(self)
         self._construir_ui()
+        self._configurar_atajos()
+        self._cargar_ajustes()
+        self.protocol("WM_DELETE_WINDOW", self._al_cerrar)
+
+    # ── Ajustes persistentes entre sesiones ──────────────────────────────
+
+    def _recoger_ajustes(self) -> dict:
+        """Opciones de la interfaz que merece la pena recordar."""
+        try:
+            return {
+                "proveedor": self.panel_config.proveedor.get(),
+                "formato": self.panel_config.formato.get(),
+                "calidad_pdf": self.panel_config._calidad_pdf.get(),
+                "prov_localizacion": self.panel_config._prov_localizacion.get(),
+                "layout_key": self.panel_cajetin.obtener_layout_key(),
+                "salida": self.panel_config.salida.get(),
+                "patron_nombre": self.panel_config.patron_nombre.get(),
+                "opciones_salida": self.panel_generacion.obtener_opciones_salida(),
+                "geometria": self.geometry(),
+            }
+        except Exception:
+            return {}
+
+    def _cargar_ajustes(self):
+        """Restaura las últimas opciones usadas (si existen y son válidas)."""
+        from . import ajustes
+        datos = ajustes.cargar_ajustes()
+        if not datos:
+            return
+
+        def _set_combo(combo, var, valor):
+            # Solo aceptar valores que sigan existiendo en el desplegable
+            try:
+                if valor and valor in list(combo["values"]):
+                    var.set(valor)
+                    return True
+            except Exception:
+                pass
+            return False
+
+        pc = self.panel_config
+        try:
+            if _set_combo(pc._cb_prov, pc.proveedor, datos.get("proveedor")):
+                pc._on_proveedor_changed()
+            if _set_combo(pc._cb_prov_loc, pc._prov_localizacion,
+                          datos.get("prov_localizacion")):
+                pc._on_prov_loc_changed()
+            if datos.get("formato") in FORMATOS:
+                pc.formato.set(datos["formato"])
+            if datos.get("calidad_pdf") in CALIDADES_PDF:
+                pc._calidad_pdf.set(datos["calidad_pdf"])
+            if datos.get("salida") and os.path.isdir(datos["salida"]):
+                pc.salida.set(datos["salida"])
+            if datos.get("patron_nombre"):
+                pc.patron_nombre.set(datos["patron_nombre"])
+            lk = datos.get("layout_key")
+            if lk in PLANTILLAS_DISPONIBLES:
+                self.panel_cajetin._layout_key.set(lk)
+                self.motor.layout_key = lk
+            self.panel_generacion.cargar_opciones_salida(
+                datos.get("opciones_salida") or {})
+            geo = datos.get("geometria")
+            if isinstance(geo, str) and "x" in geo:
+                try:
+                    self.geometry(geo)
+                except Exception:
+                    pass
+        except Exception as e:
+            self._escribir_log(f"No se pudieron restaurar los ajustes: {e}", "warn")
+
+    def _guardar_ajustes(self):
+        from . import ajustes
+        datos = self._recoger_ajustes()
+        if datos:
+            ajustes.guardar_ajustes(datos)
+
+    def _al_cerrar(self):
+        """Guarda los ajustes y cierra la ventana."""
+        try:
+            self._guardar_ajustes()
+        finally:
+            self.destroy()
+
+    # ── Icono de ventana ─────────────────────────────────────────────────
+
+    def _establecer_icono(self):
+        """Pone el icono de la app en la barra de título/tareas.
+
+        Busca assets/icon.ico tanto en el repositorio como dentro del
+        .exe (sys._MEIPASS). Si no existe o la plataforma no admite .ico,
+        se deja el icono por defecto sin fallar.
+        """
+        import sys
+        candidatos = []
+        base_frozen = getattr(sys, "_MEIPASS", None)
+        if base_frozen:
+            candidatos.append(os.path.join(base_frozen, "assets", "icon.ico"))
+        raiz = os.path.dirname(os.path.dirname(os.path.dirname(
+            os.path.abspath(__file__))))
+        candidatos.append(os.path.join(raiz, "assets", "icon.ico"))
+        for ruta in candidatos:
+            if os.path.isfile(ruta):
+                try:
+                    self.iconbitmap(ruta)
+                    return
+                except Exception:
+                    continue
+
+    # ── Errores no capturados en callbacks de Tk ─────────────────────────
+
+    def report_callback_exception(self, exc, val, tb):
+        """Registra y muestra errores de callbacks de Tkinter.
+
+        En el .exe (modo ventana) no hay consola: sin esto, un error en un
+        botón no se veía en ningún sitio y la app "no hacía nada".
+        """
+        import traceback as _tb
+        texto = "".join(_tb.format_exception(exc, val, tb))
+        try:
+            from pathlib import Path
+            carpeta = Path.home() / ".mapa_pdf_cache"
+            carpeta.mkdir(parents=True, exist_ok=True)
+            with open(carpeta / "error.log", "a", encoding="utf-8") as fh:
+                from datetime import datetime
+                fh.write(f"\n[{datetime.now():%Y-%m-%d %H:%M:%S}]\n{texto}")
+        except Exception:
+            pass
+        try:
+            self._escribir_log(f"✗ Error inesperado: {val}", "error")
+        except Exception:
+            pass
+        try:
+            messagebox.showerror(
+                "Error inesperado",
+                f"{val}\n\nSe ha guardado el detalle en:\n"
+                f"{os.path.join(os.path.expanduser('~'), '.mapa_pdf_cache', 'error.log')}")
+        except Exception:
+            pass
 
     def _construir_ui(self):
         # ── Barra superior ──
@@ -208,6 +352,22 @@ class App(tk.Tk):
             activebackground=COLOR_ACENTO, activeforeground="#FFFFFF")
         btn_cargar.pack(side="left")
 
+        # Menú de proyectos recientes
+        self._mb_recientes_proy = tk.Menubutton(
+            btn_f, text="▾", font=FONT_BOTON,
+            bg=COLOR_BORDE, fg=COLOR_TEXTO, relief="flat", cursor="hand2",
+            padx=6, pady=3, bd=0, highlightthickness=0,
+            activebackground=COLOR_ACENTO, activeforeground="#FFFFFF")
+        self._menu_recientes_proy = tk.Menu(
+            self._mb_recientes_proy, tearoff=0,
+            bg=COLOR_PANEL_ALT, fg=COLOR_TEXTO,
+            activebackground=COLOR_ACENTO, activeforeground="#FFFFFF",
+            font=FONT_SMALL)
+        self._mb_recientes_proy.configure(menu=self._menu_recientes_proy)
+        self._mb_recientes_proy.pack(side="left", padx=(2, 0))
+        crear_tooltip(self._mb_recientes_proy, "Proyectos abiertos recientemente")
+        self._actualizar_menu_recientes_proyecto()
+
         btn_info = tk.Button(
             btn_f, text="\u2139\ufe0f  Info", command=self._mostrar_info,
             font=FONT_BOTON, bg=COLOR_BORDE, fg=COLOR_TEXTO,
@@ -333,7 +493,10 @@ class App(tk.Tk):
                 v = row.get(col)
                 vals.append("\u2014" if v is None or str(v) == "nan" else str(v))
             tag = "par" if i % 2 == 0 else "impar"
-            self._tabla.insert("", "end", values=vals, tags=(tag,))
+            # iid = posici\u00f3n real en el GeoDataFrame. Con la tabla filtrada,
+            # Treeview.index() devolver\u00eda la posici\u00f3n visual (0,1,2...) y la
+            # generaci\u00f3n usar\u00eda infraestructuras equivocadas.
+            self._tabla.insert("", "end", iid=str(i), values=vals, tags=(tag,))
 
         n = len(list(indices)) if not isinstance(indices, range) else len(indices)
         self._escribir_log(f"Tabla actualizada: {n} infraestructuras.", "info")
@@ -449,6 +612,9 @@ class App(tk.Tk):
         self.motor.wfs_custom_localizacion = self.panel_config.wfs_custom_localizacion
         self.motor.escala_localizacion = self.panel_config.escala_localizacion
         self.motor.prov_localizacion = self.panel_config._prov_localizacion.get()
+        # Capas WMS superpuestas y opciones de salida (formato / marca de agua)
+        self.motor.overlays_wms = self.panel_config.obtener_overlays()
+        self.panel_generacion._aplicar_opciones_salida()
         if self.panel_config.usa_excel and self.panel_config.ruta_excel:
             try:
                 self.motor.cargar_excel_tabla(
@@ -520,6 +686,8 @@ class App(tk.Tk):
             p.plantilla = self.panel_cajetin.obtener_plantilla()
             p.simbologia = self.motor.gestor_simbologia.to_dict()
             p.capas_extra = self.motor.gestor_capas.to_dict()
+            p.overlays_wms = self.panel_config.obtener_overlays()
+            p.opciones_salida = self.panel_generacion.obtener_opciones_salida()
             p.origen_datos_tabla = self.panel_config._origen_datos.get()
             p.ruta_excel_tabla = self.panel_config.ruta_excel
             p.hoja_excel_tabla = self.panel_config.hoja_excel
@@ -573,18 +741,27 @@ class App(tk.Tk):
             p.campos_orden = list(self.panel_campos._campos_orden)
 
             p.guardar(ruta)
+            recientes.agregar_reciente(recientes.TIPO_PROYECTO, ruta)
+            self._actualizar_menu_recientes_proyecto()
             self._escribir_log(f"Proyecto guardado: {ruta}", "ok")
         except Exception as e:
             self._escribir_log(f"Error al guardar proyecto: {e}", "error")
             messagebox.showerror("Error", str(e))
 
-    def _cargar_proyecto(self):
-        ruta = filedialog.askopenfilename(
-            title="Cargar proyecto",
-            filetypes=[("Proyecto JSON", "*.json")],
-            initialdir=self._ultimo_dir_proyecto,
-        )
+    def _cargar_proyecto(self, ruta: str = None):
         if not ruta:
+            ruta = filedialog.askopenfilename(
+                title="Cargar proyecto",
+                filetypes=[("Proyecto JSON", "*.json")],
+                initialdir=self._ultimo_dir_proyecto,
+            )
+        if not ruta:
+            return
+        if not os.path.exists(ruta):
+            messagebox.showwarning(
+                "Archivo no encontrado",
+                f"El proyecto ya no existe:\n{ruta}")
+            self._actualizar_menu_recientes_proyecto()
             return
         self._ultimo_dir_proyecto = os.path.dirname(ruta)
 
@@ -740,10 +917,128 @@ class App(tk.Tk):
             if p.capas_extra:
                 self.panel_capas.cargar_capas_extra_desde_proyecto(p.capas_extra)
 
+            # ── Capas WMS superpuestas (también las empuja al motor) ──
+            self.panel_config.cargar_overlays(getattr(p, "overlays_wms", []) or [])
+            self.motor.overlays_wms = self.panel_config.obtener_overlays()
+            self.panel_generacion.cargar_opciones_salida(
+                getattr(p, "opciones_salida", {}) or {})
+
+            recientes.agregar_reciente(recientes.TIPO_PROYECTO, ruta)
+            self._actualizar_menu_recientes_proyecto()
             self._escribir_log(f"Proyecto cargado: {p.nombre}", "ok")
         except Exception as e:
             self._escribir_log(f"Error al cargar proyecto: {e}", "error")
             messagebox.showerror("Error", str(e))
+
+    def _actualizar_menu_recientes_proyecto(self):
+        """Reconstruye el menú de proyectos recientes en la barra superior."""
+        menu = self._menu_recientes_proy
+        menu.delete(0, "end")
+        lista = recientes.cargar_recientes().get(recientes.TIPO_PROYECTO, [])
+        if not lista:
+            menu.add_command(label="(sin recientes)", state="disabled")
+            return
+        for ruta in lista:
+            existe = os.path.exists(ruta)
+            etiqueta = os.path.basename(ruta) or ruta
+            if existe:
+                menu.add_command(
+                    label=etiqueta,
+                    command=lambda r=ruta: self._cargar_proyecto(r))
+            else:
+                menu.add_command(label=f"{etiqueta} (no encontrado)",
+                                 state="disabled")
+
+    def _limpiar_log(self):
+        """Vacía el registro de proceso."""
+        self._log.configure(state="normal")
+        self._log.delete("1.0", "end")
+        self._log.configure(state="disabled")
+        self._escribir_log("Registro limpiado.", "info")
+
+    # ── Atajos de teclado ─────────────────────────────────────────────────
+
+    def _configurar_atajos(self):
+        """Vincula atajos de teclado a las acciones principales.
+
+        Cada manejador es tolerante: los validadores subyacentes ya
+        comprueban si hay datos cargados, por lo que un atajo pulsado
+        prematuramente simplemente no hace nada perjudicial.
+        """
+        self.bind("<Control-g>", self._atajo_generar)
+        self.bind("<Control-G>", self._atajo_generar)
+        self.bind("<F5>", self._atajo_vista_previa)
+        self.bind("<Control-s>", self._atajo_guardar)
+        self.bind("<Control-S>", self._atajo_guardar)
+        self.bind("<Control-o>", self._atajo_cargar)
+        self.bind("<Control-O>", self._atajo_cargar)
+        self.bind("<Control-l>", self._atajo_limpiar_log)
+        self.bind("<Control-L>", self._atajo_limpiar_log)
+
+    def _foco_en_texto(self) -> bool:
+        """True si el foco está en un widget de edición de texto.
+
+        Los atajos no deben dispararse mientras el usuario escribe en un
+        Entry/Combobox/Text (p. ej. Ctrl+S por costumbre al editar el
+        patrón de nombre abriría el diálogo de guardar proyecto).
+        """
+        try:
+            w = self.focus_get()
+        except Exception:
+            return False
+        if isinstance(w, ttk.Combobox):
+            # Un desplegable de solo lectura no admite escritura: no debe
+            # bloquear los atajos tras elegir, p. ej., el proveedor
+            try:
+                return str(w.cget("state")) != "readonly"
+            except Exception:
+                return True
+        return isinstance(w, (tk.Entry, tk.Text, ttk.Entry, tk.Spinbox))
+
+    def _atajo_generar(self, event=None):
+        if self._foco_en_texto():
+            return
+        try:
+            self.panel_generacion._iniciar_generacion()
+        except Exception as e:
+            self._escribir_log(f"Atajo generar: {e}", "warn")
+        return "break"
+
+    def _atajo_vista_previa(self, event=None):
+        if self._foco_en_texto():
+            return
+        try:
+            self.panel_generacion._vista_previa()
+        except Exception as e:
+            self._escribir_log(f"Atajo vista previa: {e}", "warn")
+        return "break"
+
+    def _atajo_guardar(self, event=None):
+        if self._foco_en_texto():
+            return
+        try:
+            self._guardar_proyecto()
+        except Exception as e:
+            self._escribir_log(f"Atajo guardar: {e}", "warn")
+        return "break"
+
+    def _atajo_cargar(self, event=None):
+        if self._foco_en_texto():
+            return
+        try:
+            self._cargar_proyecto()
+        except Exception as e:
+            self._escribir_log(f"Atajo cargar: {e}", "warn")
+        return "break"
+
+    def _atajo_limpiar_log(self, event=None):
+        if self._foco_en_texto():
+            return
+        try:
+            self._limpiar_log()
+        except Exception as e:
+            self._escribir_log(f"Atajo limpiar log: {e}", "warn")
+        return "break"
 
     def _mostrar_info(self):
         """Abre la ventana de informacion tecnica y manual de usuario."""

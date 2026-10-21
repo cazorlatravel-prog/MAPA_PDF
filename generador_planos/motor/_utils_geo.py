@@ -87,12 +87,13 @@ def _plot_gdf_por_tipo(gdf: GeoDataFrame, ax: Axes, alpha: float, lw: float, zor
 
 def _limpiar_tipos_mixtos(gdf: GeoDataFrame) -> GeoDataFrame:
     """Convierte columnas con tipos mixtos (str + float) a str para evitar TypeError."""
+    col_geom = gdf.geometry.name if hasattr(gdf, "geometry") else "geometry"
     for col in gdf.columns:
-        if col == "geometry":
+        if col == col_geom:
             continue
         if gdf[col].dtype == object:
             # Columna con tipo 'object' puede tener mezcla de str, float, int, None
-            # Intentar convertir a numérico; si no se puede, forzar a str
+            # Forzar a str (manteniendo los nulos como NaN)
             try:
                 gdf[col] = gdf[col].where(gdf[col].isna(), gdf[col].astype(str))
             except Exception:
@@ -101,9 +102,15 @@ def _limpiar_tipos_mixtos(gdf: GeoDataFrame) -> GeoDataFrame:
 
 
 def _auto_calcular_campos(gdf: GeoDataFrame) -> GeoDataFrame:
-    """Calcula longitud/superficie automáticamente si no existen en el GDF."""
+    """Calcula longitud/superficie automáticamente si no existen en el GDF.
+
+    Tolera geometrías nulas o vacías (frecuentes en exportaciones de
+    ArcGIS): antes una sola geometría None abortaba la carga de la capa.
+    """
     if "Longitud" not in gdf.columns:
         def _long(g):
+            if g is None or g.is_empty:
+                return 0.0
             gt = str(g.geom_type).lower()
             if "line" in gt or "string" in gt:
                 return round(g.length, 1)
@@ -112,6 +119,8 @@ def _auto_calcular_campos(gdf: GeoDataFrame) -> GeoDataFrame:
 
     if "Superficie" not in gdf.columns:
         def _sup(g):
+            if g is None or g.is_empty:
+                return 0.0
             gt = str(g.geom_type).lower()
             if "polygon" in gt:
                 return round(g.area / 10000, 4)  # m² → ha
@@ -121,23 +130,57 @@ def _auto_calcular_campos(gdf: GeoDataFrame) -> GeoDataFrame:
     return gdf
 
 
+def _a_numero(serie):
+    """Convierte una Serie a float tolerando texto con formato español.
+
+    Acepta "1.234,5" (miles con punto, decimal con coma), "1,5" y "1.5".
+    Los valores no convertibles pasan a NaN en vez de lanzar ValueError.
+    """
+    import pandas as pd
+
+    def _conv(v):
+        if v is None:
+            return float("nan")
+        if isinstance(v, (int, float)):
+            return float(v)
+        s = str(v).strip()
+        if not s or s.lower() in ("nan", "none", "null", "—"):
+            return float("nan")
+        if "," in s:
+            # Coma decimal (convención española): los puntos son de miles
+            s = s.replace(".", "").replace(",", ".")
+        try:
+            return float(s)
+        except ValueError:
+            return float("nan")
+
+    return pd.to_numeric(serie.map(_conv), errors="coerce")
+
+
 def _calcular_stats_grupo(gdf_grupo: GeoDataFrame) -> dict[str, float]:
     """Calcula estadísticas resumen para un grupo de infraestructuras."""
     stats = {"num_infraestructuras": len(gdf_grupo)}
 
+    # Longitud/Superficie pueden venir como texto en el shapefile
+    # ("1.234,5"); astype(float) rompía el plano agrupado entero.
     if "Longitud" in gdf_grupo.columns:
-        total_m = gdf_grupo["Longitud"].astype(float).sum()
-        stats["total_longitud_km"] = total_m / 1000.0
+        total_m = _a_numero(gdf_grupo["Longitud"]).fillna(0).sum()
+        stats["total_longitud_km"] = float(total_m) / 1000.0
 
     if "Superficie" in gdf_grupo.columns:
-        total_ha = gdf_grupo["Superficie"].astype(float).sum()
-        stats["total_superficie_ha"] = total_ha
+        total_ha = _a_numero(gdf_grupo["Superficie"]).fillna(0).sum()
+        stats["total_superficie_ha"] = float(total_ha)
 
     return stats
 
 
 def _leer_geodatos(ruta: str, layer: str | None = None) -> GeoDataFrame:
-    """Lee un shapefile o geodatabase con fallback al driver OpenFileGDB."""
+    """Lee un shapefile o geodatabase con fallback al driver OpenFileGDB.
+
+    Si el .dbf está en latin-1/cp1252 pero un .cpg erróneo declara UTF-8
+    (habitual en shapefiles españoles antiguos), la lectura lanza
+    UnicodeDecodeError; se reintenta forzando cp1252 en vez de fallar.
+    """
     kwargs = {}
     if layer:
         kwargs["layer"] = layer
@@ -147,4 +190,7 @@ def _leer_geodatos(ruta: str, layer: str | None = None) -> GeoDataFrame:
             return gpd.read_file(ruta, driver="OpenFileGDB", **kwargs)
         except Exception:
             pass
-    return gpd.read_file(ruta, **kwargs)
+    try:
+        return gpd.read_file(ruta, **kwargs)
+    except UnicodeDecodeError:
+        return gpd.read_file(ruta, encoding="cp1252", **kwargs)

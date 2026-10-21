@@ -237,7 +237,7 @@ class PanelCampos:
 
     def obtener_campos_activos(self) -> list:
         return [c for c in self._campos_orden
-                if self._check_campos.get(c, tk.BooleanVar(value=False)).get()]
+                if c in self._check_campos and self._check_campos[c].get()]
 
     def obtener_campo_encabezado(self) -> str | None:
         val = self._combo_encabezado.get()

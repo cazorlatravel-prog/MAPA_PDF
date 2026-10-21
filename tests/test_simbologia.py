@@ -74,3 +74,34 @@ class TestConstantes:
 
     def test_paleta_categorias(self):
         assert len(PALETA_CATEGORIAS) >= 10
+
+
+class TestRegresionesProyecto:
+    """Regresiones de carga de proyectos guardados."""
+
+    def test_from_dict_ignora_claves_desconocidas(self):
+        """Una clave desconocida en el JSON (de otra versión) no debe
+        romper la carga del proyecto entero con TypeError."""
+        d = ConfigSimbologia(color="#FF0000").to_dict()
+        d["hatch"] = "//"
+        d["clave_futura"] = 123
+        cfg = ConfigSimbologia.from_dict(d)
+        assert cfg.color == "#FF0000"
+
+    def test_generar_por_categoria_conserva_personalizados(self):
+        """Al regenerar categorías (p. ej. tras cargar proyecto), los
+        colores personalizados de valores ya existentes se conservan."""
+        gestor = GestorSimbologia()
+        gestor.generar_por_categoria("Tipo", ["A", "B"])
+        gestor.categorias["Tipo"]["A"].color = "#ABCDEF"
+
+        gestor.generar_por_categoria("Tipo", ["A", "B", "C"])
+        assert gestor.categorias["Tipo"]["A"].color == "#ABCDEF"
+        assert "C" in gestor.categorias["Tipo"]
+
+    def test_generar_por_categoria_montes_conserva(self):
+        gestor = GestorSimbologia()
+        gestor.generar_por_categoria_montes("Prop", ["X"])
+        gestor.categorias_montes["Prop"]["X"].color = "#123456"
+        gestor.generar_por_categoria_montes("Prop", ["X", "Y"])
+        assert gestor.categorias_montes["Prop"]["X"].color == "#123456"

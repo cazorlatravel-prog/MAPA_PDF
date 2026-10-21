@@ -40,6 +40,7 @@ class Proyecto:
     wfs_custom_general: dict[str, str]
     wms_custom_localizacion: dict[str, str]
     wfs_custom_localizacion: dict[str, str]
+    overlays_wms: list[dict[str, Any]]
     escala_manual: int | None
     transparencia_montes: float
     color_infra: str
@@ -97,6 +98,12 @@ class Proyecto:
         self.wfs_custom_general = {}       # {"url":..., "capa":...}
         self.wms_custom_localizacion = {}
         self.wfs_custom_localizacion = {}
+        # Capas WMS superpuestas al fondo (lista de dicts: nombre, url,
+        # capa, alpha, formato, activo, version)
+        self.overlays_wms = []
+        # Opciones de salida de la GUI: formato (PDF / PDF + PNG / PDF + JPG)
+        # y marca de agua
+        self.opciones_salida = {}
         self.escala_manual = None  # None = automática
         self.transparencia_montes = 0.3
         self.color_infra = "#E74C3C"
@@ -186,6 +193,8 @@ class Proyecto:
             "wfs_custom_general": self.wfs_custom_general,
             "wms_custom_localizacion": self.wms_custom_localizacion,
             "wfs_custom_localizacion": self.wfs_custom_localizacion,
+            "overlays_wms": self.overlays_wms,
+            "opciones_salida": self.opciones_salida,
             "escala_manual": self.escala_manual,
             "transparencia_montes": self.transparencia_montes,
             "color_infra": self.color_infra,
@@ -242,6 +251,11 @@ class Proyecto:
         ]:
             if key in d:
                 setattr(p, key, d[key])
+        # Overlays WMS (proyectos antiguos no los tienen): solo dicts
+        # con url y capa; el resto de claves con valores por defecto.
+        p.overlays_wms = _normalizar_overlays(d.get("overlays_wms"))
+        op = d.get("opciones_salida")
+        p.opciones_salida = op if isinstance(op, dict) else {}
         return p
 
     def guardar(self, ruta: str) -> None:
@@ -257,29 +271,95 @@ class Proyecto:
         return cls.from_dict(data)
 
 
+def _normalizar_overlays(valor: Any) -> list[dict[str, Any]]:
+    """Valida la lista de overlays WMS leída de un proyecto JSON."""
+    if not isinstance(valor, list):
+        return []
+    resultado = []
+    for ov in valor:
+        if not isinstance(ov, dict):
+            continue
+        url = str(ov.get("url") or "").strip()
+        capa = str(ov.get("capa") or "").strip()
+        if not url or not capa:
+            continue
+        try:
+            alpha = min(1.0, max(0.0, float(ov.get("alpha", 0.6))))
+        except (TypeError, ValueError):
+            alpha = 0.6
+        norm = {
+            "nombre": str(ov.get("nombre") or capa),
+            "url": url,
+            "capa": capa,
+            "alpha": alpha,
+            "formato": str(ov.get("formato") or "image/png"),
+            "activo": bool(ov.get("activo", True)),
+        }
+        if ov.get("version"):
+            norm["version"] = str(ov["version"])
+        resultado.append(norm)
+    return resultado
+
+
 def cargar_lotes_csv(ruta_csv: str) -> list[dict[str, str]]:
     """Carga un CSV con rutas a múltiples shapefiles para generación por lotes.
 
-    Formato CSV esperado:
+    Formato CSV esperado (cabecera obligatoria):
         ruta_shp,nombre,formato,carpeta_salida
-        /ruta/a/infra1.shp,Proyecto Norte,A3 Horizontal,/salida/norte
-        /ruta/a/infra2.shp,Proyecto Sur,A4 Vertical,/salida/sur
+        C:/datos/infra1.shp,Proyecto Norte,A3 Horizontal,C:/salida/norte
+        C:/datos/infra2.shp,Proyecto Sur,A4 Horizontal,C:/salida/sur
+
+    Tolera lo que produce Excel en español: separador ``;``, BOM UTF-8,
+    codificación cp1252, filas cortas y espacios en las cabeceras. Las
+    rutas relativas se resuelven respecto a la carpeta del CSV.
 
     Devuelve lista de dicts con la configuración de cada lote.
     """
     import csv
+    import os
+
+    # 1) Leer el texto tolerando BOM y cp1252 (Excel "CSV UTF-8" añade BOM;
+    #    "CSV (delimitado por comas)" en Windows español guarda cp1252).
+    try:
+        with open(ruta_csv, "r", encoding="utf-8-sig", newline="") as f:
+            texto = f.read()
+    except UnicodeDecodeError:
+        with open(ruta_csv, "r", encoding="cp1252", newline="") as f:
+            texto = f.read()
+
+    if not texto.strip():
+        return []
+
+    # 2) Detectar separador (; o ,) a partir de la cabecera
+    primera_linea = texto.splitlines()[0]
+    delimitador = ";" if primera_linea.count(";") > primera_linea.count(",") else ","
+
+    base_dir = os.path.dirname(os.path.abspath(ruta_csv))
+
+    def _abs(p: str) -> str:
+        if not p:
+            return ""
+        return p if os.path.isabs(p) else os.path.normpath(os.path.join(base_dir, p))
 
     lotes = []
-    with open(ruta_csv, "r", encoding="utf-8") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            lote = {
-                "ruta_shp": row.get("ruta_shp", "").strip(),
-                "nombre": row.get("nombre", "").strip(),
-                "formato": row.get("formato", "A3 Horizontal").strip(),
-                "carpeta_salida": row.get("carpeta_salida", "").strip(),
-            }
-            if lote["ruta_shp"]:
-                lotes.append(lote)
+    reader = csv.DictReader(texto.splitlines(), delimiter=delimitador)
+    # Normalizar cabeceras: " Ruta_SHP " -> "ruta_shp"
+    if reader.fieldnames:
+        reader.fieldnames = [
+            (c or "").strip().lower().lstrip("\ufeff") for c in reader.fieldnames]
+    for row in reader:
+        # DictReader rellena con None las columnas ausentes en filas cortas
+        def _get(k, default=""):
+            v = row.get(k)
+            return (v if isinstance(v, str) else default).strip()
+
+        lote = {
+            "ruta_shp": _abs(_get("ruta_shp")),
+            "nombre": _get("nombre"),
+            "formato": _get("formato") or "A3 Horizontal",
+            "carpeta_salida": _abs(_get("carpeta_salida")),
+        }
+        if lote["ruta_shp"]:
+            lotes.append(lote)
 
     return lotes

@@ -6,6 +6,7 @@ progreso, portada, botón GENERAR.
 import os
 import shutil
 import threading
+import traceback
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 
@@ -15,6 +16,7 @@ from .estilos import (
     COLOR_FONDO_APP, COLOR_HEADER,
     FONT_BOLD, FONT_SMALL, FONT_LABEL, FONT_SECCION, FONT_BOTON,
     crear_frame_seccion, crear_boton, crear_entry, crear_label,
+    crear_tooltip,
 )
 from ..motor.maquetacion import ETIQUETAS_CAMPOS
 from ..motor.generador import GeneracionCancelada
@@ -128,47 +130,104 @@ class PanelGeneracion:
 
         # ── Opciones PDF ──
         self._multipagina = tk.BooleanVar(value=False)
-        tk.Checkbutton(
+        _chk_multi = tk.Checkbutton(
             f, text="PDF multipagina (un solo archivo)",
             variable=self._multipagina, font=FONT_SMALL,
             bg=COLOR_PANEL, fg=COLOR_TEXTO, selectcolor=COLOR_ENTRY,
             activebackground=COLOR_PANEL, activeforeground=COLOR_ACENTO,
             cursor="hand2", bd=0, highlightthickness=0,
-        ).grid(row=8, column=0, columnspan=2, sticky="w", pady=(8, 0))
+        )
+        _chk_multi.grid(row=8, column=0, columnspan=2, sticky="w", pady=(8, 0))
+        crear_tooltip(
+            _chk_multi,
+            "Genera un \u00fanico PDF con todos los planos como p\u00e1ginas,\n"
+            "en lugar de un archivo independiente por infraestructura.")
 
         self._incluir_portada = tk.BooleanVar(value=False)
-        tk.Checkbutton(
+        _chk_portada = tk.Checkbutton(
             f, text="Incluir portada e \u00edndice",
             variable=self._incluir_portada, font=FONT_SMALL,
             bg=COLOR_PANEL, fg=COLOR_TEXTO, selectcolor=COLOR_ENTRY,
             activebackground=COLOR_PANEL, activeforeground=COLOR_ACENTO,
             cursor="hand2", bd=0, highlightthickness=0,
-        ).grid(row=9, column=0, columnspan=2, sticky="w", pady=(2, 0))
+        )
+        _chk_portada.grid(row=9, column=0, columnspan=2, sticky="w", pady=(2, 0))
+        crear_tooltip(
+            _chk_portada,
+            "A\u00f1ade una portada con t\u00edtulo e \u00edndice al PDF multip\u00e1gina\n"
+            "(solo aplica con la opci\u00f3n de PDF multip\u00e1gina activada).")
+
+        # \u2500\u2500 Formato de salida y marca de agua \u2500\u2500
+        opts_f = tk.Frame(f, bg=COLOR_PANEL)
+        opts_f.grid(row=10, column=0, columnspan=2, sticky="ew", pady=(6, 0))
+        opts_f.columnconfigure(1, weight=1)
+
+        crear_label(opts_f, "Formato:", tipo="normal").grid(
+            row=0, column=0, sticky="w", padx=(0, 6))
+        self._formato_salida = tk.StringVar(value="PDF")
+        _cb_fmt = ttk.Combobox(
+            opts_f, textvariable=self._formato_salida,
+            values=["PDF", "PDF + PNG", "PDF + JPG"], state="readonly",
+            font=FONT_SMALL, width=12)
+        _cb_fmt.grid(row=0, column=1, sticky="w")
+        crear_tooltip(
+            _cb_fmt,
+            "Adem\u00e1s del PDF, guarda cada plano como imagen PNG o JPG\n"
+            "(\u00fatil para insertar en informes o presentaciones).\n"
+            "El PDF multip\u00e1gina siempre es solo PDF.")
+
+        self._marca_agua_on = tk.BooleanVar(value=False)
+        _chk_marca = tk.Checkbutton(
+            opts_f, text="Marca de agua:",
+            variable=self._marca_agua_on, font=FONT_SMALL,
+            bg=COLOR_PANEL, fg=COLOR_TEXTO, selectcolor=COLOR_ENTRY,
+            activebackground=COLOR_PANEL, activeforeground=COLOR_ACENTO,
+            cursor="hand2", bd=0, highlightthickness=0,
+        )
+        _chk_marca.grid(row=1, column=0, sticky="w", pady=(4, 0))
+        self._marca_agua_txt = tk.StringVar(value="BORRADOR")
+        _ent_marca = crear_entry(opts_f, textvariable=self._marca_agua_txt,
+                                 width=14)
+        _ent_marca.grid(row=1, column=1, sticky="w", pady=(4, 0))
+        crear_tooltip(
+            _chk_marca,
+            "Imprime un texto grande y tenue en diagonal sobre el mapa\n"
+            "(p. ej. BORRADOR o PROVISIONAL).")
 
         # ── Progreso ──
         crear_label(f, "Progreso:", tipo="secundario").grid(
-            row=10, column=0, columnspan=2, sticky="w", pady=(12, 0))
+            row=11, column=0, columnspan=2, sticky="w", pady=(12, 0))
 
         self._progreso = ttk.Progressbar(f, length=240, mode="determinate",
                                           style="Green.Horizontal.TProgressbar")
-        self._progreso.grid(row=11, column=0, columnspan=2, sticky="ew", pady=(4, 4))
+        self._progreso.grid(row=12, column=0, columnspan=2, sticky="ew", pady=(4, 4))
 
         self._lbl_progreso = tk.Label(f, text="\u2014", font=FONT_SMALL,
                                        bg=COLOR_PANEL, fg=COLOR_ACENTO)
-        self._lbl_progreso.grid(row=12, column=0, columnspan=2, pady=(0, 8))
+        self._lbl_progreso.grid(row=13, column=0, columnspan=2, pady=(0, 8))
+        self._t_inicio = None      # inicio de la generación (tiempo restante)
+        self._ultimo_pdf = None    # último PDF generado ("Abrir último PDF")
 
         # ── Botones Vista previa y Mapa guia ──
         btn_preview_f = tk.Frame(f, bg=COLOR_PANEL)
-        btn_preview_f.grid(row=13, column=0, columnspan=2, sticky="ew", pady=(4, 4))
+        btn_preview_f.grid(row=14, column=0, columnspan=2, sticky="ew", pady=(4, 4))
         btn_preview_f.columnconfigure(0, weight=1)
         btn_preview_f.columnconfigure(1, weight=1)
 
-        crear_boton(btn_preview_f, "Vista previa",
-                    self._vista_previa, icono="\U0001f50d").grid(
-                    row=0, column=0, sticky="ew", padx=(0, 3))
-        crear_boton(btn_preview_f, "Mapa gu\u00eda",
-                    self._mapa_guia, icono="\U0001f5fa").grid(
-                    row=0, column=1, sticky="ew", padx=(3, 0))
+        _btn_preview = crear_boton(btn_preview_f, "Vista previa",
+                    self._vista_previa, icono="\U0001f50d")
+        _btn_preview.grid(row=0, column=0, sticky="ew", padx=(0, 3))
+        _btn_guia = crear_boton(btn_preview_f, "Mapa gu\u00eda",
+                    self._mapa_guia, icono="\U0001f5fa")
+        _btn_guia.grid(row=0, column=1, sticky="ew", padx=(3, 0))
+        crear_tooltip(
+            _btn_preview,
+            "Genera una vista previa r\u00e1pida en pantalla del primer plano\n"
+            "seg\u00fan el modo de selecci\u00f3n actual (F5).")
+        crear_tooltip(
+            _btn_guia,
+            "Muestra un mapa gu\u00eda con todas las infraestructuras\n"
+            "seleccionadas numeradas sobre el territorio.")
 
         # ── Boton GENERAR ──
         self._btn_generar = crear_boton(
@@ -176,7 +235,11 @@ class PanelGeneracion:
             icono="\U0001f5a8", ancho=30,
             estilo="primario",
         )
-        self._btn_generar.grid(row=14, column=0, columnspan=2, sticky="ew", pady=(6, 4))
+        self._btn_generar.grid(row=15, column=0, columnspan=2, sticky="ew", pady=(6, 4))
+        crear_tooltip(
+            self._btn_generar,
+            "Genera los planos según el modo seleccionado (Ctrl+G).\n"
+            "Requiere haber cargado el shapefile de infraestructuras.")
 
         # ── Boton PARAR ──
         self._btn_parar = crear_boton(
@@ -184,18 +247,29 @@ class PanelGeneracion:
             icono="\u23f9", ancho=30,
             estilo="peligro",
         )
-        self._btn_parar.grid(row=15, column=0, columnspan=2, sticky="ew", pady=(0, 4))
+        self._btn_parar.grid(row=16, column=0, columnspan=2, sticky="ew", pady=(0, 4))
         self._btn_parar.configure(state="disabled")
+        crear_tooltip(
+            self._btn_parar,
+            "Detiene la generación en curso.\n"
+            "Los planos ya generados se conservan.")
 
         # ── Boton abrir carpeta ──
         crear_boton(f, "Abrir carpeta de salida",
                     self._abrir_carpeta, icono="\U0001f4c2").grid(
-                    row=16, column=0, columnspan=2, sticky="ew", pady=(0, 4))
+                    row=17, column=0, columnspan=2, sticky="ew", pady=(0, 4))
+        self._btn_ultimo_pdf = crear_boton(
+            f, "Abrir último PDF", self._abrir_ultimo_pdf, icono="\U0001f4c4")
+        self._btn_ultimo_pdf.grid(row=18, column=0, columnspan=2, sticky="ew",
+                                  pady=(0, 4))
+        self._btn_ultimo_pdf.configure(state="disabled")
+        crear_tooltip(self._btn_ultimo_pdf,
+                      "Abre con el visor predeterminado el último PDF generado.")
 
         # ── Boton vaciar cache ──
         crear_boton(f, "Vaciar cach\u00e9 de teselas",
                     self._vaciar_cache, icono="\U0001f5d1").grid(
-                    row=17, column=0, columnspan=2, sticky="ew", pady=(0, 4))
+                    row=19, column=0, columnspan=2, sticky="ew", pady=(0, 4))
 
         f.columnconfigure(0, weight=1)
         f.columnconfigure(1, weight=1)
@@ -518,7 +592,10 @@ class PanelGeneracion:
             sels = tabla.selection()
             if not sels:
                 return []
-            return [tabla.index(s) for s in sels]
+            # El iid de cada fila es la posición real en el gdf (ver
+            # app._poblar_tabla); tabla.index() daría la posición visual,
+            # que no coincide cuando la tabla está filtrada.
+            return [int(s) for s in sels]
         elif modo == "rango":
             try:
                 desde = int(self._rango_desde.get())
@@ -541,7 +618,25 @@ class PanelGeneracion:
 
     # ── Generación ───────────────────────────────────────────────────────
 
+    def _generacion_en_curso(self) -> bool:
+        """True si ya hay una generación en marcha (botón GENERAR deshabilitado).
+
+        El botón se deshabilita al arrancar y se restaura en _fin_*; pero el
+        atajo Ctrl+G llama a _iniciar_generacion directamente, así que hay
+        que comprobarlo aquí para no lanzar un segundo hilo en paralelo.
+        """
+        try:
+            return str(self._btn_generar["state"]) == "disabled"
+        except Exception:
+            return False
+
     def _iniciar_generacion(self):
+        if self._generacion_en_curso():
+            self.callback_log(
+                "Ya hay una generación en curso; espera a que termine o "
+                "pulsa PARAR.", "warn")
+            return
+
         modo = self._modo_gen.get()
 
         if modo == "lotes":
@@ -554,6 +649,8 @@ class PanelGeneracion:
 
         # Resetear bandera de cancelación
         self.motor._cancelar.clear()
+        self._aplicar_opciones_salida()
+        self._ultimo_pdf = None
 
         # Auto-aplicar cajetín, plantilla y simbología antes de generar
         if self._auto_aplicar:
@@ -582,7 +679,7 @@ class PanelGeneracion:
 
             self._btn_generar.configure(state="disabled", text="\u23f3 Generando...")
             self._btn_parar.configure(state="normal", text="\u23f9  PARAR GENERACI\u00d3N  ")
-            self._progreso["value"] = 0
+            self._reiniciar_progreso()
             self._progreso["maximum"] = len(valores_sel)
 
             campo_grupo = self._campo_agrupacion.get()
@@ -597,7 +694,7 @@ class PanelGeneracion:
                         f"\n{'=' * 50}\nGenerando {len(valores_sel)} planos agrupados "
                         f"por {campo_grupo}...", "info")
 
-                    self.motor.generar_serie_agrupada(
+                    rutas = self.motor.generar_serie_agrupada(
                         campo_grupo=campo_grupo,
                         valores=valores_sel,
                         formato_key=cfg["formato"],
@@ -614,9 +711,17 @@ class PanelGeneracion:
                         patron_nombre=patron_nombre,
                     )
 
-                    self._after_seguro(0, self._fin_generacion)
+                    n_ok = len(rutas or [])
+                    self._ultimo_pdf = rutas[-1] if rutas else None
+                    total = len(valores_sel)
+                    self._after_seguro(
+                        0, lambda: self._fin_generacion(n_ok, total))
                 except GeneracionCancelada:
                     self._after_seguro(0, self._fin_cancelacion)
+                except Exception as e:
+                    tb = traceback.format_exc()
+                    self._after_seguro(
+                        0, lambda e=e, tb=tb: self._fin_error(e, tb))
 
             threading.Thread(target=_worker_agrupado, daemon=True).start()
         else:
@@ -627,7 +732,7 @@ class PanelGeneracion:
 
             self._btn_generar.configure(state="disabled", text="\u23f3 Generando...")
             self._btn_parar.configure(state="normal", text="\u23f9  PARAR GENERACI\u00d3N  ")
-            self._progreso["value"] = 0
+            self._reiniciar_progreso()
             self._progreso["maximum"] = len(indices)
 
             def _worker():
@@ -643,7 +748,7 @@ class PanelGeneracion:
                         nombre_multi = "".join(c for c in nombre_multi if c.isalnum() or c in "_ -.")[:80]
                         nombre_multi = nombre_multi.strip("_- ") or "planos_forestales_completo"
                         ruta_pdf = os.path.join(carpeta, f"{nombre_multi}.pdf")
-                        self.motor.generar_pdf_multipagina(
+                        ruta = self.motor.generar_pdf_multipagina(
                             indices=indices,
                             formato_key=cfg["formato"],
                             proveedor=cfg["proveedor"],
@@ -658,8 +763,18 @@ class PanelGeneracion:
                             campo_encabezado=campo_encabezado,
                             patron_nombre=patron_nombre,
                         )
+                        # Multipágina: 1 PDF esperado (cuenta 1 si devuelve ruta)
+                        n_ok = 1 if ruta else 0
+                        total = 1
+                        self._ultimo_pdf = ruta if ruta else None
+                        # El motor cuenta las páginas de plano realmente
+                        # añadidas; con ruta válida pero 0 páginas el aviso
+                        # debe reflejarlo.
+                        resumen = getattr(self.motor, "ultimo_resumen", None)
+                        if ruta and resumen:
+                            n_ok, total = resumen
                     else:
-                        self.motor.generar_serie(
+                        rutas = self.motor.generar_serie(
                             indices=indices,
                             formato_key=cfg["formato"],
                             proveedor=cfg["proveedor"],
@@ -673,10 +788,18 @@ class PanelGeneracion:
                             campo_encabezado=campo_encabezado,
                             patron_nombre=patron_nombre,
                         )
+                        n_ok = len(rutas or [])
+                        self._ultimo_pdf = rutas[-1] if rutas else None
+                        total = len(indices)
 
-                    self._after_seguro(0, self._fin_generacion)
+                    self._after_seguro(
+                        0, lambda: self._fin_generacion(n_ok, total))
                 except GeneracionCancelada:
                     self._after_seguro(0, self._fin_cancelacion)
+                except Exception as e:
+                    tb = traceback.format_exc()
+                    self._after_seguro(
+                        0, lambda e=e, tb=tb: self._fin_error(e, tb))
 
             threading.Thread(target=_worker, daemon=True).start()
 
@@ -692,17 +815,19 @@ class PanelGeneracion:
 
         # Resetear bandera de cancelación
         self.motor._cancelar.clear()
+        self._aplicar_opciones_salida()
+        self._ultimo_pdf = None
 
         self._btn_generar.configure(state="disabled", text="\u23f3 Generando lotes...")
         self._btn_parar.configure(state="normal", text="\u23f9  PARAR GENERACI\u00d3N  ")
-        self._progreso["value"] = 0
+        self._reiniciar_progreso()
 
         def _worker_lotes():
             try:
                 self.callback_log(
                     f"\n{'=' * 50}\nIniciando generaci\u00f3n por lotes...", "info")
 
-                self.motor.generar_lotes_csv(
+                rutas = self.motor.generar_lotes_csv(
                     ruta_csv=self._ruta_csv_completa,
                     proveedor=cfg["proveedor"],
                     transparencia=cfg["transparencia"],
@@ -714,29 +839,159 @@ class PanelGeneracion:
                     campo_encabezado=campo_encabezado,
                 )
 
-                self._after_seguro(0, self._fin_generacion)
+                # El total esperado de planos por lotes no se conoce de
+                # antemano (depende de cada shapefile del CSV); se reporta
+                # el número generado dejando total=None.
+                n_ok = len(rutas or [])
+                self._ultimo_pdf = rutas[-1] if rutas else None
+                self._after_seguro(
+                    0, lambda: self._fin_generacion(n_ok, None))
             except GeneracionCancelada:
                 self._after_seguro(0, self._fin_cancelacion)
+            except Exception as e:
+                tb = traceback.format_exc()
+                self._after_seguro(
+                    0, lambda e=e, tb=tb: self._fin_error(e, tb))
 
         threading.Thread(target=_worker_lotes, daemon=True).start()
 
     def _actualizar_progreso(self, actual, total):
+        import time
+        ahora = time.time()
+
         def _update():
             self._progreso.configure(value=actual, maximum=total)
-            self._lbl_progreso.configure(
-                text=f"{actual}/{total} planos generados")
+            texto = f"{actual}/{total} planos generados"
+            # Tiempo restante estimado a partir del ritmo medio
+            if self._t_inicio and actual > 0 and total and actual < total:
+                transcurrido = ahora - self._t_inicio
+                restante = transcurrido / actual * (total - actual)
+                if restante >= 90:
+                    texto += f"  ·  ~{int(round(restante / 60))} min restantes"
+                else:
+                    texto += f"  ·  ~{int(round(restante))} s restantes"
+            self._lbl_progreso.configure(text=texto)
         self._after_seguro(0, _update)
 
-    def _fin_generacion(self):
+    def _reiniciar_progreso(self):
+        """Pone el progreso a cero y arranca el cronómetro de la estimación."""
+        import time
+        self._reiniciar_progreso()
+        self._t_inicio = time.time()
+
+    def _abrir_ultimo_pdf(self):
+        ruta = self._ultimo_pdf
+        if not ruta or not os.path.isfile(ruta):
+            messagebox.showinfo("Info", "Todavía no hay ningún PDF generado.")
+            return
+        import sys
+        try:
+            if sys.platform == "win32":
+                os.startfile(ruta)
+            elif sys.platform == "darwin":
+                os.system(f'open "{ruta}"')
+            else:
+                os.system(f'xdg-open "{ruta}"')
+        except Exception as e:
+            messagebox.showerror("Error", f"No se pudo abrir el PDF:\n{e}")
+
+    def _aplicar_opciones_salida(self):
+        """Pasa al motor el formato de salida y la marca de agua elegidos."""
+        fmt = self._formato_salida.get()
+        formatos = ["pdf"]
+        if "PNG" in fmt:
+            formatos.append("png")
+        elif "JPG" in fmt:
+            formatos.append("jpg")
+        self.motor.formatos_salida = formatos
+        self.motor.marca_agua = (self._marca_agua_txt.get().strip()
+                                 if self._marca_agua_on.get() else "")
+
+    def obtener_opciones_salida(self) -> dict:
+        """Opciones de salida para guardar en el proyecto."""
+        return {
+            "formato_salida": self._formato_salida.get(),
+            "marca_agua_on": bool(self._marca_agua_on.get()),
+            "marca_agua_txt": self._marca_agua_txt.get(),
+        }
+
+    def cargar_opciones_salida(self, d: dict):
+        """Restaura las opciones de salida desde un proyecto."""
+        if not d:
+            return
+        if d.get("formato_salida") in ("PDF", "PDF + PNG", "PDF + JPG"):
+            self._formato_salida.set(d["formato_salida"])
+        self._marca_agua_on.set(bool(d.get("marca_agua_on", False)))
+        if d.get("marca_agua_txt"):
+            self._marca_agua_txt.set(d["marca_agua_txt"])
+
+    def _fin_generacion(self, n_ok=None, total=None):
+        """Restaura la UI y muestra un resumen honesto del resultado.
+
+        - n_ok == total  \u2192 todo correcto.
+        - 0 < n_ok < total \u2192 algunos planos fallaron (aviso).
+        - n_ok == 0 \u2192 no se gener\u00f3 nada (error).
+        - n_ok is None \u2192 comportamiento gen\u00e9rico (compatibilidad).
+        - total is None \u2192 total desconocido (p.ej. lotes); solo se reporta n_ok.
+        """
         cfg = self.get_config()
+        carpeta = cfg["salida"]
         self._btn_generar.configure(state="normal", text="  GENERAR PLANOS  ")
+        try:
+            self._btn_ultimo_pdf.configure(
+                state="normal" if self._ultimo_pdf else "disabled")
+        except Exception:
+            pass
         self._btn_parar.configure(state="disabled", text="\u23f9  PARAR GENERACI\u00d3N  ")
-        self.callback_log(
-            f"\n\u2713 Proceso finalizado. Planos guardados en:\n{cfg['salida']}", "ok")
-        messagebox.showinfo(
-            "Completado",
-            f"Planos generados correctamente.\n\nCarpeta: {cfg['salida']}",
-        )
+
+        # Compatibilidad: sin informaci\u00f3n de conteo, resumen gen\u00e9rico
+        if n_ok is None:
+            self.callback_log(
+                f"\n\u2713 Proceso finalizado. Planos guardados en:\n{carpeta}", "ok")
+            messagebox.showinfo(
+                "Completado",
+                f"Planos generados correctamente.\n\nCarpeta: {carpeta}",
+            )
+            return
+
+        if n_ok == 0:
+            self.callback_log(
+                "\n\u2717 No se gener\u00f3 ning\u00fan plano. "
+                "Revisa el registro para ver los errores.", "error")
+            messagebox.showerror(
+                "Sin resultados",
+                "No se gener\u00f3 ning\u00fan plano; revisa el registro.",
+            )
+            return
+
+        # Total desconocido (lotes): solo se reporta lo generado
+        if total is None:
+            self.callback_log(
+                f"\n\u2713 Proceso finalizado: {n_ok} planos generados en:\n{carpeta}",
+                "ok")
+            messagebox.showinfo(
+                "Completado",
+                f"\u2713 {n_ok} planos generados correctamente.\n\nCarpeta: {carpeta}",
+            )
+            return
+
+        if n_ok == total:
+            self.callback_log(
+                f"\n\u2713 {n_ok} planos generados correctamente en:\n{carpeta}", "ok")
+            messagebox.showinfo(
+                "Completado",
+                f"\u2713 {n_ok} planos generados correctamente.\n\nCarpeta: {carpeta}",
+            )
+        else:
+            self.callback_log(
+                f"\n\u26a0 {n_ok} de {total} planos generados; "
+                "revisa el registro para ver los errores.", "warn")
+            messagebox.showwarning(
+                "Generaci\u00f3n incompleta",
+                f"{n_ok} de {total} generados; "
+                "revisa el registro para ver los errores.\n\n"
+                f"Carpeta: {carpeta}",
+            )
 
     def _fin_cancelacion(self):
         self._btn_generar.configure(state="normal", text="  GENERAR PLANOS  ")
@@ -749,6 +1004,25 @@ class PanelGeneracion:
             "Cancelado",
             "Generaci\u00f3n detenida.\n\n"
             "Los planos generados antes de parar se han conservado.",
+        )
+
+    def _fin_error(self, error, tb=""):
+        """Restaura la UI tras un error no controlado en la generación.
+
+        Sin esto, una excepción en el hilo de trabajo dejaba el botón
+        GENERAR deshabilitado para siempre y la app parecía colgada.
+        """
+        self._btn_generar.configure(state="normal", text="  GENERAR PLANOS  ")
+        self._btn_parar.configure(state="disabled", text="⏹  PARAR GENERACIÓN  ")
+        self._lbl_progreso.configure(text="Generación interrumpida por un error")
+        detalle = f"\n{tb}" if tb else ""
+        self.callback_log(
+            f"\n✗ Error durante la generación: {error}{detalle}", "error")
+        messagebox.showerror(
+            "Error en la generación",
+            "La generación se ha detenido por un error:\n\n"
+            f"{error}\n\n"
+            "Consulta el registro para más detalles.",
         )
 
     def _parar_generacion(self):
@@ -815,7 +1089,8 @@ class PanelGeneracion:
                 messagebox.showinfo("Info",
                                      "Selecciona una infraestructura en la tabla.")
                 return
-            idx = tabla.index(sels[0])
+            # iid = posición real en el gdf (ver app._poblar_tabla)
+            idx = int(sels[0])
         elif modo == "rango":
             try:
                 idx = max(0, int(self._rango_desde.get()) - 1)
@@ -827,6 +1102,8 @@ class PanelGeneracion:
         self.callback_log("Generando vista previa...", "info")
 
         def _worker():
+            import matplotlib.pyplot as plt
+            _figs_antes = set(plt.get_fignums())
             try:
                 fig = self.motor.generar_vista_previa(
                     idx_fila=idx,
@@ -840,6 +1117,12 @@ class PanelGeneracion:
                 )
                 self._after_seguro(0, lambda: self._mostrar_preview(fig))
             except Exception as e:
+                # Cerrar la figura a medio dibujar para no fugar memoria
+                for num in set(plt.get_fignums()) - _figs_antes:
+                    try:
+                        plt.close(num)
+                    except Exception:
+                        pass
                 msg = f"Error en vista previa: {e}"
                 self._after_seguro(
                     0, lambda: self.callback_log(msg, "error"))
@@ -911,6 +1194,8 @@ class PanelGeneracion:
             "info")
 
         def _worker():
+            import matplotlib.pyplot as plt
+            _figs_antes = set(plt.get_fignums())
             try:
                 fig = self.motor.generar_mapa_guia(
                     indices=indices,
@@ -919,6 +1204,12 @@ class PanelGeneracion:
                 )
                 self._after_seguro(0, lambda: self._mostrar_preview(fig))
             except Exception as e:
+                # Cerrar la figura a medio dibujar para no fugar memoria
+                for num in set(plt.get_fignums()) - _figs_antes:
+                    try:
+                        plt.close(num)
+                    except Exception:
+                        pass
                 msg = f"Error en mapa gu\u00eda: {e}"
                 self._after_seguro(
                     0, lambda: self.callback_log(msg, "error"))

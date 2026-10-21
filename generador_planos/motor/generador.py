@@ -52,6 +52,8 @@ class GeneradorPlanos:
         self.layout_key = "Plantilla 1 (Clásica)"
         self.dpi_figura = None   # None = default (400)
         self.dpi_guardado = None  # None = same as dpi_figura
+        self.marca_agua = ""               # p. ej. "BORRADOR" ("" = sin marca)
+        self.formatos_salida = ["pdf"]     # además: "png", "jpg"
         self.ruta_raster_general = ""       # Ráster local para fondo de mapa
         self.ruta_raster_localizacion = ""  # Ráster local para mapa de localización
         self.ruta_capa_localizacion = ""   # SHP/GDB propio para mapa de localización
@@ -59,6 +61,10 @@ class GeneradorPlanos:
         self.wfs_custom_general = {}       # {"url":..., "capa":...}
         self.wms_custom_localizacion = {}  # {"url":..., "capa":..., "formato":...}
         self.wfs_custom_localizacion = {}  # {"url":..., "capa":...}
+        # Capas WMS superpuestas al fondo del mapa principal. Lista de
+        # {"nombre", "url", "capa", "alpha" (0-1), "formato", "activo",
+        #  "version" (opcional, "1.3.0" por defecto)}
+        self.overlays_wms = []
         self.escala_localizacion = 250_000  # Escala configurable del mapa localización
         self.prov_localizacion = "WMS IGN (online)"
         self._df_excel = None               # DataFrame con datos de Excel para tabla
@@ -134,10 +140,27 @@ class GeneradorPlanos:
             cols_validas = [c for c in cols if c in df.columns]
             df = df[cols_validas]
 
+        def _fusionar(row_shp, fila_excel):
+            """Fila del shapefile completada/sobrescrita con la del Excel.
+
+            Así el panel puede mostrar a la vez campos del shapefile
+            (Provincia, Monte...) y columnas del Excel; antes, un campo
+            ausente en el Excel salía como "—" aunque existiera en el SHP.
+            """
+            try:
+                fila = row_shp.drop(labels=["geometry"], errors="ignore").copy()
+            except Exception:
+                fila = row_shp.copy()
+            for k, v in fila_excel.items():
+                fila[k] = v
+            return fila
+
         # Sin campo enlace: fallback por índice
         if not self._campo_enlace_shp or not self._campo_enlace_excel:
             if idx_fila is not None and idx_fila < len(df):
-                return [df.iloc[idx_fila]]
+                base = rows_shp[0] if rows_shp else None
+                fila_x = df.iloc[idx_fila]
+                return [_fusionar(base, fila_x) if base is not None else fila_x]
             return [df.iloc[i] for i in range(len(df))]
 
         # Buscar por campo enlace
@@ -150,7 +173,7 @@ class GeneradorPlanos:
             mask = df[self._campo_enlace_excel].astype(str) == str(valor_shp)
             coincidencias = df[mask]
             for _, fila_excel in coincidencias.iterrows():
-                resultado.append(fila_excel)
+                resultado.append(_fusionar(row_shp, fila_excel))
 
         return resultado if resultado else rows_shp
 
@@ -243,6 +266,53 @@ class GeneradorPlanos:
     # ── Helpers internos ─────────────────────────────────────────────────
 
     def _añadir_fondo(self, ax_map, gdf_view, proveedor, xmin, xmax, ymin, ymax):
+        """Añade el fondo del mapa principal y, encima, las capas WMS
+        superpuestas activas (``self.overlays_wms``)."""
+        self._añadir_fondo_base(ax_map, gdf_view, proveedor,
+                                xmin, xmax, ymin, ymax)
+        self._añadir_overlays_wms(ax_map, xmin, xmax, ymin, ymax)
+
+    def _añadir_overlays_wms(self, ax_map, xmin, xmax, ymin, ymax):
+        """Dibuja cada overlay WMS activo; un fallo nunca rompe el plano."""
+        overlays = getattr(self, "overlays_wms", None) or []
+        if not overlays:
+            return
+        import warnings
+        from .cartografia import añadir_overlay_wms, OVERLAYS_PREDEFINIDOS
+        for ov in overlays:
+            if not isinstance(ov, dict) or not ov.get("activo", True):
+                continue
+            url = (ov.get("url") or "").strip()
+            capa = (ov.get("capa") or "").strip()
+            if not url or not capa:
+                continue
+            version = ov.get("version")
+            if not version:
+                # Overlays guardados sin versión: heredar la del preset
+                # con la misma URL (Catastro solo admite WMS 1.1.1)
+                version = next(
+                    (p.get("version") for p in OVERLAYS_PREDEFINIDOS.values()
+                     if p.get("url", "").rstrip("?") == url.split("?")[0]),
+                    "1.3.0")
+            try:
+                añadir_overlay_wms(
+                    ax_map, url, capa, xmin, xmax, ymin, ymax,
+                    alpha=ov.get("alpha", 0.6),
+                    formato=ov.get("formato") or "image/png",
+                    version=version)
+            except Exception as e:
+                msg = (f"Capa superpuesta '{ov.get('nombre') or capa}' "
+                       f"no disponible: {e}")
+                cb = getattr(self, "callback_log", None)
+                if callable(cb):
+                    try:
+                        cb(f"  ⚠ {msg}")
+                    except Exception:
+                        pass
+                warnings.warn(msg[:300])
+
+    def _añadir_fondo_base(self, ax_map, gdf_view, proveedor,
+                           xmin, xmax, ymin, ymax):
         """Añade fondo cartográfico usando ráster local, WMS/WFS propio o tiles."""
         # WMS propio
         if self.wms_custom_general:
@@ -283,6 +353,20 @@ class GeneradorPlanos:
     def _ensure_agg(self):
         if threading.current_thread() is not threading.main_thread():
             matplotlib.use("Agg")
+
+    @staticmethod
+    def _cerrar_figuras_nuevas(fignums_antes):
+        """Cierra las figuras pyplot creadas después de ``fignums_antes``.
+
+        Cuando un plano falla a medio dibujar, su figura queda abierta en el
+        registro global de pyplot; sin esto, cada plano con error acumula
+        memoria durante lotes grandes.
+        """
+        for num in set(plt.get_fignums()) - set(fignums_antes):
+            try:
+                plt.close(num)
+            except Exception:
+                pass
 
     def _dibujar_capas_mapa(self, ax_map, gdf_sel, indices, xmin, xmax,
                              ymin, ymax, transparencia, color_infra):
@@ -603,6 +687,8 @@ class GeneradorPlanos:
         maq.dibujar_norte_en_mapa()
         maq.dibujar_cabecera(row, cajetin=self._cajetin, plantilla=self._plantilla)
         maq.dibujar_marcos(plantilla=self._plantilla, cajetin=self._cajetin)
+        if self.marca_agua:
+            maq.dibujar_marca_agua(self.marca_agua)
 
         num_visible = idx_fila + 1
         nombre_infra = str(row.get("Nombre_Infra", f"infra_{num_visible:04d}"))
@@ -616,9 +702,13 @@ class GeneradorPlanos:
         else:
             nombre_base = f"plano_{num_visible:04d}_{nombre_infra_safe}"
         nombre_arch = f"{nombre_base}.pdf"
+        # Crear la carpeta si no existe (la GUI lo hace, pero el motor debe
+        # ser robusto cuando se usa directamente o desde lotes/proyectos)
+        os.makedirs(salida_dir, exist_ok=True)
         ruta_out = os.path.join(salida_dir, nombre_arch)
 
-        maq.guardar(ruta_out, dpi_save=self.dpi_guardado)
+        maq.guardar(ruta_out, dpi_save=self.dpi_guardado,
+                    formatos=self.formatos_salida)
         log(f"  \u2713 Guardado: {nombre_arch}")
         return ruta_out
 
@@ -737,6 +827,8 @@ class GeneradorPlanos:
                               num_plano_override=num_plano,
                               cajetin=self._cajetin, plantilla=self._plantilla)
         maq.dibujar_marcos(plantilla=self._plantilla, cajetin=self._cajetin)
+        if self.marca_agua:
+            maq.dibujar_marca_agua(self.marca_agua)
 
         nombre_safe = "".join(c for c in valor_grupo if c.isalnum() or c in "_ -")[:40]
         if patron_nombre:
@@ -747,9 +839,13 @@ class GeneradorPlanos:
         else:
             nombre_base = f"plano_grupo_{num_plano:04d}_{nombre_safe}"
         nombre_arch = f"{nombre_base}.pdf"
+        # Crear la carpeta si no existe (la GUI lo hace, pero el motor debe
+        # ser robusto cuando se usa directamente o desde lotes/proyectos)
+        os.makedirs(salida_dir, exist_ok=True)
         ruta_out = os.path.join(salida_dir, nombre_arch)
 
-        maq.guardar(ruta_out, dpi_save=self.dpi_guardado)
+        maq.guardar(ruta_out, dpi_save=self.dpi_guardado,
+                    formatos=self.formatos_salida)
         log(f"  \u2713 Guardado: {nombre_arch}")
         return ruta_out
 
@@ -852,6 +948,8 @@ class GeneradorPlanos:
         maq.dibujar_cabecera(row, cajetin=self._cajetin,
                               plantilla=self._plantilla)
         maq.dibujar_marcos(plantilla=self._plantilla, cajetin=self._cajetin)
+        if self.marca_agua:
+            maq.dibujar_marca_agua(self.marca_agua)
 
         return fig
 
@@ -884,6 +982,7 @@ class GeneradorPlanos:
         )
 
         if salida_dir is not None:
+            os.makedirs(salida_dir, exist_ok=True)
             ruta_out = os.path.join(salida_dir, "mapa_guia.pdf")
             fig.savefig(ruta_out, format="pdf",
                         dpi=self.dpi_guardado or 300, facecolor="white")
@@ -909,6 +1008,7 @@ class GeneradorPlanos:
             nombre = self.gdf_infra.iloc[idx].get("Nombre_Infra", f"#{idx + 1}")
             if callback_log:
                 callback_log(f"\n[{i + 1}/{total}] Generando: {nombre}")
+            _figs_antes = plt.get_fignums()
             try:
                 ruta = self.generar_plano(
                     idx_fila=idx, formato_key=formato_key,
@@ -921,8 +1021,10 @@ class GeneradorPlanos:
                 )
                 rutas.append(ruta)
             except GeneracionCancelada:
+                self._cerrar_figuras_nuevas(_figs_antes)
                 raise
             except Exception as e:
+                self._cerrar_figuras_nuevas(_figs_antes)
                 tb = traceback.format_exc()
                 if callback_log:
                     callback_log(f"  \u2717 Error: {e}\n{tb}")
@@ -959,6 +1061,7 @@ class GeneradorPlanos:
                 if callback_progreso:
                     callback_progreso(i + 1, total)
                 continue
+            _figs_antes = plt.get_fignums()
             try:
                 ruta = self.generar_plano_agrupado(
                     indices=indices, campo_grupo=campo_grupo,
@@ -973,8 +1076,10 @@ class GeneradorPlanos:
                 )
                 rutas.append(ruta)
             except GeneracionCancelada:
+                self._cerrar_figuras_nuevas(_figs_antes)
                 raise
             except Exception as e:
+                self._cerrar_figuras_nuevas(_figs_antes)
                 tb = traceback.format_exc()
                 if callback_log:
                     callback_log(f"  \u2717 Error: {e}\n{tb}")
@@ -1025,10 +1130,16 @@ class GeneradorPlanos:
                     nombre = str(self.gdf_infra.iloc[idx].get(
                         "Nombre_Infra", f"Infraestructura #{idx + 1}"))
                     items_idx.append((i + 1, nombre, ""))
-                fig_indice = crear_indice(formato_key, items_idx,
-                                           plantilla=self._plantilla)
-                pdf.savefig(fig_indice, dpi=self.dpi_guardado or 300, facecolor="white")
-                plt.close(fig_indice)
+                # Paginar el \u00edndice: caben ~35 entradas por p\u00e1gina; antes
+                # los planos a partir del 36 desaparec\u00edan del \u00edndice.
+                _por_pagina = 35
+                for _ini in range(0, len(items_idx), _por_pagina):
+                    fig_indice = crear_indice(
+                        formato_key, items_idx[_ini:_ini + _por_pagina],
+                        plantilla=self._plantilla)
+                    pdf.savefig(fig_indice, dpi=self.dpi_guardado or 300,
+                                facecolor="white")
+                    plt.close(fig_indice)
                 if callback_log:
                     callback_log("  \u2713 \u00cdndice a\u00f1adido")
 
@@ -1054,11 +1165,13 @@ class GeneradorPlanos:
                         callback_log(f"  \u26a0 No se pudo generar mapa gu\u00eda: {e}")
 
             # Planos
+            paginas_ok = 0
             for i, idx in enumerate(indices):
                 self._check_cancelado()
                 nombre = self.gdf_infra.iloc[idx].get("Nombre_Infra", f"#{idx + 1}")
                 if callback_log:
                     callback_log(f"\n[{i + 1}/{total}] Generando: {nombre}")
+                fig = None
                 try:
                     row = self.gdf_infra.iloc[idx]
                     geom = row.geometry
@@ -1126,7 +1239,8 @@ class GeneradorPlanos:
                                                      proveedor=proveedor,
                                                      campo_mapeo=self._campo_mapeo)
                     else:
-                        items_ley = self._construir_items_leyenda(gdf_sel, color_infra)
+                        items_ley = self._construir_items_leyenda(
+                            gdf_sel, color_infra, xmin, xmax, ymin, ymax)
                         maq.dibujar_leyenda(items_ley)
                         _fila_panel = _filas_tabla[0] if _filas_tabla else row
                         maq.dibujar_panel_atributos(_fila_panel, campos,
@@ -1140,7 +1254,8 @@ class GeneradorPlanos:
                                 wms_custom=self.wms_custom_localizacion,
                                 wfs_custom=self.wfs_custom_localizacion,
                                 ruta_capa_loc=self.ruta_capa_localizacion)
-                        items_cat = self._construir_items_categoria(gdf_sel)
+                        items_cat = self._construir_items_categoria(
+                            gdf_sel, xmin, xmax, ymin, ymax)
                         maq.dibujar_barra_escala(proveedor, cx_utm=cx, cy_utm=cy,
                                                   cajetin=self._cajetin,
                                                   items_categoria=items_cat)
@@ -1152,22 +1267,34 @@ class GeneradorPlanos:
                     maq.dibujar_cabecera(row, cajetin=self._cajetin,
                                           plantilla=self._plantilla)
                     maq.dibujar_marcos(plantilla=self._plantilla, cajetin=self._cajetin)
+                    if self.marca_agua:
+                        maq.dibujar_marca_agua(self.marca_agua)
 
                     pdf.savefig(fig, dpi=self.dpi_guardado or 300, facecolor="white")
-                    plt.close(fig)
+                    paginas_ok += 1
 
                     if callback_log:
                         callback_log(f"  \u2713 P\u00e1gina {i + 1} a\u00f1adida")
+                except GeneracionCancelada:
+                    raise
                 except Exception as e:
                     tb = traceback.format_exc()
                     if callback_log:
                         callback_log(f"  \u2717 Error: {e}\n{tb}")
+                finally:
+                    # Cerrar siempre la figura, tambi\u00e9n cuando el dibujo
+                    # falla: si no, cada plano con error acumula una figura
+                    # abierta y la memoria crece durante lotes grandes.
+                    if fig is not None:
+                        plt.close(fig)
 
                 if callback_progreso:
                     callback_progreso(i + 1, total)
 
         if callback_log:
             callback_log(f"\n\u2713 PDF multipágina guardado: {ruta_pdf}")
+        # Resumen para la GUI: páginas de plano realmente añadidas / previstas
+        self.ultimo_resumen = (paginas_ok, total)
         return ruta_pdf
 
     # ── Generación por lotes desde CSV ───────────────────────────────────
@@ -1187,41 +1314,77 @@ class GeneradorPlanos:
 
         rutas = []
         total = len(lotes)
-        for i, lote in enumerate(lotes):
-            self._check_cancelado()
-            if callback_log:
-                callback_log(
-                    f"\n[{i + 1}/{total}] Lote: {lote.get('nombre', lote['ruta_shp'])}")
-
-            ok, msg, faltantes = self.cargar_infraestructuras(lote["ruta_shp"])
-            if not ok:
+        # cargar_infraestructuras() reasigna self.gdf_infra para cada lote.
+        # Guardar el estado actual para restaurarlo al terminar: si no, la
+        # tabla de la GUI mostrar\u00eda los datos originales pero las siguientes
+        # generaciones usar\u00edan el shapefile del \u00faltimo lote.
+        gdf_infra_original = self.gdf_infra
+        campo_mapeo_original = self._campo_mapeo
+        try:
+            for i, lote in enumerate(lotes):
+                self._check_cancelado()
                 if callback_log:
-                    callback_log(f"  \u2717 {msg}", "error")
+                    callback_log(
+                        f"\n[{i + 1}/{total}] Lote: {lote.get('nombre', lote['ruta_shp'])}")
+
+                ok, msg, faltantes = self.cargar_infraestructuras(lote["ruta_shp"])
+                if not ok:
+                    if callback_log:
+                        callback_log(f"  \u2717 {msg}", "error")
+                    if callback_progreso:
+                        callback_progreso(i + 1, total)
+                    continue
+
+                formato = lote.get("formato", "A3 Horizontal")
+                if formato not in FORMATOS:
+                    if callback_log:
+                        callback_log(
+                            f"  ⚠ Formato '{formato}' no reconocido; se usa "
+                            "A3 Horizontal", "warn")
+                    formato = "A3 Horizontal"
+                # Carpeta de salida vacía -> subcarpeta junto al CSV. Antes
+                # os.makedirs("") abortaba el lote entero.
+                carpeta = lote.get("carpeta_salida") or ""
+                if not carpeta:
+                    nombre_safe = "".join(
+                        c for c in (lote.get("nombre") or "lote")
+                        if c.isalnum() or c in "_ -").strip() or "lote"
+                    carpeta = os.path.join(
+                        os.path.dirname(os.path.abspath(ruta_csv)),
+                        "salida", nombre_safe)
+                try:
+                    os.makedirs(carpeta, exist_ok=True)
+                except OSError as e:
+                    if callback_log:
+                        callback_log(
+                            f"  ✗ No se pudo crear la carpeta '{carpeta}': {e}",
+                            "error")
+                    if callback_progreso:
+                        callback_progreso(i + 1, total)
+                    continue
+
+                indices = list(range(len(self.gdf_infra)))
+                try:
+                    resultados = self.generar_serie(
+                        indices=indices, formato_key=formato,
+                        proveedor=proveedor, transparencia=transparencia,
+                        campos=campos, color_infra=color_infra,
+                        salida_dir=carpeta, escala_manual=escala_manual,
+                        callback_log=callback_log,
+                        campo_encabezado=campo_encabezado,
+                    )
+                    rutas.extend(resultados)
+                except GeneracionCancelada:
+                    raise
+                except Exception as e:
+                    tb = traceback.format_exc()
+                    if callback_log:
+                        callback_log(f"  \u2717 Error en lote: {e}\n{tb}", "error")
+
                 if callback_progreso:
                     callback_progreso(i + 1, total)
-                continue
-
-            formato = lote.get("formato", "A3 Horizontal")
-            carpeta = lote.get("carpeta_salida", ".")
-            os.makedirs(carpeta, exist_ok=True)
-
-            indices = list(range(len(self.gdf_infra)))
-            try:
-                resultados = self.generar_serie(
-                    indices=indices, formato_key=formato,
-                    proveedor=proveedor, transparencia=transparencia,
-                    campos=campos, color_infra=color_infra,
-                    salida_dir=carpeta, escala_manual=escala_manual,
-                    callback_log=callback_log,
-                    campo_encabezado=campo_encabezado,
-                )
-                rutas.extend(resultados)
-            except Exception as e:
-                tb = traceback.format_exc()
-                if callback_log:
-                    callback_log(f"  \u2717 Error en lote: {e}\n{tb}", "error")
-
-            if callback_progreso:
-                callback_progreso(i + 1, total)
+        finally:
+            self.gdf_infra = gdf_infra_original
+            self._campo_mapeo = campo_mapeo_original
 
         return rutas

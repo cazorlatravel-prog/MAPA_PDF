@@ -14,6 +14,7 @@ from .estilos import (
     COLOR_ACENTO, COLOR_HOVER,
     FONT_BOLD, FONT_SMALL, FONT_LABEL,
     crear_frame_seccion, crear_boton, crear_entry, crear_label,
+    crear_tooltip,
 )
 from ..motor.escala import FORMATOS, ESCALAS
 from ..motor.cartografia import PROVIDERS_CTX
@@ -48,6 +49,12 @@ class PanelConfig:
                                state="readonly", font=FONT_LABEL)
         self._cb_prov.grid(row=3, column=0, sticky="ew", pady=(2, 4))
         self._cb_prov.bind("<<ComboboxSelected>>", self._on_proveedor_changed)
+        crear_tooltip(
+            self._cb_prov,
+            "Cartografía de fondo del mapa principal:\n"
+            "· Proveedores online (OSM, IGN…): descarga teselas (necesita internet).\n"
+            "· Ráster local: usa un GeoTIFF/ECW/VRT o carpeta de hojas tuya.\n"
+            "· WMS/WFS propio: conecta a tu servidor de mapas.")
 
         # Raster local para mapa general
         self._ruta_raster = tk.StringVar(value="")
@@ -208,6 +215,10 @@ class PanelConfig:
             values=_ESCALAS_LOC,
             font=FONT_SMALL, width=12)
         self._cb_escala_loc.pack(side="left", padx=(2, 0))
+        crear_tooltip(
+            self._cb_escala_loc,
+            "Escala del mapa de localización (recuadro de situación).\n"
+            "Valores mayores abarcan más territorio alrededor de la zona.")
 
         # ── Escala manual ──
         crear_label(f, "Escala (0 = automatica):", tipo="titulo").grid(
@@ -223,6 +234,11 @@ class PanelConfig:
             font=FONT_SMALL, width=12,
         )
         self._cb_escala.pack(side="left", padx=(2, 0))
+        crear_tooltip(
+            self._cb_escala,
+            "Escala del mapa principal (1:N).\n"
+            "0 = automática: se ajusta a cada infraestructura.\n"
+            "Un valor fijo usa la misma escala en todos los planos.")
 
         # ── Color infraestructura ──
         crear_label(f, "Color infraestructura:", tipo="titulo").grid(
@@ -242,10 +258,15 @@ class PanelConfig:
         crear_label(f, "Calidad PDF:", tipo="titulo").grid(
             row=13, column=0, sticky="w")
         self._calidad_pdf = tk.StringVar(value="Alta (400 DPI)")
-        ttk.Combobox(f, textvariable=self._calidad_pdf,
+        cb_calidad = ttk.Combobox(f, textvariable=self._calidad_pdf,
                      values=list(CALIDADES_PDF.keys()),
-                     state="readonly", font=FONT_LABEL).grid(
-                     row=14, column=0, sticky="ew", pady=(2, 8))
+                     state="readonly", font=FONT_LABEL)
+        cb_calidad.grid(row=14, column=0, sticky="ew", pady=(2, 8))
+        crear_tooltip(
+            cb_calidad,
+            "Resolución de salida del PDF (DPI).\n"
+            "Mayor calidad = más nitidez pero archivos más grandes "
+            "y generación más lenta.")
 
         # ── Origen datos tabla ──
         crear_label(f, "Datos de tabla:", tipo="titulo").grid(
@@ -334,8 +355,13 @@ class PanelConfig:
         cb_preset.bind("<<ComboboxSelected>>", self._on_preset_nombre)
 
         self.patron_nombre = tk.StringVar(value="plano_{num}_{nombre}")
-        crear_entry(f, textvariable=self.patron_nombre).grid(
-            row=20, column=0, sticky="ew", pady=(2, 0))
+        entry_patron = crear_entry(f, textvariable=self.patron_nombre)
+        entry_patron.grid(row=20, column=0, sticky="ew", pady=(2, 0))
+        crear_tooltip(
+            entry_patron,
+            "Patrón del nombre de cada archivo PDF. Variables disponibles:\n"
+            "{num} = número de plano · {nombre} = nombre de la "
+            "infraestructura · {campo} = valor del campo de agrupación.")
 
         self._lbl_preview_nombre = tk.Label(
             f, text="Ej: plano_0001_CortafuegosNorte.pdf",
@@ -352,6 +378,11 @@ class PanelConfig:
                  wraplength=240, justify="left").grid(row=23, column=0, sticky="w")
         crear_boton(f, "Seleccionar carpeta", self._elegir_carpeta,
                     icono="\U0001f4c1").grid(row=24, column=0, sticky="ew", pady=(4, 4))
+
+        # ── Capas WMS superpuestas (overlays) ──
+        self._parent = parent
+        self._overlays = []  # lista de dicts (ver motor.overlays_wms)
+        self._crear_seccion_overlays(f, fila=25)
 
         f.columnconfigure(0, weight=1)
 
@@ -373,9 +404,10 @@ class PanelConfig:
 
     @property
     def escala_manual(self) -> int:
-        txt = self._escala_manual.get().replace(",", "").strip()
-        if txt.startswith("0"):
-            return None
+        # No descartar por empezar en "0": un "0500" tecleado debe ser 500,
+        # no escala automática. "0" y "0 (Automática)" siguen dando None
+        # (val<=0 y ValueError respectivamente).
+        txt = self._escala_manual.get().replace(",", "").replace(".", "").strip()
         try:
             val = int(txt)
             return val if val > 0 else None
@@ -680,3 +712,233 @@ class PanelConfig:
             return val if val > 0 else 250_000
         except ValueError:
             return 250_000
+
+    # ── Capas WMS superpuestas ──
+
+    def _crear_seccion_overlays(self, f, fila: int):
+        """Sección plegable 'CAPAS WMS SUPERPUESTAS'."""
+        self._overlays_visible = tk.BooleanVar(value=False)
+        self._btn_toggle_overlays = tk.Button(
+            f, text="▸  CAPAS WMS SUPERPUESTAS (0)",
+            command=self._toggle_overlays, font=FONT_BOLD,
+            bg=COLOR_PANEL, fg=COLOR_ACENTO, activebackground=COLOR_PANEL,
+            activeforeground=COLOR_ACENTO, relief="flat", bd=0,
+            highlightthickness=0, cursor="hand2", anchor="w")
+        self._btn_toggle_overlays.grid(row=fila, column=0, sticky="ew",
+                                       pady=(6, 2))
+        crear_tooltip(
+            self._btn_toggle_overlays,
+            "Capas WMS semitransparentes dibujadas ENCIMA del fondo del\n"
+            "mapa principal (no en el de localización): p. ej. parcelas de\n"
+            "Catastro sobre la ortofoto PNOA, límites municipales o montes\n"
+            "públicos. Cada capa tiene su propia transparencia y se puede\n"
+            "activar/desactivar sin borrarla. Requiere internet.")
+
+        body = tk.Frame(f, bg=COLOR_PANEL)
+        body.grid(row=fila + 1, column=0, sticky="ew", pady=(0, 6))
+        self._frame_overlays = body
+
+        self._lb_overlays = tk.Listbox(
+            body, height=4, font=FONT_SMALL, bg=COLOR_ENTRY, fg=COLOR_TEXTO,
+            selectbackground=COLOR_ACENTO, relief="flat",
+            highlightthickness=1, highlightbackground=COLOR_BORDE,
+            activestyle="none", exportselection=False)
+        self._lb_overlays.pack(fill="x", pady=(0, 4))
+        self._lb_overlays.bind("<Double-Button-1>",
+                               lambda e: self._toggle_overlay_activo())
+
+        fila1 = tk.Frame(body, bg=COLOR_PANEL)
+        fila1.pack(fill="x")
+        self._btn_overlay_preset = crear_boton(
+            fila1, "Añadir predefinida ▾",
+            self._menu_overlays_predefinidos)
+        self._btn_overlay_preset.pack(side="left", fill="x", expand=True)
+        crear_boton(fila1, "Añadir WMS propio…",
+                    self._dialogo_overlay_wms).pack(
+            side="left", fill="x", expand=True, padx=(4, 0))
+
+        fila2 = tk.Frame(body, bg=COLOR_PANEL)
+        fila2.pack(fill="x", pady=(4, 0))
+        crear_boton(fila2, "Quitar", self._quitar_overlay).pack(
+            side="left", fill="x", expand=True)
+        crear_boton(fila2, "Activar/Desactivar",
+                    self._toggle_overlay_activo).pack(
+            side="left", fill="x", expand=True, padx=(4, 0))
+
+        body.grid_remove()
+
+    def _toggle_overlays(self):
+        if self._overlays_visible.get():
+            self._frame_overlays.grid_remove()
+            self._overlays_visible.set(False)
+        else:
+            self._frame_overlays.grid()
+            self._overlays_visible.set(True)
+        self._refrescar_overlays()
+
+    def _refrescar_overlays(self):
+        """Repinta la lista y sincroniza con el motor."""
+        sel = self._lb_overlays.curselection()
+        self._lb_overlays.delete(0, "end")
+        for ov in self._overlays:
+            marca = "✓" if ov.get("activo", True) else "✗"
+            pct = int(round(float(ov.get("alpha", 0.6)) * 100))
+            self._lb_overlays.insert(
+                "end", f"{marca}  {ov.get('nombre', ov.get('capa', ''))}"
+                       f"  ({pct}%)")
+        if sel and sel[0] < len(self._overlays):
+            self._lb_overlays.selection_set(sel[0])
+        flecha = "▾" if self._overlays_visible.get() else "▸"
+        n_act = sum(1 for o in self._overlays if o.get("activo", True))
+        self._btn_toggle_overlays.configure(
+            text=f"{flecha}  CAPAS WMS SUPERPUESTAS ({n_act}/{len(self._overlays)})")
+        self._sincronizar_overlays_motor()
+
+    def _sincronizar_overlays_motor(self):
+        """Empuja la lista a ``motor.overlays_wms``.
+
+        La ventana principal (App) expone ``self.motor``; se localiza a
+        través de la ventana raíz para no depender de cambios en app.py.
+        """
+        try:
+            motor = getattr(self._parent.winfo_toplevel(), "motor", None)
+        except Exception:
+            motor = None
+        if motor is not None:
+            motor.overlays_wms = self.obtener_overlays()
+
+    def _menu_overlays_predefinidos(self):
+        from ..motor.cartografia import OVERLAYS_PREDEFINIDOS
+        menu = tk.Menu(self._btn_overlay_preset, tearoff=0)
+        for nombre in OVERLAYS_PREDEFINIDOS:
+            menu.add_command(
+                label=nombre,
+                command=lambda n=nombre: self._añadir_overlay_predefinido(n))
+        btn = self._btn_overlay_preset
+        try:
+            menu.tk_popup(btn.winfo_rootx(),
+                          btn.winfo_rooty() + btn.winfo_height())
+        finally:
+            menu.grab_release()
+
+    def _añadir_overlay_predefinido(self, nombre: str):
+        from ..motor.cartografia import OVERLAYS_PREDEFINIDOS
+        p = OVERLAYS_PREDEFINIDOS.get(nombre)
+        if not p:
+            return
+        if any(o.get("nombre") == nombre for o in self._overlays):
+            messagebox.showinfo("Capa ya añadida",
+                                f"'{nombre}' ya está en la lista.")
+            return
+        self._overlays.append({
+            "nombre": nombre, "url": p["url"], "capa": p["capa"],
+            "alpha": float(p.get("alpha", 0.6)),
+            "formato": p.get("formato", "image/png"),
+            "activo": True, "version": p.get("version", "1.3.0"),
+        })
+        self._refrescar_overlays()
+
+    def _dialogo_overlay_wms(self):
+        """Diálogo para añadir un WMS propio como capa superpuesta."""
+        dlg = tk.Toplevel(self._parent.winfo_toplevel())
+        dlg.title("Añadir capa WMS superpuesta")
+        dlg.configure(bg=COLOR_PANEL)
+        dlg.transient(self._parent.winfo_toplevel())
+        dlg.resizable(False, False)
+
+        v_nombre = tk.StringVar(value="")
+        v_url = tk.StringVar(value="")
+        v_capa = tk.StringVar(value="")
+        v_formato = tk.StringVar(value="image/png")
+        v_version = tk.StringVar(value="1.3.0")
+        v_alpha = tk.DoubleVar(value=60)
+
+        cont = tk.Frame(dlg, bg=COLOR_PANEL, padx=12, pady=10)
+        cont.pack(fill="both", expand=True)
+        for txt, var in (("Nombre:", v_nombre),
+                         ("URL del servicio WMS:", v_url),
+                         ("Nombre de capa (LAYERS):", v_capa)):
+            crear_label(cont, txt).pack(anchor="w")
+            crear_entry(cont, textvariable=var, width=48).pack(
+                fill="x", pady=(2, 6))
+        fila = tk.Frame(cont, bg=COLOR_PANEL)
+        fila.pack(fill="x", pady=(0, 6))
+        crear_label(fila, "Formato:").pack(side="left")
+        ttk.Combobox(fila, textvariable=v_formato,
+                     values=["image/png", "image/gif"],
+                     state="readonly", font=FONT_SMALL, width=11
+                     ).pack(side="left", padx=(4, 12))
+        crear_label(fila, "Versión WMS:").pack(side="left")
+        ttk.Combobox(fila, textvariable=v_version,
+                     values=["1.3.0", "1.1.1"],
+                     state="readonly", font=FONT_SMALL, width=7
+                     ).pack(side="left", padx=(4, 0))
+        crear_label(cont, "Opacidad (%):").pack(anchor="w")
+        tk.Scale(cont, from_=10, to=100, orient="horizontal",
+                 variable=v_alpha, resolution=5, bg=COLOR_PANEL,
+                 fg=COLOR_TEXTO, highlightthickness=0,
+                 troughcolor=COLOR_ENTRY).pack(fill="x")
+
+        def _aceptar():
+            url, capa = v_url.get().strip(), v_capa.get().strip()
+            if not url or not capa:
+                messagebox.showwarning(
+                    "Datos incompletos",
+                    "Indica la URL del servicio y el nombre de la capa.",
+                    parent=dlg)
+                return
+            self._overlays.append({
+                "nombre": v_nombre.get().strip() or capa,
+                "url": url, "capa": capa,
+                "alpha": round(v_alpha.get() / 100.0, 2),
+                "formato": v_formato.get(),
+                "activo": True, "version": v_version.get(),
+            })
+            dlg.destroy()
+            self._refrescar_overlays()
+
+        botones = tk.Frame(cont, bg=COLOR_PANEL)
+        botones.pack(fill="x", pady=(8, 0))
+        crear_boton(botones, "Cancelar", dlg.destroy).pack(side="right")
+        crear_boton(botones, "Añadir", _aceptar,
+                    estilo="primario").pack(side="right", padx=(0, 6))
+        dlg.grab_set()
+
+    def _indice_overlay_sel(self):
+        sel = self._lb_overlays.curselection()
+        if not sel or sel[0] >= len(self._overlays):
+            return None
+        return sel[0]
+
+    def _quitar_overlay(self):
+        i = self._indice_overlay_sel()
+        if i is None:
+            return
+        del self._overlays[i]
+        self._refrescar_overlays()
+
+    def _toggle_overlay_activo(self):
+        i = self._indice_overlay_sel()
+        if i is None:
+            return
+        self._overlays[i]["activo"] = not self._overlays[i].get("activo", True)
+        self._refrescar_overlays()
+
+    def obtener_overlays(self) -> list:
+        """Copia de la lista de capas WMS superpuestas configuradas."""
+        return [dict(o) for o in self._overlays]
+
+    def cargar_overlays(self, lista):
+        """Sustituye la lista de overlays (p. ej. al cargar un proyecto)."""
+        self._overlays = [
+            dict(o) for o in (lista or [])
+            if isinstance(o, dict) and o.get("url") and o.get("capa")]
+        if self._overlays and not self._overlays_visible.get():
+            self._toggle_overlays()  # mostrar la sección si hay capas
+        else:
+            self._refrescar_overlays()
+
+    @property
+    def overlays_wms(self) -> list:
+        """Overlays configurados (para get_config / motor.overlays_wms)."""
+        return self.obtener_overlays()
