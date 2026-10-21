@@ -48,7 +48,14 @@ RATIO_MAPA_ALTO: float = 0.78
 
 _CABECERA_MM: int = 6  # Altura de la cabecera (debe coincidir con maquetacion._CABECERA_MM)
 
-DPI_DEFAULT: int = 400  # calidad de impresión alta
+DPI_DEFAULT: int = 400  # calidad de impresión alta (dpi de guardado de rásters en el PDF)
+
+# DPI al que se CONSTRUYE la figura (no el de salida). El PDF es vectorial:
+# su resolución solo depende del dpi de guardado de las imágenes; en
+# cambio cada redibujado durante la maquetación (etiquetas, adjustText...)
+# cuesta proporcional al cuadrado de este valor. Medido: 400 → 120 dpi
+# reduce la generación de un plano de ~20 s a ~1 s sin cambiar el PDF.
+DPI_TRABAJO: int = 120
 
 
 def seleccionar_escala(geom: BaseGeometry, formato_key: str,

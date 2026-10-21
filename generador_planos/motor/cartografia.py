@@ -273,6 +273,44 @@ def obtener_atribucion(proveedor_key: str) -> str:
 # Descarga manual de teselas (fallback si contextily falla con IGN)
 # ---------------------------------------------------------------------------
 
+def _px_objetivo(ax, minimo: int = 512, maximo: int = 4096) -> int:
+    """Píxeles de ancho que necesita un eje al imprimirse.
+
+    = ancho físico del eje (pulgadas) × dpi de salida (``fig.dpi_salida``,
+    que fija MaquetadorPlano según la calidad elegida; tope 300). Es la
+    resolución justa para pedir/embeber imágenes: el mapa principal de un
+    A3 a 300 dpi necesita ~4000 px, pero el minimapa de localización (5 cm)
+    solo ~600 px. Antes se pedían 4096 px también para el minimapa.
+    """
+    try:
+        fig = ax.figure
+        dpi_salida = float(getattr(fig, "dpi_salida", 300) or 300)
+        dpi_salida = min(dpi_salida, 300.0)
+        ancho_in = float(fig.get_size_inches()[0]) * float(ax.get_position().width)
+        px = int(round(ancho_in * dpi_salida))
+    except Exception:
+        px = maximo
+    return max(minimo, min(maximo, px))
+
+
+def _reducir_si_excede(img, px_objetivo: int, margen: float = 1.5):
+    """Reduce (LANCZOS) una imagen PIL si es mucho mayor que lo necesario.
+
+    Con ``interpolation="none"`` la imagen se embebe en el PDF tal cual;
+    si viniera de la caché con más resolución de la que el eje necesita,
+    engordaría el PDF sin aportar nada.
+    """
+    try:
+        if img.width > px_objetivo * margen:
+            factor = px_objetivo / float(img.width)
+            nuevo = (max(1, int(round(img.width * factor))),
+                     max(1, int(round(img.height * factor))))
+            return img.resize(nuevo, Image.LANCZOS)
+    except Exception:
+        pass
+    return img
+
+
 def _dimensiones_wms(extent_x: float, extent_y: float,
                      m_por_px: float = 2.0, minimo: int = 512,
                      maximo: int = 4096) -> tuple:
@@ -321,30 +359,89 @@ _HEADERS_HTTP = {
 }
 
 
+# Evento de cancelación (lo fija GeneradorPlanos) para que PARAR
+# interrumpa también las descargas en curso, no solo entre planos.
+_evento_cancelacion = None
+
+
+class DescargaCancelada(Exception):
+    """El usuario canceló mientras se descargaba cartografía."""
+
+
+# Hosts que no responden: se evitan durante un rato para que un servidor
+# caído no bloquee minutos cada plano de una serie.
+_HOSTS_CAIDOS = {}
+_HOSTS_CAIDOS_SEG = 180.0
+_SESION_TLS = _threading.local()
+_REQUESTS_GET_ORIGINAL = requests.get
+
+
+def _sesion_http():
+    """requests.Session por hilo: reutiliza conexiones TLS (las teselas
+    abrían una conexión nueva por petición)."""
+    s = getattr(_SESION_TLS, "sesion", None)
+    if s is None:
+        s = requests.Session()
+        _SESION_TLS.sesion = s
+    return s
+
+
+def _http_get(url, **kwargs):
+    """GET vía la sesión del hilo; si ``requests.get`` ha sido sustituido
+    (tests con mocks), se respeta esa sustitución."""
+    if requests.get is not _REQUESTS_GET_ORIGINAL:
+        return requests.get(url, **kwargs)
+    return _sesion_http().get(url, **kwargs)
+
+
 def _get_con_reintentos(url, params=None, headers=None, timeout=60,
                         intentos=3, espera=1.0):
-    """requests.get con reintentos ante cortes de red y errores 5xx.
+    """GET con reintentos ante cortes de red y errores 5xx.
 
-    Algunos servidores públicos (Catastro, IDEE) cortan conexiones de forma
-    intermitente ("connection reset", respuesta vacía). Un reintento breve
-    evita que un plano se quede sin fondo por un fallo transitorio.
+    - Timeout en dos partes (conexión 5 s / lectura ``timeout``): un
+      servidor que no contesta no bloquea el plano un minuto por intento.
+    - Reintenta también cortes a mitad de descarga (ChunkedEncodingError).
+    - Si el usuario pulsa PARAR, aborta inmediatamente (DescargaCancelada).
+    - Un host que ha agotado los reintentos se recuerda y se salta durante
+      unos minutos en vez de volver a esperar en cada plano.
     """
     import time
+    import urllib.parse
+    host = ""
+    try:
+        host = urllib.parse.urlsplit(url).netloc.lower()
+    except Exception:
+        pass
+    ahora = time.time()
+    caido_hasta = _HOSTS_CAIDOS.get(host)
+    if caido_hasta and ahora < caido_hasta:
+        raise requests.ConnectionError(
+            f"El servidor {host} no responde (se reintentará en "
+            f"{int(caido_hasta - ahora)} s)")
+
+    if isinstance(timeout, (int, float)):
+        timeout = (5.0, float(timeout))
     ultimo = None
     for i in range(max(1, intentos)):
+        if _evento_cancelacion is not None and _evento_cancelacion.is_set():
+            raise DescargaCancelada("Descarga cancelada por el usuario.")
         try:
-            resp = requests.get(url, params=params,
-                                headers=headers or _HEADERS_HTTP,
-                                timeout=timeout)
+            resp = _http_get(url, params=params,
+                             headers=headers or _HEADERS_HTTP,
+                             timeout=timeout)
             if resp.status_code >= 500 and i < intentos - 1:
                 ultimo = requests.HTTPError(
                     f"HTTP {resp.status_code}", response=resp)
             else:
+                _HOSTS_CAIDOS.pop(host, None)
                 return resp
-        except (requests.ConnectionError, requests.Timeout) as e:
+        except (requests.ConnectionError, requests.Timeout,
+                requests.exceptions.ChunkedEncodingError) as e:
             ultimo = e
         if i < intentos - 1:
             time.sleep(espera * (i + 1))
+    if host and isinstance(ultimo, (requests.ConnectionError, requests.Timeout)):
+        _HOSTS_CAIDOS[host] = time.time() + _HOSTS_CAIDOS_SEG
     raise ultimo
 
 
@@ -408,7 +505,7 @@ def _calcular_zoom_teselas(lon_min, lat_min, lon_max, lat_max,
             break
 
     z_tope = _max_zoom_con(max_teselas_lado)
-    z_comodo = _max_zoom_con(teselas_comodas)
+    z_comodo = _max_zoom_con(teselas_comodas) if teselas_comodas else 1
     return max(1, min(max_zoom, z_tope, max(z_necesario, z_comodo)))
 
 
@@ -456,9 +553,12 @@ def _descargar_teselas_manual(ax, url_template, xmin, xmax, ymin, ymax,
     """Descarga teselas manualmente y las dibuja en el eje matplotlib.
 
     Convierte las coordenadas del eje (EPSG:25830) a EPSG:4326 para
-    calcular tiles, descarga y compone la imagen de fondo. El zoom se
-    elige con _calcular_zoom_teselas (resolución >= ~2 m/px, como mucho
-    24 teselas por lado en X e Y, sin pasar del ``max_zoom`` del proveedor).
+    calcular tiles, descarga y compone UNA sola imagen de fondo (mosaico)
+    que se dibuja con un único ``imshow``. El zoom se elige para que el
+    mosaico tenga aproximadamente los píxeles que el eje necesita al
+    imprimir (``_px_objetivo``), sin bajar de ``m_por_px`` metros/píxel de
+    detalle, con como mucho 24 teselas por lado y sin pasar del
+    ``max_zoom`` del proveedor.
     """
     transformer = _get_transformer(f"EPSG:{crs_epsg}", "EPSG:4326")
     # Las 4 esquinas: en UTM el rectángulo no es un rectángulo lon/lat
@@ -469,8 +569,15 @@ def _descargar_teselas_manual(ax, url_template, xmin, xmax, ymin, ymax,
     lat_min = min(c[1] for c in esquinas)
     lat_max = max(c[1] for c in esquinas)
 
+    # Resolución necesaria según el tamaño físico del eje (nunca más fina
+    # que m_por_px: no hace falta más detalle del que el papel muestra)
+    px_obj = _px_objetivo(ax)
+    m_px_necesario = max(float(m_por_px) * 0.25,
+                         float(xmax - xmin) / float(px_obj))
     zoom = _calcular_zoom_teselas(lon_min, lat_min, lon_max, lat_max,
-                                  max_zoom=max_zoom, m_por_px=m_por_px)
+                                  max_zoom=max_zoom,
+                                  m_por_px=max(m_px_necesario, 0.3),
+                                  teselas_comodas=0)
 
     tx_min, ty_min = _lat_lon_to_tile(lat_max, lon_min, zoom)
     tx_max, ty_max = _lat_lon_to_tile(lat_min, lon_max, zoom)
@@ -487,12 +594,7 @@ def _descargar_teselas_manual(ax, url_template, xmin, xmax, ymin, ymax,
 
     def _fetch_tile(coords):
         tx, ty = coords
-        img = _descargar_tesela(url_template, zoom, tx, ty)
-        tile_lon_min = tx / n * 360.0 - 180.0
-        tile_lon_max = (tx + 1) / n * 360.0 - 180.0
-        tile_lat_max = math.degrees(math.atan(math.sinh(math.pi * (1 - 2 * ty / n))))
-        tile_lat_min = math.degrees(math.atan(math.sinh(math.pi * (1 - 2 * (ty + 1) / n))))
-        return (img, tile_lon_min, tile_lon_max, tile_lat_min, tile_lat_max)
+        return (tx, ty, _descargar_tesela(url_template, zoom, tx, ty))
 
     # Hasta 2 rondas: las teselas que fallan (cortes de conexión de
     # servidores públicos) se reintentan una vez más para no dejar huecos.
@@ -513,18 +615,81 @@ def _descargar_teselas_manual(ax, url_template, xmin, xmax, ymin, ymax,
     if not tiles:
         return False
 
-    # Convertir bounds de cada tile de lon/lat a EPSG:25830
-    transformer_inv = _get_transformer("EPSG:4326", f"EPSG:{crs_epsg}")
-    for img, tlon_min, tlon_max, tlat_min, tlat_max in tiles:
-        txmin_m, tymin_m = transformer_inv.transform(tlon_min, tlat_min)
-        txmax_m, tymax_m = transformer_inv.transform(tlon_max, tlat_max)
-        ax.imshow(
-            _imagen_a_array(img),
-            extent=[txmin_m, txmax_m, tymin_m, tymax_m],
-            aspect="auto",
-            zorder=0,
-            interpolation="bilinear",
+    # ── Componer un único mosaico RGBA (huecos transparentes) ──
+    tam = tiles[0][2].width or 256
+    n_x = tx_max - tx_min + 1
+    n_y = ty_max - ty_min + 1
+    mosaico = np.zeros((n_y * tam, n_x * tam, 4), dtype=np.uint8)
+    for tx, ty, img in tiles:
+        arr = _imagen_a_array(img)
+        if arr.ndim == 2:
+            arr = np.stack([arr, arr, arr], axis=-1)
+        if arr.shape[-1] == 3:
+            arr = np.dstack([arr, np.full(arr.shape[:2], 255, dtype=np.uint8)])
+        if arr.dtype != np.uint8:
+            arr = np.clip(arr * (255 if arr.max() <= 1.0 else 1), 0, 255).astype(np.uint8)
+        y0 = (ty - ty_min) * tam
+        x0 = (tx - tx_min) * tam
+        h, w = min(tam, arr.shape[0]), min(tam, arr.shape[1])
+        mosaico[y0:y0 + h, x0:x0 + w] = arr[:h, :w, :4]
+
+    # Reducir a lo que el eje necesita (el zoom se elige por exceso)
+    img_mos = Image.fromarray(mosaico, "RGBA")
+
+    # Límites del mosaico en Web Mercator (EPSG:3857), que es el CRS real
+    # de las teselas.
+    MERC = 20037508.342789244
+    mx0 = tx_min / n * 2 * MERC - MERC
+    mx1 = (tx_max + 1) / n * 2 * MERC - MERC
+    my1 = MERC - ty_min / n * 2 * MERC
+    my0 = MERC - (ty_max + 1) / n * 2 * MERC
+
+    # ── Reproyectar el mosaico a EPSG:25830 (alineación exacta) ──
+    # Un rectángulo Web Mercator NO es un rectángulo en UTM: colocarlo por
+    # sus esquinas ignora la convergencia de meridianos (6 m de error en
+    # Cazorla, pero 300-400 m en Huelva). Se warpea con rasterio sobre la
+    # malla exacta del plano; si rasterio no está, se cae a las esquinas.
+    try:
+        from rasterio.warp import reproject, Resampling
+        from rasterio.transform import from_bounds as _from_bounds
+        h_s, w_s = mosaico.shape[:2]
+        w_d = int(px_obj)
+        h_d = max(1, int(round(w_d * (ymax - ymin) / max(xmax - xmin, 1e-9))))
+        src_tr = _from_bounds(mx0, my0, mx1, my1, w_s, h_s)
+        dst_tr = _from_bounds(xmin, ymin, xmax, ymax, w_d, h_d)
+        destino = np.zeros((4, h_d, w_d), dtype=np.uint8)
+        reproject(
+            source=np.ascontiguousarray(np.moveaxis(mosaico, -1, 0)),
+            destination=destino,
+            src_transform=src_tr, src_crs="EPSG:3857",
+            dst_transform=dst_tr, dst_crs=f"EPSG:{crs_epsg}",
+            resampling=Resampling.bilinear, dst_nodata=0,
         )
+        ax.imshow(
+            np.moveaxis(destino, 0, -1),
+            extent=[xmin, xmax, ymin, ymax],
+            aspect="auto", zorder=0, interpolation="none",
+        )
+        return True
+    except Exception:
+        pass
+
+    # Fallback sin rasterio: colocar por las esquinas (aproximado)
+    img_mos = _reducir_si_excede(img_mos, px_obj, margen=1.25)
+    mos_lon_min = tx_min / n * 360.0 - 180.0
+    mos_lon_max = (tx_max + 1) / n * 360.0 - 180.0
+    mos_lat_max = math.degrees(math.atan(math.sinh(math.pi * (1 - 2 * ty_min / n))))
+    mos_lat_min = math.degrees(math.atan(math.sinh(math.pi * (1 - 2 * (ty_max + 1) / n))))
+    transformer_inv = _get_transformer("EPSG:4326", f"EPSG:{crs_epsg}")
+    mxmin_m, mymin_m = transformer_inv.transform(mos_lon_min, mos_lat_min)
+    mxmax_m, mymax_m = transformer_inv.transform(mos_lon_max, mos_lat_max)
+    ax.imshow(
+        np.asarray(img_mos),
+        extent=[mxmin_m, mxmax_m, mymin_m, mymax_m],
+        aspect="auto",
+        zorder=0,
+        interpolation="none",
+    )
     return True
 
 
@@ -534,11 +699,14 @@ def _descargar_wms(ax, wms_url, xmin, xmax, ymin, ymax, crs_epsg=25830):
     A diferencia de tiles, solicita una sola imagen que cubre todo el extent,
     lo que da mejor calidad a escalas cartográficas específicas (1:25.000, etc.).
     """
-    # Tamaño de imagen proporcional al extent del eje (~2 m/píxel), con un
-    # mínimo de 512 px y un máximo de 4096 px. Ambos límites se aplican con
-    # UN MISMO factor a los dos lados para conservar el aspect ratio del
-    # BBOX: si no, el servidor renderiza la imagen deformada.
-    width, height = _dimensiones_wms(xmax - xmin, ymax - ymin)
+    # Tamaño de imagen según el tamaño físico del eje y la calidad de
+    # salida (_px_objetivo), con mínimo 512 px. Ambos límites se aplican
+    # con UN MISMO factor a los dos lados para conservar el aspect ratio
+    # del BBOX: si no, el servidor renderiza la imagen deformada.
+    px_obj = _px_objetivo(ax)
+    width, height = _dimensiones_wms(xmax - xmin, ymax - ymin,
+                                     m_por_px=float(xmax - xmin) / px_obj,
+                                     maximo=px_obj)
 
     # BBOX: en WMS 1.3.0 con EPSG:25830 el orden es (minx,miny,maxx,maxy)
     bbox_str = f"{xmin},{ymin},{xmax},{ymax}"
@@ -570,11 +738,11 @@ def _descargar_wms(ax, wms_url, xmin, xmax, ymin, ymax, crs_epsg=25830):
             pass
 
     ax.imshow(
-        _imagen_a_array(img),
+        _imagen_a_array(_reducir_si_excede(img, px_obj)),
         extent=[xmin, xmax, ymin, ymax],
         aspect="auto",
         zorder=0,
-        interpolation="bilinear",
+        interpolation="none",
     )
     return True
 
@@ -606,11 +774,44 @@ def añadir_fondo_raster_local(ax, ruta_raster: str, xmin, xmax, ymin, ymax):
                 f"EPSG:{epsg_src}, pero el plano usa EPSG:25830. "
                 "Reproyéctalo o el fondo saldrá desplazado.")
 
-        # Recortar al extent del plano
+        # Recortar al extent del plano, LIMITADO a la extensión del ráster:
+        # si el plano sobresale del ráster, rasterio solo devuelve la parte
+        # que existe y la imagen se colocaba/estiraba con la ventana pedida
+        # completa (fondo desplazado hasta 500 m o estirado 2x en silencio).
+        from rasterio.windows import Window
         window = from_bounds(xmin, ymin, xmax, ymax, src.transform)
+        try:
+            window = window.intersection(Window(0, 0, src.width, src.height))
+        except Exception:
+            raise ValueError(
+                "El ráster no cubre la extensión del plano "
+                f"({os.path.basename(ruta_raster)})")
+        if window.width <= 0 or window.height <= 0:
+            raise ValueError(
+                "El ráster no cubre la extensión del plano "
+                f"({os.path.basename(ruta_raster)})")
         # Leer bandas visibles (máx 3 para RGB)
         n_bands = min(src.count, 3)
-        data = src.read(list(range(1, n_bands + 1)), window=window)
+
+        # Lectura DECIMADA: una ortofoto de 0,25 m/px en un A3 a 1:10.000
+        # supondría ~16.000 px de ancho (cientos de MB y minutos de
+        # proceso) para acabar impresa a ~4.000 px. Se lee ya reducida con
+        # remuestreo 'average' hasta un máximo de 4096 px por lado.
+        try:
+            from rasterio.enums import Resampling
+            w_win = max(1, int(round(window.width)))
+            h_win = max(1, int(round(window.height)))
+            factor = max(w_win, h_win) / 4096.0
+            if factor > 1.0:
+                out_shape = (n_bands, max(1, int(h_win / factor)),
+                             max(1, int(w_win / factor)))
+                data = src.read(list(range(1, n_bands + 1)), window=window,
+                                out_shape=out_shape,
+                                resampling=Resampling.average)
+            else:
+                data = src.read(list(range(1, n_bands + 1)), window=window)
+        except Exception:
+            data = src.read(list(range(1, n_bands + 1)), window=window)
 
         # Si el plano no intersecta el ráster, la ventana queda vacía.
         # Hay que fallar para que el llamador haga fallback a WMS en vez
@@ -620,20 +821,41 @@ def añadir_fondo_raster_local(ax, ruta_raster: str, xmin, xmax, ymin, ymax):
                 "El ráster no cubre la extensión del plano "
                 f"({os.path.basename(ruta_raster)})")
 
-        # Calcular extent real de la ventana leída
+        # Calcular extent real de la ventana leída (la ventana, no el
+        # array decimado: así el extent es correcto aunque se haya reducido)
         win_transform = src.window_transform(window)
-        h, w = data.shape[1], data.shape[2]
-        rx_min = min(win_transform.c, win_transform.c + w * win_transform.a)
-        rx_max = max(win_transform.c, win_transform.c + w * win_transform.a)
-        ry_min = min(win_transform.f, win_transform.f + h * win_transform.e)
-        ry_max = max(win_transform.f, win_transform.f + h * win_transform.e)
+        w_px = window.width
+        h_px = window.height
+        rx_min = min(win_transform.c, win_transform.c + w_px * win_transform.a)
+        rx_max = max(win_transform.c, win_transform.c + w_px * win_transform.a)
+        ry_min = min(win_transform.f, win_transform.f + h_px * win_transform.e)
+        ry_max = max(win_transform.f, win_transform.f + h_px * win_transform.e)
 
         # Manejar NODATA: convertir píxeles sin datos en transparentes
         nodata = src.nodata
+        cmap_kw = {}
         if n_bands == 1:
-            img = data[0].astype(float)
-            if nodata is not None:
-                img = np.ma.masked_equal(img, nodata)
+            # Una banda: respetar la paleta del ráster (hojas MTN en paleta)
+            # o mostrar en gris; antes salía en falso color (viridis).
+            try:
+                paleta = src.colormap(1)
+            except Exception:
+                paleta = None
+            if paleta:
+                lut = np.zeros((256, 4), dtype=np.uint8)
+                lut[:, 3] = 255
+                for k, v in paleta.items():
+                    if 0 <= k < 256:
+                        lut[k, :len(v[:4])] = v[:4]
+                idx = np.clip(data[0], 0, 255).astype(np.uint8)
+                img = lut[idx]
+                if nodata is not None:
+                    img[data[0] == nodata, 3] = 0
+            else:
+                img = data[0].astype(float)
+                if nodata is not None:
+                    img = np.ma.masked_equal(img, nodata)
+                cmap_kw = {"cmap": "gray"}
         else:
             img = np.moveaxis(data, 0, -1)  # (bands, h, w) → (h, w, bands)
             if nodata is not None:
@@ -648,7 +870,7 @@ def añadir_fondo_raster_local(ax, ruta_raster: str, xmin, xmax, ymin, ymax):
 
     ax.imshow(
         img, extent=[rx_min, rx_max, ry_min, ry_max],
-        aspect="auto", zorder=0, interpolation="bilinear",
+        aspect="auto", zorder=0, interpolation="none", **cmap_kw,
     )
     return True
 
@@ -1464,7 +1686,10 @@ def descargar_wfs(url: str, capa: str, xmin, ymin, xmax, ymax,
 def descargar_wms_custom(ax, url: str, capa: str, xmin, xmax, ymin, ymax,
                          crs_epsg: int = 25830, formato: str = "image/png"):
     """Descarga una imagen WMS GetMap de un servicio personalizado del usuario."""
-    width, height = _dimensiones_wms(xmax - xmin, ymax - ymin)
+    px_obj = _px_objetivo(ax)
+    width, height = _dimensiones_wms(xmax - xmin, ymax - ymin,
+                                     m_por_px=float(xmax - xmin) / px_obj,
+                                     maximo=px_obj)
 
     bbox_str = f"{xmin},{ymin},{xmax},{ymax}"
     base_url = url.split("?")[0]
@@ -1511,18 +1736,19 @@ def descargar_wms_custom(ax, url: str, capa: str, xmin, xmax, ymin, ymax,
             pass
 
     ax.imshow(
-        _imagen_a_array(img),
+        _imagen_a_array(_reducir_si_excede(img, px_obj)),
         extent=[xmin, xmax, ymin, ymax],
         aspect="auto",
         zorder=0,
-        interpolation="bilinear",
+        interpolation="none",
     )
     return True
 
 
 def _params_getmap_overlay(url: str, capa: str, xmin, xmax, ymin, ymax,
                            formato: str = "image/png", crs_epsg: int = 25830,
-                           version: str = "1.3.0", estilos: str = ""):
+                           version: str = "1.3.0", estilos: str = "",
+                           maximo_px: int = 4096):
     """Construye (base_url, params) de un GetMap transparente para overlay.
 
     Conserva los parámetros no-WMS que traiga la URL del usuario (p. ej.
@@ -1539,7 +1765,9 @@ def _params_getmap_overlay(url: str, capa: str, xmin, xmax, ymin, ymax,
     params = {k: v for k, v in urllib.parse.parse_qsl(partes.query)
               if k.lower() not in claves_wms}
 
-    width, height = _dimensiones_wms(xmax - xmin, ymax - ymin)
+    width, height = _dimensiones_wms(xmax - xmin, ymax - ymin,
+                                     m_por_px=float(xmax - xmin) / max(maximo_px, 1),
+                                     maximo=maximo_px)
     version = version or "1.3.0"
     params.update({
         "SERVICE": "WMS",
@@ -1569,9 +1797,11 @@ def añadir_overlay_wms(ax, url: str, capa: str, xmin, xmax, ymin, ymax,
     en disco que ``descargar_wms_custom``.
     """
     import urllib.parse
+    px_obj = _px_objetivo(ax)
     base_url, params = _params_getmap_overlay(
         url, capa, xmin, xmax, ymin, ymax, formato=formato,
-        crs_epsg=crs_epsg, version=version, estilos=estilos)
+        crs_epsg=crs_epsg, version=version, estilos=estilos,
+        maximo_px=px_obj)
 
     full_url = f"{base_url}?{urllib.parse.urlencode(params)}"
     cache_key = hashlib.md5(full_url.encode()).hexdigest()
@@ -1600,7 +1830,7 @@ def añadir_overlay_wms(ax, url: str, capa: str, xmin, xmax, ymin, ymax,
             pass
 
     # Siempre RGBA: las zonas sin datos deben quedar transparentes
-    arr = np.array(img.convert("RGBA"))
+    arr = np.array(_reducir_si_excede(img, px_obj).convert("RGBA"))
     try:
         alpha = float(alpha)
     except (TypeError, ValueError):
@@ -1612,7 +1842,7 @@ def añadir_overlay_wms(ax, url: str, capa: str, xmin, xmax, ymin, ymax,
         aspect="auto",
         zorder=1.5,
         alpha=alpha,
-        interpolation="bilinear",
+        interpolation="none",
     )
     return True
 
@@ -1627,8 +1857,19 @@ def dibujar_wfs_en_eje(ax, gdf, estilo: dict = None):
     alpha = est.get("alpha", 0.6)
     facecolor = est.get("facecolor", "none")
 
-    gdf.plot(ax=ax, color=facecolor, edgecolor=color,
-             linewidth=linewidth, alpha=alpha, zorder=2)
+    # Líneas y puntos deben llevar el color de trazo: con color="none"
+    # (pensado para el relleno de polígonos) eran invisibles.
+    try:
+        tipos = gdf.geometry.geom_type.str.lower()
+        es_poligono = tipos.str.contains("polygon").all()
+    except Exception:
+        es_poligono = True
+    if es_poligono:
+        gdf.plot(ax=ax, color=facecolor, edgecolor=color,
+                 linewidth=linewidth, alpha=alpha, zorder=2)
+    else:
+        gdf.plot(ax=ax, color=color, linewidth=linewidth, markersize=6,
+                 alpha=alpha, zorder=2)
 
 
 def añadir_fondo_cartografico(ax, gdf_view, proveedor_key: str, xmin=None, xmax=None,

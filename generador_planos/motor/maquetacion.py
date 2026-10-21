@@ -137,23 +137,61 @@ ETIQUETAS_CAMPOS = {
     "Tipo_Trabajos": "Tipo de Trabajos",
 }
 
-from .escala import DPI_DEFAULT  # noqa: F401 - re-exportado para compatibilidad
+from .escala import DPI_DEFAULT, DPI_TRABAJO  # noqa: F401 - re-exportado para compatibilidad
+
+
+def _preparar_figura_rapida(fig):
+    """Evita renderizados completos innecesarios durante la maquetación.
+
+    geopandas llama a ``canvas.draw_idle()`` al final de cada ``plot()`` y,
+    con el backend Agg, eso renderiza TODA la figura (imagen de fondo
+    incluida) cada vez: tres capas = tres renderizados de varios segundos
+    que no sirven para nada porque el único render útil es el de
+    ``savefig``. Se anula en esta figura (no afecta a otras).
+    """
+    try:
+        fig.canvas.draw_idle = lambda *a, **k: None
+    except Exception:
+        pass
+    return fig
 
 
 def _fmt_valor(valor_raw):
-    """Formatea un valor para mostrar: floats a 2 decimales."""
+    """Formatea un valor para mostrar en tablas y paneles.
+
+    - None/NaN/NaT/inf \u2192 "\u2014"
+    - fechas \u2192 dd/mm/aaaa
+    - booleanos \u2192 S\u00ed/No
+    - textos tal cual (antes "007" se convert\u00eda en "7")
+    - enteros sin decimales (sin tope: los c\u00f3digos largos no llevan ".00")
+    - resto de n\u00fameros con 2 decimales
+    """
+    import datetime as _dt
+    import math as _m
     if valor_raw is None:
         return "\u2014"
+    if isinstance(valor_raw, bool) or getattr(getattr(valor_raw, "dtype", None), "kind", "") == "b":
+        return "S\u00ed" if bool(valor_raw) else "No"
+    if isinstance(valor_raw, (_dt.datetime, _dt.date)):
+        try:
+            if valor_raw != valor_raw:  # NaT
+                return "\u2014"
+            return valor_raw.strftime("%d/%m/%Y")
+        except Exception:
+            return str(valor_raw)
+    if isinstance(valor_raw, str):
+        s = valor_raw.strip()
+        return "\u2014" if s.lower() in ("", "nan", "none", "nat", "null") else s
     try:
         f = float(valor_raw)
-        if f != f:  # NaN
-            return "\u2014"
-        if f == int(f) and abs(f) < 1e9:
-            return str(int(f))
-        return f"{f:.2f}"
-    except (ValueError, TypeError):
+    except (ValueError, TypeError, OverflowError):
         s = str(valor_raw)
-        return "\u2014" if s == "nan" else s
+        return "\u2014" if s in ("nan", "NaT", "None") else s
+    if f != f or _m.isinf(f):
+        return "\u2014"
+    if f == int(f):
+        return str(int(f))
+    return f"{f:.2f}"
 
 # Presets de calidad: (DPI figura, DPI guardado)
 CALIDADES_PDF = {
@@ -204,8 +242,13 @@ class MaquetadorPlano(ElementosMapaMixin):
     def _crear_figura_clasica(self):
         fig_w = self.fmt_mm[0] / 25.4
         fig_h = self.fmt_mm[1] / 25.4
-        self.fig = plt.figure(figsize=(fig_w, fig_h), dpi=self.dpi,
-                              facecolor="white")
+        # La figura se construye a DPI_TRABAJO; la calidad (self.dpi) se
+        # aplica al guardar (ver guardar()).
+        self.fig = _preparar_figura_rapida(plt.figure(
+            figsize=(fig_w, fig_h), dpi=DPI_TRABAJO, facecolor="white"))
+        # Calidad de salida: la usan las descargas de fondo para pedir las
+        # imágenes a la resolución justa de impresión (cartografia._px_objetivo)
+        self.fig.dpi_salida = self.dpi
 
         izq = MARGENES_MM["izq"] / self.fmt_mm[0]
         der = MARGENES_MM["der"] / self.fmt_mm[0]
@@ -245,8 +288,11 @@ class MaquetadorPlano(ElementosMapaMixin):
         """
         fig_w = self.fmt_mm[0] / 25.4
         fig_h = self.fmt_mm[1] / 25.4
-        self.fig = plt.figure(figsize=(fig_w, fig_h), dpi=self.dpi,
-                              facecolor="white")
+        self.fig = _preparar_figura_rapida(plt.figure(
+            figsize=(fig_w, fig_h), dpi=DPI_TRABAJO, facecolor="white"))
+        # Calidad de salida: la usan las descargas de fondo para pedir las
+        # imágenes a la resolución justa de impresión (cartografia._px_objetivo)
+        self.fig.dpi_salida = self.dpi
 
         izq = MARGENES_MM["izq"] / self.fmt_mm[0]
         der = MARGENES_MM["der"] / self.fmt_mm[0]
@@ -297,19 +343,34 @@ class MaquetadorPlano(ElementosMapaMixin):
     # ── Extensión del mapa ─────────────────────────────────────────────
 
     def calcular_extension_mapa(self, geom):
-        cx, cy = geom.centroid.x, geom.centroid.y
-        ancho_util = self.fmt_mm[0] - MARGENES_MM["izq"] - MARGENES_MM["der"]
-        alto_util = self.fmt_mm[1] - MARGENES_MM["sup"] - MARGENES_MM["inf"]
-        if self.es_lateral:
-            # Plantilla 2: mapa ocupa 80% del ancho y toda la altura
-            ancho_mm = ancho_util * 0.80
-            alto_mm = (alto_util - _CABECERA_MM)
-        else:
-            ancho_mm = ancho_util * RATIO_MAPA_ANCHO
-            alto_mm = (alto_util - _CABECERA_MM) * RATIO_MAPA_ALTO
+        # Centro = centro del rectángulo envolvente (no el centroide): la
+        # escala se elige para que quepa el bbox, así que centrando en el
+        # centroide un grupo con elementos alejados quedaba cortado.
+        b = geom.bounds
+        cx, cy = (b[0] + b[2]) / 2.0, (b[1] + b[3]) / 2.0
+        ancho_mm, alto_mm = self._tamano_mapa_mm()
         semi_x = (ancho_mm / 1000.0) * self.escala / 2
         semi_y = (alto_mm / 1000.0) * self.escala / 2
         return cx - semi_x, cx + semi_x, cy - semi_y, cy + semi_y
+
+    def _tamano_mapa_mm(self):
+        """Tamaño físico REAL del marco del mapa (mm).
+
+        Se toma de la posición del eje en la figura: con las proporciones
+        nominales el plano rotulado 1:10.000 se imprimía a 1:10.180.
+        """
+        if self.ax_map is not None:
+            try:
+                pos = self.ax_map.get_position()
+                return pos.width * self.fmt_mm[0], pos.height * self.fmt_mm[1]
+            except Exception:
+                pass
+        ancho_util = self.fmt_mm[0] - MARGENES_MM["izq"] - MARGENES_MM["der"]
+        alto_util = self.fmt_mm[1] - MARGENES_MM["sup"] - MARGENES_MM["inf"]
+        if self.es_lateral:
+            return ancho_util * 0.80, (alto_util - _CABECERA_MM)
+        return (ancho_util * RATIO_MAPA_ANCHO,
+                (alto_util - _CABECERA_MM) * RATIO_MAPA_ALTO)
 
     def configurar_mapa_principal(self, xmin, xmax, ymin, ymax):
         ax = self.ax_map
@@ -617,16 +678,23 @@ class MaquetadorPlano(ElementosMapaMixin):
         wms_custom = wms_custom or {}
         wfs_custom = wfs_custom or {}
 
-        # Tamaño físico aproximado del panel de localización (mm)
-        ancho_util = self.fmt_mm[0] - MARGENES_MM["izq"] - MARGENES_MM["der"]
-        alto_util = (self.fmt_mm[1] - MARGENES_MM["sup"] - MARGENES_MM["inf"]
-                     - _CABECERA_MM)
-        if self.es_lateral:
-            panel_w_mm = ancho_util * 0.20 * 0.90
-            panel_h_mm = alto_util * 0.20 * 0.90
-        else:
-            panel_w_mm = ancho_util * 0.30 * 0.95
-            panel_h_mm = alto_util * (1 - RATIO_MAPA_ALTO) * 0.90
+        # Tamaño físico REAL del panel de localización (mm), de su posición
+        # en la figura. Con las proporciones estimadas salía ~1:228.000 en
+        # horizontal y ~1:207.000 en vertical rotulado como 1:250.000.
+        try:
+            pos = ax.get_position()
+            panel_w_mm = pos.width * self.fmt_mm[0]
+            panel_h_mm = pos.height * self.fmt_mm[1]
+        except Exception:
+            ancho_util = self.fmt_mm[0] - MARGENES_MM["izq"] - MARGENES_MM["der"]
+            alto_util = (self.fmt_mm[1] - MARGENES_MM["sup"] - MARGENES_MM["inf"]
+                         - _CABECERA_MM)
+            if self.es_lateral:
+                panel_w_mm = ancho_util * 0.20 * 0.90
+                panel_h_mm = alto_util * 0.20 * 0.90
+            else:
+                panel_w_mm = ancho_util * 0.30 * 0.95
+                panel_h_mm = alto_util * (1 - RATIO_MAPA_ALTO) * 0.90
 
         # Extensión real según escala configurada
         semi_x = (panel_w_mm / 1000.0) * escala_loc / 2
@@ -852,7 +920,8 @@ class MaquetadorPlano(ElementosMapaMixin):
         if logo_path:
             try:
                 from PIL import Image as PILImage
-                img = PILImage.open(logo_path)
+                with PILImage.open(logo_path) as _im:
+                    img = _im.copy()  # cerrar el archivo (Windows lo bloquea)
                 # Calcular posición del logo dentro del axes
                 iw, ih = img.size
                 aspect_img = iw / max(ih, 1)
@@ -1311,7 +1380,8 @@ class MaquetadorPlano(ElementosMapaMixin):
         if logo_path:
             try:
                 from PIL import Image as PILImage
-                img = PILImage.open(logo_path)
+                with PILImage.open(logo_path) as _im:
+                    img = _im.copy()  # cerrar el archivo (Windows lo bloquea)
                 iw, ih = img.size
                 aspect_img = iw / max(ih, 1)
 
@@ -1692,7 +1762,8 @@ class MaquetadorPlano(ElementosMapaMixin):
         if logo_path:
             try:
                 from PIL import Image as PILImage
-                img = PILImage.open(logo_path)
+                with PILImage.open(logo_path) as _im:
+                    img = _im.copy()  # cerrar el archivo (Windows lo bloquea)
                 # Encajar logo ajustado a la altura de la cabecera
                 iw, ih = img.size
                 aspect_img = iw / max(ih, 1)
@@ -1810,10 +1881,26 @@ class MaquetadorPlano(ElementosMapaMixin):
         siempre la figura."""
         dpi = dpi_save or self.dpi
         fmts = [str(f).lower().lstrip(".") for f in (formatos or ("pdf",))]
+        # Se escribe en un .part y se renombra al terminar: si la app se
+        # cierra o se cancela a mitad, no queda un PDF truncado con nombre
+        # definitivo.
+        tmp_out = ruta_out + ".part"
         try:
-            self.fig.savefig(ruta_out, format="pdf", dpi=dpi,
+            # PDF (vectorial): las imágenes de fondo van con
+            # interpolation="none", es decir, embebidas a su resolución
+            # nativa sin remuestrear (más rápido, más nítido y más ligero).
+            self.fig.savefig(tmp_out, format="pdf", dpi=dpi,
                               facecolor="white")
+            os.replace(tmp_out, ruta_out)
             base = os.path.splitext(ruta_out)[0]
+            if "png" in fmts or "jpg" in fmts or "jpeg" in fmts:
+                # Salida raster: aquí sí conviene interpolar al remuestrear
+                for ax in self.fig.axes:
+                    for im in ax.images:
+                        try:
+                            im.set_interpolation("antialiased")
+                        except Exception:
+                            pass
             if "png" in fmts:
                 self.fig.savefig(base + ".png", format="png", dpi=dpi,
                                   facecolor="white")
@@ -1824,6 +1911,11 @@ class MaquetadorPlano(ElementosMapaMixin):
                                               "optimize": True})
         finally:
             plt.close(self.fig)
+            try:
+                if os.path.exists(tmp_out):
+                    os.remove(tmp_out)
+            except OSError:
+                pass
 
 
 # ════════════════════════════════════════════════════════════════════════

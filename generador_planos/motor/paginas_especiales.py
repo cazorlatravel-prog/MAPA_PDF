@@ -9,7 +9,7 @@ import matplotlib.gridspec as gridspec
 from matplotlib.patches import Rectangle
 from matplotlib.ticker import FuncFormatter
 
-from .escala import FORMATOS, DPI_DEFAULT
+from .escala import FORMATOS, DPI_DEFAULT, DPI_TRABAJO  # noqa: F401
 from ._elementos_mapa import halo, formato_miles
 
 _PT_MM = 25.4 / 72.0
@@ -49,7 +49,7 @@ def crear_portada(formato_key: str, titulo_proyecto: str,
 
     fmt = FORMATOS[formato_key]
     fig = plt.figure(figsize=(fmt[0] / 25.4, fmt[1] / 25.4),
-                      dpi=DPI_DEFAULT, facecolor="white")
+                      dpi=DPI_TRABAJO, facecolor="white")
     ax = fig.add_axes([0, 0, 1, 1])
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
@@ -122,7 +122,7 @@ def crear_indice(formato_key: str, items: list,
 
     fmt = FORMATOS[formato_key]
     fig = plt.figure(figsize=(fmt[0] / 25.4, fmt[1] / 25.4),
-                      dpi=DPI_DEFAULT, facecolor="white")
+                      dpi=DPI_TRABAJO, facecolor="white")
     ax = fig.add_axes([0.08, 0.05, 0.84, 0.88])
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
@@ -164,7 +164,8 @@ def crear_mapa_guia(formato_key: str, gdf_infra, indices: list,
                      gdf_montes=None, transparencia_montes: float = 0.3,
                      plantilla: dict = None, cajetin: dict = None,
                      titulo: str = "MAPA GUÍA",
-                     campo_nombre: str = "Nombre_Infra") -> plt.Figure:
+                     campo_nombre: str = "Nombre_Infra",
+                     numeros: list = None) -> plt.Figure:
     """Crea un mapa guía/índice cartográfico mostrando todas las
     infraestructuras numeradas sobre un fondo simplificado.
 
@@ -181,7 +182,7 @@ def crear_mapa_guia(formato_key: str, gdf_infra, indices: list,
     fmt = FORMATOS[formato_key]
     fig_w = fmt[0] / 25.4
     fig_h = fmt[1] / 25.4
-    fig = plt.figure(figsize=(fig_w, fig_h), dpi=DPI_DEFAULT,
+    fig = plt.figure(figsize=(fig_w, fig_h), dpi=DPI_TRABAJO,
                       facecolor="white")
 
     # Layout: cabecera + mapa + leyenda inferior
@@ -205,9 +206,14 @@ def crear_mapa_guia(formato_key: str, gdf_infra, indices: list,
 
     # ── Mapa principal ──
     gdf_sel = gdf_infra.iloc[indices]
-    geom_union = unary_union(gdf_sel.geometry)
-    bounds = geom_union.bounds  # minx, miny, maxx, maxy
-    if not bounds or any(b != b for b in bounds):  # NaN con indices vacíos
+    # Límites de las geometrías válidas (sin unary_union: fallaba con
+    # geometrías inválidas y no hace falta la unión para los límites)
+    try:
+        validas = gdf_sel[gdf_sel.geometry.notna() & ~gdf_sel.geometry.is_empty]
+    except Exception:
+        validas = gdf_sel
+    bounds = validas.total_bounds if len(validas) else (float("nan"),) * 4
+    if not len(bounds) or any(b != b for b in bounds):  # NaN sin geometrías
         plt.close(fig)
         raise ValueError(
             "No hay geometrías válidas para el mapa guía "
@@ -248,32 +254,44 @@ def crear_mapa_guia(formato_key: str, gdf_infra, indices: list,
     except (AttributeError, KeyError):
         cmap = plt.cm.get_cmap("tab20")
 
+    def _numero(i):
+        if numeros and i < len(numeros):
+            return str(numeros[i])
+        return str(i + 1)
+
     for i, idx in enumerate(indices):
         row = gdf_infra.iloc[idx]
         geom = row.geometry
+        if geom is None or getattr(geom, "is_empty", False):
+            continue
         color = cmap(i % 20)
         gt = str(geom.geom_type).lower()
-        if "polygon" in gt:
-            ax_map.fill(*geom.exterior.xy, facecolor=color, edgecolor="black",
-                         linewidth=0.8, alpha=0.6)
-        elif "line" in gt:
-            ax_map.plot(*geom.xy, color=color, linewidth=2.0, alpha=0.8)
-        elif "point" in gt:
-            ax_map.plot(geom.x, geom.y, marker="o", color=color,
-                         markersize=8, markeredgecolor="black",
-                         markeredgewidth=0.5)
-        else:
-            # MultiGeometry
-            try:
-                gdf_infra.iloc[[idx]].plot(ax=ax_map, color=color,
-                                            linewidth=1.5, alpha=0.7)
-            except Exception:
-                pass
+        # Dibujar vía GeoSeries.plot: funciona igual para geometrías simples
+        # y multiparte (MultiPolygon/MultiLineString de las GDB), donde
+        # .exterior/.xy/.x lanzaban excepción
+        try:
+            serie = gdf_infra.iloc[[idx]]
+            if "polygon" in gt:
+                serie.plot(ax=ax_map, facecolor=color, edgecolor="black",
+                           linewidth=0.8, alpha=0.6)
+            elif "point" in gt:
+                serie.plot(ax=ax_map, color=color, markersize=40,
+                           edgecolor="black", linewidth=0.5)
+            else:
+                serie.plot(ax=ax_map, color=color, linewidth=2.0, alpha=0.8)
+        except Exception:
+            continue
 
-        # Número en el centroide
-        cx, cy = geom.centroid.x, geom.centroid.y
+        # Número en un punto interior (representative_point cae siempre
+        # dentro de la geometría; el centroide de una L o de un multipolígono
+        # puede quedar fuera)
+        try:
+            pr = geom.representative_point()
+            cx, cy = pr.x, pr.y
+        except Exception:
+            cx, cy = geom.centroid.x, geom.centroid.y
         ax_map.annotate(
-            str(i + 1), xy=(cx, cy), fontsize=7, fontweight="bold",
+            _numero(i), xy=(cx, cy), fontsize=7, fontweight="bold",
             ha="center", va="center", color=c_fondo,
             path_effects=halo(2.5), zorder=10,
         )
@@ -312,7 +330,7 @@ def crear_mapa_guia(formato_key: str, gdf_infra, indices: list,
         color = cmap(i % 20)
         ax_legend.add_patch(Rectangle((x, y - 0.03), 0.02, 0.06,
                                        facecolor=color, edgecolor="none"))
-        ax_legend.text(x + 0.03, y, f"{i + 1}. {nombre}",
+        ax_legend.text(x + 0.03, y, f"{_numero(i)}. {nombre}",
                         fontsize=5, va="center", color="#333")
 
         if i + 1 >= items_per_col * max_cols:

@@ -8,6 +8,45 @@ from matplotlib.patches import FancyBboxPatch, Rectangle
 from matplotlib.lines import Line2D
 from .escala import INTERVALOS_GRID
 
+
+def _intervalo_grid(escala) -> int:
+    """Intervalo de cuadrícula UTM (m) para cualquier escala.
+
+    Para las escalas estándar usa INTERVALOS_GRID; para una escala manual
+    cualquiera elige el intervalo del tramo correspondiente (antes todas
+    recibían 1 km: saturado a 1:50.000 y vacío a 1:1.000).
+    """
+    try:
+        if escala in INTERVALOS_GRID:
+            return INTERVALOS_GRID[escala]
+        e = float(escala or 10000)
+    except (TypeError, ValueError):
+        return 1000
+    for tope, intervalo in ((1500, 100), (3500, 200), (7500, 500),
+                            (15000, 1000), (25000, 2000), (60000, 5000),
+                            (150000, 10000), (400000, 25000)):
+        if e <= tope:
+            return intervalo
+    return 50000
+
+
+def _adjust_text_sin_imagenes(ax, textos, **kwargs):
+    """adjustText ocultando las imágenes de fondo durante el ajuste.
+
+    adjust_text redibuja la figura entera para medir los textos; con la
+    ortofoto visible eso costaba 3-4 s por plano (1 s a 120 dpi). Las
+    imágenes no influyen en el solapamiento de etiquetas.
+    """
+    from adjustText import adjust_text
+    imagenes = [im for im in ax.images if im.get_visible()]
+    for im in imagenes:
+        im.set_visible(False)
+    try:
+        adjust_text(textos, ax=ax, **kwargs)
+    finally:
+        for im in imagenes:
+            im.set_visible(True)
+
 # ── Escala tipográfica (puntos) ──────────────────────────────────────────
 # Usar estas constantes en lugar de tamaños sueltos para que todo el plano
 # mantenga una jerarquía coherente.
@@ -122,7 +161,7 @@ class ElementosMapaMixin:
         return formato_miles(valor)
 
     def dibujar_grid_utm(self, xmin, xmax, ymin, ymax):
-        intervalo = INTERVALOS_GRID.get(self.escala, 1000)
+        intervalo = _intervalo_grid(self.escala)
         ax = self.ax_map
 
         for sp in ax.spines.values():
@@ -341,10 +380,9 @@ class ElementosMapaMixin:
         # Anti-solapamiento: mover etiquetas que se pisan
         if len(textos_anotados) > 1:
             try:
-                from adjustText import adjust_text
-                adjust_text(textos_anotados, ax=self.ax_map,
-                            arrowprops=dict(arrowstyle="-", color="#999999",
-                                            lw=0.4))
+                _adjust_text_sin_imagenes(
+                    self.ax_map, textos_anotados,
+                    arrowprops=dict(arrowstyle="-", color="#999999", lw=0.4))
             except Exception:
                 pass  # Si adjustText falla o no está instalado, continuar
 
@@ -389,10 +427,9 @@ class ElementosMapaMixin:
 
         if len(textos_anotados) > 1:
             try:
-                from adjustText import adjust_text
-                adjust_text(textos_anotados, ax=self.ax_map,
-                            arrowprops=dict(arrowstyle="-", color="none",
-                                            lw=0))
+                _adjust_text_sin_imagenes(
+                    self.ax_map, textos_anotados,
+                    arrowprops=dict(arrowstyle="-", color="none", lw=0))
             except Exception:
                 pass
 

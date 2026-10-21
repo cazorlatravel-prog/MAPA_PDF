@@ -13,7 +13,12 @@ import tkinter as tk
 
 
 def verificar_dependencias() -> list:
-    """Verifica que todas las dependencias están instaladas."""
+    """Verifica que todas las dependencias están instaladas.
+
+    Usa ``find_spec`` en vez de importar: importar geopandas/matplotlib
+    aquí costaba varios segundos ANTES de mostrar la pantalla de carga.
+    """
+    import importlib.util
     faltantes = []
     for mod, nombre in [
         ("geopandas", "geopandas"),
@@ -23,11 +28,14 @@ def verificar_dependencias() -> list:
         ("PIL", "Pillow"),
         ("contextily", "contextily"),
         ("pyproj", "pyproj"),
-        ("reportlab", "reportlab"),
+        ("rasterio", "rasterio"),
+        ("pyogrio", "pyogrio"),
+        ("openpyxl", "openpyxl"),
     ]:
         try:
-            __import__(mod)
-        except ImportError:
+            if importlib.util.find_spec(mod) is None:
+                faltantes.append(nombre)
+        except (ImportError, ValueError):
             faltantes.append(nombre)
     return faltantes
 

@@ -21,6 +21,7 @@ class GeneracionCancelada(Exception):
     pass
 
 from .escala import seleccionar_escala, FORMATOS, MARGENES_MM
+from . import cartografia as _cartografia
 from .cartografia import añadir_fondo_cartografico, añadir_fondo_raster_local
 from .maquetacion import MaquetadorPlano, ETIQUETAS_CAMPOS, crear_portada, crear_indice
 from .capas_extra import GestorCapasExtra
@@ -31,9 +32,59 @@ from ._utils_geo import (  # noqa: F401
     _limpiar_tipos_mixtos, _auto_calcular_campos, _calcular_stats_grupo,
     _leer_geodatos,
 )
+from shapely.geometry import box as _box
 
 # Campos esperados en el shapefile
 CAMPOS_ATRIBUTOS = list(ETIQUETAS_CAMPOS.keys())
+
+# Clave de categoría para valores vacíos (misma en mapa y leyenda)
+SIN_VALOR = "(sin valor)"
+
+
+def _clave_categoria(serie):
+    """Serie de claves de categoría como texto, con los nulos como SIN_VALOR.
+
+    Mapa y leyenda deben usar EXACTAMENTE la misma clave: con pandas 3,
+    ``astype(str)`` conserva NaN y la máscara nunca coincidía, de modo que
+    una infraestructura con categoría vacía desaparecía del plano; con
+    pandas 2 se dibujaba pero no salía en la leyenda (que usaba dropna).
+    """
+    import pandas as pd
+    s = pd.Series(serie)
+    return s.astype(object).where(s.notna(), SIN_VALOR).map(str)
+
+
+def _formatear_patron(patron: str, **valores) -> str:
+    """``str.format`` tolerante: una variable desconocida en el patrón de
+    nombre ({TIPO}, {MUNICIPIO}...) no hace fallar todos los planos; se
+    deja tal cual en el nombre."""
+    class _Tolerante(dict):
+        def __missing__(self, k):
+            return "{" + k + "}"
+    try:
+        return str(patron).format_map(_Tolerante(**valores))
+    except Exception:
+        return "_".join(str(v) for v in valores.values())
+
+
+def _normalizar_clave_enlace(v):
+    """Clave de enlace shapefile↔Excel comparable: sin espacios, sin '.0'
+    en enteros leídos como float ("101.0" == "101"), None para nulos."""
+    if v is None:
+        return None
+    try:
+        if v != v:  # NaN
+            return None
+    except Exception:
+        pass
+    if isinstance(v, float) and v.is_integer():
+        return str(int(v))
+    s = str(v).strip()
+    if not s or s.lower() in ("nan", "none", "nat"):
+        return None
+    if s.endswith(".0") and s[:-2].lstrip("-").isdigit():
+        s = s[:-2]
+    return s
 
 
 class GeneradorPlanos:
@@ -72,6 +123,10 @@ class GeneradorPlanos:
         self._campo_enlace_excel = ""
         self._columnas_excel = None
         self._cancelar = threading.Event()
+        # Para que PARAR interrumpa también las descargas en curso
+        _cartografia._evento_cancelacion = self._cancelar
+        self._log_actual = None       # callback_log de la generación en curso
+        self._nombres_usados = set()  # nombres de archivo ya usados en la serie
 
     def cancelar_generacion(self):
         """Señala que la generación en curso debe detenerse."""
@@ -155,23 +210,28 @@ class GeneradorPlanos:
                 fila[k] = v
             return fila
 
-        # Sin campo enlace: fallback por índice
+        # Sin campo enlace: fallback por índice (solo para un plano
+        # individual; en un agrupado sin enlace se usan las filas del SHP,
+        # antes salían TODAS las filas del Excel)
         if not self._campo_enlace_shp or not self._campo_enlace_excel:
             if idx_fila is not None and idx_fila < len(df):
                 base = rows_shp[0] if rows_shp else None
                 fila_x = df.iloc[idx_fila]
                 return [_fusionar(base, fila_x) if base is not None else fila_x]
-            return [df.iloc[i] for i in range(len(df))]
+            return rows_shp
 
-        # Buscar por campo enlace
+        # Buscar por campo enlace (claves normalizadas: "101.0" == "101",
+        # sin espacios; los nulos nunca coinciden). Si la columna de enlace
+        # no existe en el Excel, se usan las filas del SHP en vez de fallar.
+        if self._campo_enlace_excel not in df.columns:
+            return rows_shp
+        claves_excel = df[self._campo_enlace_excel].map(_normalizar_clave_enlace)
         resultado = []
         for row_shp in rows_shp:
-            valor_shp = row_shp.get(self._campo_enlace_shp, None)
-            if valor_shp is None:
+            clave = _normalizar_clave_enlace(row_shp.get(self._campo_enlace_shp, None))
+            if clave is None:
                 continue
-            # Buscar coincidencia en el Excel
-            mask = df[self._campo_enlace_excel].astype(str) == str(valor_shp)
-            coincidencias = df[mask]
+            coincidencias = df[claves_excel == clave]
             for _, fila_excel in coincidencias.iterrows():
                 resultado.append(_fusionar(row_shp, fila_excel))
 
@@ -241,26 +301,32 @@ class GeneradorPlanos:
 
     # ── Consulta para agrupación ─────────────────────────────────────────
 
+    def _campo_real(self, campo: str) -> str:
+        """Nombre real de columna aplicando el mapeo de campos si existe."""
+        if self._campo_mapeo and campo in self._campo_mapeo:
+            return self._campo_mapeo[campo]
+        return campo
+
     def obtener_valores_unicos(self, campo: str) -> list:
         if self.gdf_infra is None:
             return []
-        campo_real = campo
-        if self._campo_mapeo and campo in self._campo_mapeo:
-            campo_real = self._campo_mapeo[campo]
+        campo_real = self._campo_real(campo)
         if campo_real not in self.gdf_infra.columns:
             return []
-        valores = self.gdf_infra[campo_real].dropna().unique().tolist()
-        return sorted([str(v) for v in valores])
+        # Misma conversión a texto que obtener_indices_por_valor (antes
+        # str(v) vs astype(str) daban textos distintos para fechas y los
+        # grupos salían vacíos)
+        serie = self.gdf_infra[campo_real]
+        return sorted(set(serie.dropna().map(str)))
 
     def obtener_indices_por_valor(self, campo: str, valor: str) -> list:
         if self.gdf_infra is None:
             return []
-        campo_real = campo
-        if self._campo_mapeo and campo in self._campo_mapeo:
-            campo_real = self._campo_mapeo[campo]
+        campo_real = self._campo_real(campo)
         if campo_real not in self.gdf_infra.columns:
             return []
-        mask = self.gdf_infra[campo_real].astype(str) == str(valor)
+        serie = self.gdf_infra[campo_real]
+        mask = serie.notna() & (serie.map(str) == str(valor))
         return list(self.gdf_infra.index[mask])
 
     # ── Helpers internos ─────────────────────────────────────────────────
@@ -303,7 +369,7 @@ class GeneradorPlanos:
             except Exception as e:
                 msg = (f"Capa superpuesta '{ov.get('nombre') or capa}' "
                        f"no disponible: {e}")
-                cb = getattr(self, "callback_log", None)
+                cb = getattr(self, "_log_actual", None)
                 if callable(cb):
                     try:
                         cb(f"  ⚠ {msg}")
@@ -378,13 +444,12 @@ class GeneradorPlanos:
                 alpha = transparencia
                 campo_cat_montes = self.config_infra.get("campo_categoria_montes")
                 if campo_cat_montes and campo_cat_montes in montes_clip.columns:
-                    # Colorear por categoría
-                    valores_unicos = montes_clip[campo_cat_montes].astype(str).unique()
-                    for valor in valores_unicos:
+                    # Colorear por categoría (clave común con la leyenda)
+                    claves_m = _clave_categoria(montes_clip[campo_cat_montes])
+                    for valor in claves_m.unique():
                         simb = self.gestor_simbologia.obtener_simbologia_monte(
                             campo_cat_montes, valor)
-                        mask = montes_clip[campo_cat_montes].astype(str) == valor
-                        gdf_cat = montes_clip[mask]
+                        gdf_cat = montes_clip[(claves_m == valor).values]
                         if gdf_cat.empty:
                             continue
                         gdf_cat.plot(
@@ -417,20 +482,17 @@ class GeneradorPlanos:
         lw = float(ci.get("linewidth", 2.5))
         alpha_infra = max(0.0, min(1.0, float(ci.get("alpha", 0.35))))
         campo_cat = ci.get("campo_categoria")
+        # Resolver el campo real por mapeo ANTES de comprobar que existe
+        # (antes se comprobaba el nombre esperado y el mapeo nunca aplicaba)
+        campo_real = self._campo_real(campo_cat) if campo_cat else None
 
         # ── Categorización por campo ──
-        if campo_cat and campo_cat in gdf_sel.columns:
-            # Resolver campo real por mapeo si existe
-            campo_real = campo_cat
-            if self._campo_mapeo and campo_cat in self._campo_mapeo:
-                campo_real = self._campo_mapeo[campo_cat]
-
-            valores_unicos = gdf_sel[campo_real].astype(str).unique()
-            for valor in valores_unicos:
+        if campo_cat and campo_real in gdf_sel.columns:
+            claves = _clave_categoria(gdf_sel[campo_real])
+            for valor in claves.unique():
                 simb = self.gestor_simbologia.obtener_simbologia_infra(
                     campo_cat, valor)
-                mask = gdf_sel[campo_real].astype(str) == valor
-                gdf_cat = gdf_sel[mask]
+                gdf_cat = gdf_sel[(claves == valor).values]
                 if gdf_cat.empty:
                     continue
                 c = simb.color
@@ -454,13 +516,9 @@ class GeneradorPlanos:
 
         # Solo categorías presentes en las infraestructuras seleccionadas
         campo_cat = self.config_infra.get("campo_categoria")
-        if campo_cat and campo_cat in gdf_sel.columns:
-            campo_real = campo_cat
-            if self._campo_mapeo and campo_cat in self._campo_mapeo:
-                campo_real = self._campo_mapeo[campo_cat]
-            valores_unicos = sorted(
-                str(v) for v in gdf_sel[campo_real].dropna().unique()
-            )
+        campo_real = self._campo_real(campo_cat) if campo_cat else None
+        if campo_cat and campo_real in gdf_sel.columns:
+            valores_unicos = sorted(_clave_categoria(gdf_sel[campo_real]).unique())
             for valor in valores_unicos:
                 simb = self.gestor_simbologia.obtener_simbologia_infra(
                     campo_cat, valor)
@@ -482,8 +540,7 @@ class GeneradorPlanos:
                 if campo_cat_montes and campo_cat_montes in montes_vis.columns:
                     # Leyenda por categoría de montes
                     valores_visibles = sorted(
-                        str(v) for v in montes_vis[campo_cat_montes].dropna().unique()
-                    )
+                        _clave_categoria(montes_vis[campo_cat_montes]).unique())
                     for valor in valores_visibles:
                         simb = self.gestor_simbologia.obtener_simbologia_monte(
                             campo_cat_montes, valor)
@@ -503,20 +560,15 @@ class GeneradorPlanos:
                                      xmin=None, xmax=None, ymin=None, ymax=None):
         """Construye items de categoría sólo con las infra seleccionadas."""
         campo_cat = self.config_infra.get("campo_categoria")
-        if not campo_cat or campo_cat not in gdf_sel.columns:
+        campo_real = self._campo_real(campo_cat) if campo_cat else None
+        if not campo_cat or campo_real not in gdf_sel.columns:
             return None
 
         items = []
         geom_type = _detectar_geom_type(gdf_sel)
 
-        campo_real = campo_cat
-        if self._campo_mapeo and campo_cat in self._campo_mapeo:
-            campo_real = self._campo_mapeo[campo_cat]
-
         # Solo categorías de las infraestructuras seleccionadas para el plano
-        valores_visibles = sorted(
-            str(v) for v in gdf_sel[campo_real].dropna().unique()
-        )
+        valores_visibles = sorted(_clave_categoria(gdf_sel[campo_real]).unique())
 
         for valor in valores_visibles:
             simb = self.gestor_simbologia.obtener_simbologia_infra(campo_cat, valor)
@@ -538,13 +590,9 @@ class GeneradorPlanos:
         geom_type = _detectar_geom_type(gdf_sel)
 
         campo_cat = self.config_infra.get("campo_categoria")
-        if campo_cat and campo_cat in gdf_sel.columns:
-            campo_real = campo_cat
-            if self._campo_mapeo and campo_cat in self._campo_mapeo:
-                campo_real = self._campo_mapeo[campo_cat]
-            valores_unicos = sorted(
-                str(v) for v in gdf_sel[campo_real].dropna().unique()
-            )
+        campo_real = self._campo_real(campo_cat) if campo_cat else None
+        if campo_cat and campo_real in gdf_sel.columns:
+            valores_unicos = sorted(_clave_categoria(gdf_sel[campo_real]).unique())
             for valor in valores_unicos:
                 simb = self.gestor_simbologia.obtener_simbologia_infra(
                     campo_cat, valor)
@@ -565,7 +613,7 @@ class GeneradorPlanos:
             if not montes_vis.empty:
                 if campo_cat_montes and campo_cat_montes in montes_vis.columns:
                     valores_visibles = sorted(
-                        montes_vis[campo_cat_montes].astype(str).unique())
+                        _clave_categoria(montes_vis[campo_cat_montes]).unique())
                     for valor in valores_visibles:
                         simb = self.gestor_simbologia.obtener_simbologia_monte(
                             campo_cat_montes, valor)
@@ -587,6 +635,8 @@ class GeneradorPlanos:
                       callback_log=None, campo_encabezado: str = None,
                       patron_nombre: str = None) -> str:
         self._ensure_agg()
+        # Registro de la generación en curso (lo usan fondo/overlays)
+        self._log_actual = locals().get("callback_log")
 
         def log(msg):
             if callback_log:
@@ -690,17 +740,29 @@ class GeneradorPlanos:
         if self.marca_agua:
             maq.dibujar_marca_agua(self.marca_agua)
 
-        num_visible = idx_fila + 1
-        nombre_infra = str(row.get("Nombre_Infra", f"infra_{num_visible:04d}"))
+        # Numeración coherente con la cabecera: num_plano_inicio + posición
+        try:
+            num_inicio = int(self._cajetin.get("num_plano_inicio", 1) or 1)
+        except (ValueError, TypeError):
+            num_inicio = 1
+        num_visible = num_inicio + idx_fila
+        campo_nombre = self._campo_real("Nombre_Infra")
+        nombre_infra = row.get(campo_nombre, None)
+        if nombre_infra is None or str(nombre_infra) in ("", "nan", "None"):
+            nombre_infra = f"infra_{num_visible:04d}"
+        nombre_infra = str(nombre_infra)
         nombre_infra_safe = "".join(c for c in nombre_infra if c.isalnum() or c in "_ -")[:40]
 
         if patron_nombre:
-            nombre_base = patron_nombre.format(
+            nombre_base = _formatear_patron(
+                patron_nombre,
                 num=f"{num_visible:04d}", nombre=nombre_infra_safe,
                 campo=nombre_infra_safe)
             nombre_base = "".join(c for c in nombre_base if c.isalnum() or c in "_ -.")[:80]
+            nombre_base = nombre_base.strip("_- .") or f"plano_{num_visible:04d}"
         else:
             nombre_base = f"plano_{num_visible:04d}_{nombre_infra_safe}"
+        nombre_base = self._nombre_unico(nombre_base, num_visible)
         nombre_arch = f"{nombre_base}.pdf"
         # Crear la carpeta si no existe (la GUI lo hace, pero el motor debe
         # ser robusto cuando se usa directamente o desde lotes/proyectos)
@@ -724,6 +786,8 @@ class GeneradorPlanos:
                                 campo_encabezado: str = None,
                                 patron_nombre: str = None) -> str:
         self._ensure_agg()
+        # Registro de la generación en curso (lo usan fondo/overlays)
+        self._log_actual = locals().get("callback_log")
 
         def log(msg):
             if callback_log:
@@ -732,7 +796,9 @@ class GeneradorPlanos:
         gdf_grupo = self.gdf_infra.iloc[indices]
         rows = [self.gdf_infra.iloc[idx] for idx in indices]
 
-        geom_union = unary_union(gdf_grupo.geometry)
+        # Solo se necesitan los límites del grupo: unary_union fallaba con
+        # geometrías inválidas (autointersecciones) y era innecesario
+        geom_union = _box(*gdf_grupo.total_bounds)
         _es_lateral = self.layout_key == "Plantilla 2 (Panel lateral)"
         escala = seleccionar_escala(geom_union, formato_key, escala_manual,
                                     es_lateral=_es_lateral)
@@ -832,7 +898,8 @@ class GeneradorPlanos:
 
         nombre_safe = "".join(c for c in valor_grupo if c.isalnum() or c in "_ -")[:40]
         if patron_nombre:
-            nombre_base = patron_nombre.format(
+            nombre_base = _formatear_patron(
+                patron_nombre,
                 num=f"{num_plano:04d}", nombre=nombre_safe,
                 campo=nombre_safe)
             nombre_base = "".join(c for c in nombre_base if c.isalnum() or c in "_ -.")[:80]
@@ -862,6 +929,8 @@ class GeneradorPlanos:
         mostrarlo en un popup de la GUI.
         """
         self._ensure_agg()
+        # Registro de la generación en curso (lo usan fondo/overlays)
+        self._log_actual = locals().get("callback_log")
 
         row = self.gdf_infra.iloc[idx_fila]
         geom = row.geometry
@@ -968,6 +1037,8 @@ class GeneradorPlanos:
         from .maquetacion import crear_mapa_guia
 
         self._ensure_agg()
+        # Registro de la generación en curso (lo usan fondo/overlays)
+        self._log_actual = locals().get("callback_log")
 
         campo_nombre = self._cajetin.get("campo_etiqueta", "Nombre_Infra")
         fig = crear_mapa_guia(
@@ -995,6 +1066,24 @@ class GeneradorPlanos:
 
     # ── Generación en serie ──────────────────────────────────────────────
 
+    def _nombre_unico(self, nombre_base: str, num: int) -> str:
+        """Evita que dos planos de la misma serie se sobrescriban.
+
+        Con el patrón 'solo nombre' tres infraestructuras llamadas
+        'Cortafuegos' dejaban un único PDF y la app informaba de 3 planos
+        generados. Se añade un sufijo numérico al repetirse el nombre.
+        """
+        clave = nombre_base.lower()
+        if clave in self._nombres_usados:
+            candidato = f"{nombre_base}_{num:04d}"
+            k = 2
+            while candidato.lower() in self._nombres_usados:
+                candidato = f"{nombre_base}_{num:04d}_{k}"
+                k += 1
+            nombre_base = candidato
+        self._nombres_usados.add(nombre_base.lower())
+        return nombre_base
+
     def generar_serie(self, indices: list, formato_key: str, proveedor: str,
                       transparencia: float, campos: list, color_infra: str,
                       salida_dir: str, escala_manual: int = None,
@@ -1002,6 +1091,7 @@ class GeneradorPlanos:
                       campo_encabezado: str = None,
                       patron_nombre: str = None) -> list:
         rutas = []
+        self._nombres_usados = set()
         total = len(indices)
         for i, idx in enumerate(indices):
             self._check_cancelado()
@@ -1045,6 +1135,7 @@ class GeneradorPlanos:
                                 campo_encabezado: str = None,
                                 patron_nombre: str = None) -> list:
         rutas = []
+        self._nombres_usados = set()
         total = len(valores)
         for i, valor in enumerate(valores):
             self._check_cancelado()
@@ -1101,6 +1192,8 @@ class GeneradorPlanos:
         from matplotlib.backends.backend_pdf import PdfPages
 
         self._ensure_agg()
+        # Registro de la generación en curso (lo usan fondo/overlays)
+        self._log_actual = locals().get("callback_log")
         total = len(indices)
 
         with PdfPages(ruta_pdf) as pdf:
@@ -1124,12 +1217,20 @@ class GeneradorPlanos:
                 if callback_log:
                     callback_log("  \u2713 Portada a\u00f1adida")
 
-                # Índice
+                # Índice (misma numeración que la cabecera de cada plano:
+                # num_plano_inicio + posición en la capa)
+                try:
+                    num_inicio = int(self._cajetin.get("num_plano_inicio", 1) or 1)
+                except (ValueError, TypeError):
+                    num_inicio = 1
+                campo_nombre = self._campo_real("Nombre_Infra")
                 items_idx = []
+                numeros_guia = []
                 for i, idx in enumerate(indices):
                     nombre = str(self.gdf_infra.iloc[idx].get(
-                        "Nombre_Infra", f"Infraestructura #{idx + 1}"))
-                    items_idx.append((i + 1, nombre, ""))
+                        campo_nombre, f"Infraestructura #{idx + 1}"))
+                    items_idx.append((num_inicio + idx, nombre, ""))
+                    numeros_guia.append(num_inicio + idx)
                 # Paginar el \u00edndice: caben ~35 entradas por p\u00e1gina; antes
                 # los planos a partir del 36 desaparec\u00edan del \u00edndice.
                 _por_pagina = 35
@@ -1154,6 +1255,8 @@ class GeneradorPlanos:
                         transparencia_montes=transparencia,
                         plantilla=self._plantilla,
                         cajetin=self._cajetin,
+                        campo_nombre=campo_nombre,
+                        numeros=numeros_guia,
                     )
                     pdf.savefig(fig_guia, dpi=self.dpi_guardado or 300,
                                 facecolor="white")
@@ -1313,6 +1416,7 @@ class GeneradorPlanos:
             return []
 
         rutas = []
+        self._nombres_usados = set()
         total = len(lotes)
         # cargar_infraestructuras() reasigna self.gdf_infra para cada lote.
         # Guardar el estado actual para restaurarlo al terminar: si no, la
