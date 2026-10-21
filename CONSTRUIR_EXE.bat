@@ -9,6 +9,20 @@ echo   Construccion del ejecutable portable (un solo .exe)
 echo ============================================================
 echo.
 
+if not exist "%~dp0requirements.txt" (
+    echo [ERROR] Este archivo .bat debe estar DENTRO de la carpeta del proyecto,
+    echo   junto a requirements.txt, build_portable.py y la carpeta generador_planos.
+    echo.
+    echo   Descarga el proyecto completo desde GitHub ^(Code ^> Download ZIP^),
+    echo   descomprimelo y ejecuta el CONSTRUIR_EXE.bat que hay dentro.
+    echo.
+    echo   Alternativa sin instalar nada: el .exe ya construido esta en la
+    echo   pestana Actions del repositorio ^(apartado Artifacts^).
+    echo.
+    pause
+    exit /b 1
+)
+
 where python >nul 2>nul
 if errorlevel 1 (
     echo [ERROR] No se encuentra Python en el PATH.
